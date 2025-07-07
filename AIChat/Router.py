@@ -3,13 +3,13 @@ from __future__ import annotations
 import json
 import os
 from typing import List, Dict, Any
-from tool.newsAPI import GNewsClient  # GNewsClient를 사용하려면 해당 모듈이 필요합니다.
-from tool.financial_statements import IncomeStatementClient  # IncomeStatementClient를 사용하려면 해당 모듈이 필요합니다.
-from openai import OpenAI
-from pydantic import BaseModel, Field
+from dotenv import load_dotenv
+from langchain_openai import ChatOpenAI
+from langchain.tools import tool
+from langgraph.graph import StateGraph, END
+from langgraph.prebuilt import ToolNode, ToolExecutor, tools_condition
 
 # ✅ 환경 변수 자동 로드용 (필요 시 pip install python-dotenv)
-from dotenv import load_dotenv
 load_dotenv()
 
 
@@ -117,15 +117,23 @@ TOOL_SPECS = [
 # ---------------------------------------------------------------------------
 # 툴 함수 정의
 # ---------------------------------------------------------------------------
+@tool
 def web_search(query: str, k: int = 5):
+    """인터넷에서 최신 뉴스나 사실 정보를 검색합니다."""
+    from tool.newsAPI import GNewsClient
     news = GNewsClient()
     answer = news.get(keyword=query, max_results=k)
     return answer
 
+@tool
 def financial_statements(ticker: str, limit: int = 1):
+    """주식/암호화폐 실시간 가격, 재무 지표를 조회합니다."""
+    from tool.financial_statements import IncomeStatementClient
     client = IncomeStatementClient()
     answer = client.get(ticker, limit)
-    return "ticker" + ticker + "financial_data" + answer
+    return f"ticker {ticker} financial_data {answer}"
+
+tools = [web_search, financial_statements]
 
 # ---------------------------------------------------------------------------
 # 툴 이름과 실제 함수 매핑
@@ -138,28 +146,20 @@ TOOL_FUNCTIONS = {
 # CLI 테스트 실행
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    try:
-        router = Router(tool_specs=TOOL_SPECS)
+    print("LangGraph 기반 Tool Router 시작!")
+    graph = StateGraph()
+    graph.add_node("tools", ToolNode(tools=tools, llm=llm))
+    graph.add_edge("tools", END)
+    graph.set_entry_point("tools")
+    workflow = graph.compile()
 
-        while True:
-            try:
-                user_inp = input("\nQuestion > ")
-            except (EOFError, KeyboardInterrupt):
-                print("\n종료합니다.")
-                break
+    while True:
+        try:
+            user_inp = input("\nQuestion > ")
+        except (EOFError, KeyboardInterrupt):
+            print("\n종료합니다.")
+            break
 
-            calls = router.route(user_inp)
-
-            if not calls:
-                print("\n[⚠️ Tool Calls 없음]")
-            else:
-                for call in calls:
-                    func = TOOL_FUNCTIONS.get(call.name)
-                    if func:
-                        result = func(**call.arguments)
-                        print(result)
-                        # print(json.dumps(result, indent=2, ensure_ascii=False))
-                    else:
-                        print(f"[⚠️ '{call.name}'에 대한 실행 함수가 정의되어 있지 않습니다.]")
-    except Exception as e:
-        print(f"🚨 초기화 실패: {e}")
+        # LangGraph 워크플로우 실행
+        result = workflow.invoke({"input": user_inp})
+        print(result["output"])
