@@ -1,7 +1,7 @@
 # gnews_client.py
 import requests
 from typing import Optional
-from tool.BaseFinanceTool import BaseFinanceTool
+from .BaseFinanceTool import BaseFinanceTool
 
 class GNewsClient(BaseFinanceTool):
     BASE_URL = "https://gnews.io/api/v4/search"

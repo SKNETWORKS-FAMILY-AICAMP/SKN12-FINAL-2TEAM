@@ -1,7 +1,7 @@
 # income_statement_client.py
 import requests
 from typing import Optional
-from tool.BaseFinanceTool import BaseFinanceTool
+from .BaseFinanceTool import BaseFinanceTool
 
 class IncomeStatementClient(BaseFinanceTool):
     BASE_URL = "https://financialmodelingprep.com/api/v3/income-statement"
