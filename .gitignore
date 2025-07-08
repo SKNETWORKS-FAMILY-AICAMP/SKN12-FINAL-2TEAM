@@ -114,3 +114,59 @@ docker-compose.override.yml
 fastapi_base_server/
 game_server/
 SKN12-3RD-5TEAM/
+
+########################################
+# 10. base_server 관련
+########################################
+# 가상환경
+base_server/base_server_env/
+
+# 환경별 설정 파일 (application 내 모든 서버 폴더)
+base_server/application/*/*config*.json
+base_server/application/*/*/*config*.json
+
+# 데이터베이스 스크립트 실행 결과
+base_server/db_scripts/*.log
+
+# 캐시 관련 임시 파일
+base_server/service/cache/*.tmp
+
+# 로그 파일
+base_server/*.log
+base_server/**/*.log
+
+# 테스트 파일
+base_server/test_*.py
+
+# pip 설치 스크립트
+base_server/get-pip.py
+
+# 런타임 파일
+base_server/*.pid
+base_server/**/*.pid
+base_server/*.sock
+base_server/**/*.sock
+
+# 로컬 데이터베이스
+base_server/*.db
+base_server/*.sqlite*
+base_server/**/*.db
+base_server/**/*.sqlite*
+
+# 백업 파일
+base_server/*.bak
+base_server/**/*.bak
+
+# 임시 업로드 디렉토리
+base_server/uploads/temp/
+base_server/temp/
+base_server/tmp/
+
+# 세션 파일
+base_server/sessions/
+
+# SSL 인증서
+base_server/*.crt
+base_server/*.key
+base_server/**/*.crt
+base_server/**/*.key
