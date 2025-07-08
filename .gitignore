@@ -107,3 +107,10 @@ docker-compose.override.yml
 *.pid.lock
 *.pem                    # 키 파일(예: AWS)
 .env.production          # 운영용 환경변수 파일
+
+# 제외할 폴더들
+.claude/
+111/
+fastapi_base_server/
+game_server/
+SKN12-3RD-5TEAM/
