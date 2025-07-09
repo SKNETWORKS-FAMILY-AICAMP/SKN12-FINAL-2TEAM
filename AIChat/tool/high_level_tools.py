@@ -478,7 +478,7 @@ import numpy as np
 try:
     import xgboost as xgb
     from tensorflow import keras
-    from tensorflow.keras import layers
+    from keras import layers
 except ImportError:
     xgb = None
     keras = None
