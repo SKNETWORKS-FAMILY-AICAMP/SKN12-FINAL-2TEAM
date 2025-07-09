@@ -12,6 +12,14 @@ from service.core.argparse_util import parse_log_level, parse_app_env
 from template.base.template_context import TemplateContext, TemplateType
 from template.account.account_template_impl import AccountTemplateImpl
 from template.admin.admin_template_impl_simple import AdminTemplateImpl
+from template.tutorial.tutorial_template_impl import TutorialTemplateImpl
+from template.dashboard.dashboard_template_impl import DashboardTemplateImpl
+from template.portfolio.portfolio_template_impl import PortfolioTemplateImpl
+from template.chat.chat_template_impl import ChatTemplateImpl
+from template.autotrade.autotrade_template_impl import AutoTradeTemplateImpl
+from template.market.market_template_impl import MarketTemplateImpl
+from template.settings.settings_template_impl import SettingsTemplateImpl
+from template.notification.notification_template_impl import NotificationTemplateImpl
 from template.base.template_config import AppConfig
 from service.db.database_service import DatabaseService
 from service.db.database_config import DatabaseConfig
@@ -92,12 +100,65 @@ async def lifespan(app: FastAPI):
     # 템플릿 등록
     TemplateContext.add_template(TemplateType.ADMIN, AdminTemplateImpl())
     TemplateContext.add_template(TemplateType.ACCOUNT, AccountTemplateImpl())
+    TemplateContext.add_template(TemplateType.TUTORIAL, TutorialTemplateImpl())
+    TemplateContext.add_template(TemplateType.DASHBOARD, DashboardTemplateImpl())
+    TemplateContext.add_template(TemplateType.PORTFOLIO, PortfolioTemplateImpl())
+    TemplateContext.add_template(TemplateType.CHAT, ChatTemplateImpl())
+    TemplateContext.add_template(TemplateType.AUTOTRADE, AutoTradeTemplateImpl())
+    TemplateContext.add_template(TemplateType.MARKET, MarketTemplateImpl())
+    TemplateContext.add_template(TemplateType.SETTINGS, SettingsTemplateImpl())
+    TemplateContext.add_template(TemplateType.NOTIFICATION, NotificationTemplateImpl())
     Logger.info("템플릿 등록 완료")
     
     # Account protocol 콜백 설정
     from .routers.account import setup_account_protocol_callbacks
     setup_account_protocol_callbacks()
     Logger.info("Account protocol 콜백 설정 완료")
+    
+    # Admin protocol 콜백 설정
+    from .routers.admin import setup_admin_protocol_callbacks
+    setup_admin_protocol_callbacks()
+    Logger.info("Admin protocol 콜백 설정 완료")
+    
+    # Tutorial protocol 콜백 설정
+    from .routers.tutorial import setup_tutorial_protocol_callbacks
+    setup_tutorial_protocol_callbacks()
+    Logger.info("Tutorial protocol 콜백 설정 완료")
+    
+    # Dashboard protocol 콜백 설정
+    from .routers.dashboard import setup_dashboard_protocol_callbacks
+    setup_dashboard_protocol_callbacks()
+    Logger.info("Dashboard protocol 콜백 설정 완료")
+    
+    # Portfolio protocol 콜백 설정
+    from .routers.portfolio import setup_portfolio_protocol_callbacks
+    setup_portfolio_protocol_callbacks()
+    Logger.info("Portfolio protocol 콜백 설정 완료")
+    
+    # Chat protocol 콜백 설정
+    from .routers.chat import setup_chat_protocol_callbacks
+    setup_chat_protocol_callbacks()
+    Logger.info("Chat protocol 콜백 설정 완료")
+    
+    # AutoTrade protocol 콜백 설정
+    from .routers.autotrade import setup_autotrade_protocol_callbacks
+    setup_autotrade_protocol_callbacks()
+    Logger.info("AutoTrade protocol 콜백 설정 완료")
+    
+    # Market protocol 콜백 설정
+    from .routers.market import setup_market_protocol_callbacks
+    setup_market_protocol_callbacks()
+    Logger.info("Market protocol 콜백 설정 완료")
+    
+    # Settings protocol 콜백 설정
+    from .routers.settings import setup_settings_protocol_callbacks
+    setup_settings_protocol_callbacks()
+    Logger.info("Settings protocol 콜백 설정 완료")
+    
+    # Notification protocol 콜백 설정
+    from .routers.notification import setup_notification_protocol_callbacks
+    setup_notification_protocol_callbacks()
+    Logger.info("Notification protocol 콜백 설정 완료")
     
     yield
     
@@ -116,9 +177,17 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 # 라우터 등록
-from .routers import account, admin
+from .routers import account, admin, tutorial, dashboard, portfolio, chat, autotrade, market, settings, notification
 app.include_router(account.router, prefix="/api/account", tags=["account"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
+app.include_router(tutorial.router, prefix="/api/tutorial", tags=["tutorial"])
+app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
+app.include_router(portfolio.router, prefix="/api/portfolio", tags=["portfolio"])
+app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
+app.include_router(autotrade.router, prefix="/api/autotrade", tags=["autotrade"])
+app.include_router(market.router, prefix="/api/market", tags=["market"])
+app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
+app.include_router(notification.router, prefix="/api/notification", tags=["notification"])
 
 @app.get("/")
 def root():
