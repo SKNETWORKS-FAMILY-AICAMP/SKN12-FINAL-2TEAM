@@ -13,6 +13,8 @@ class SectorAnalysisOutput:
         tickers: Optional[List[str]] = None,
         avg_per: Optional[float] = None,
         avg_pbr: Optional[float] = None,
+        avg_roe: Optional[float] = None,
+        sector_performance: Optional[float] = None,
         data: Optional[Any] = None
     ):
         self.agent = agent
@@ -20,6 +22,8 @@ class SectorAnalysisOutput:
         self.tickers = tickers
         self.avg_per = avg_per
         self.avg_pbr = avg_pbr
+        self.avg_roe = avg_roe
+        self.sector_performance = sector_performance
         self.data = data
 class SectorAnalysisTool(BaseFinanceTool):
     BASE_URL = "https://financialmodelingprep.com/api/v3/stock-screener"
@@ -46,13 +50,20 @@ class SectorAnalysisTool(BaseFinanceTool):
             tickers = [s["symbol"] for s in stocks if "symbol" in s]
             pers = [s.get("pe") for s in stocks if isinstance(s.get("pe"), (int, float))]
             pbrs = [s.get("pb") for s in stocks if isinstance(s.get("pb"), (int, float))]
+            roes = [s.get("roe") for s in stocks if isinstance(s.get("roe"), (int, float))]
 
             avg_per = round(sum(pers) / len(pers), 2) if pers else None
             avg_pbr = round(sum(pbrs) / len(pbrs), 2) if pbrs else None
+            avg_roe = round(sum(roes) / len(roes), 4) if roes else None
+
+            # Sector Performance: 6개월 수익률 평균 (priceChange6M 필드 활용)
+            perf_6m = [s.get("priceChange6M") for s in stocks if isinstance(s.get("priceChange6M"), (int, float))]
+            sector_performance = round(sum(perf_6m) / len(perf_6m), 4) if perf_6m else None
 
             summary = (
                 f"📊 '{sector_name}' 섹터 주요 종목: {', '.join(tickers)}\n"
-                f"📈 평균 PER: {avg_per}, 평균 PBR: {avg_pbr}"
+                f"📈 평균 PER: {avg_per}, 평균 PBR: {avg_pbr}, 평균 ROE: {avg_roe}\n"
+                f"📉 섹터 6개월 수익률(평균): {sector_performance}"
             )
 
             return SectorAnalysisOutput(
@@ -61,6 +72,8 @@ class SectorAnalysisTool(BaseFinanceTool):
                 tickers=tickers,
                 avg_per=avg_per,
                 avg_pbr=avg_pbr,
+                avg_roe=avg_roe,
+                sector_performance=sector_performance,
                 data=stocks
             )
 
