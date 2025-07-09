@@ -8,7 +8,7 @@ CREATE DATABASE finance_shard_1 CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci
 USE finance_shard_1;
 
 -- 에러 로그 테이블 (각 샤드별로 필요)
-CREATE TABLE `table_errorlog` (
+CREATE TABLE IF NOT EXISTS `table_errorlog` (
   `idx` int NOT NULL AUTO_INCREMENT,
   `procedure_name` varchar(45) DEFAULT NULL,
   `error_state` varchar(10) DEFAULT NULL,
@@ -20,7 +20,7 @@ CREATE TABLE `table_errorlog` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- 사용자 계좌 정보 테이블
-CREATE TABLE `table_user_accounts` (
+CREATE TABLE IF NOT EXISTS `table_user_accounts` (
   `account_db_key` bigint unsigned NOT NULL,
   `account_number` varchar(20) NOT NULL,
   `balance` decimal(15,2) DEFAULT 0.00,
@@ -36,7 +36,7 @@ CREATE TABLE `table_user_accounts` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- 거래 내역 테이블
-CREATE TABLE `table_transactions` (
+CREATE TABLE IF NOT EXISTS `table_transactions` (
   `transaction_id` varchar(32) NOT NULL,
   `account_db_key` bigint unsigned NOT NULL,
   `account_number` varchar(20),
@@ -56,7 +56,7 @@ CREATE TABLE `table_transactions` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- 포트폴리오 테이블
-CREATE TABLE `table_user_portfolios` (
+CREATE TABLE IF NOT EXISTS `table_user_portfolios` (
   `portfolio_id` bigint NOT NULL AUTO_INCREMENT,
   `account_db_key` bigint unsigned NOT NULL,
   `asset_code` varchar(10) NOT NULL,
@@ -151,7 +151,7 @@ CREATE DATABASE finance_shard_2 CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci
 USE finance_shard_2;
 
 -- 동일한 테이블 구조 생성
-CREATE TABLE `table_errorlog` (
+CREATE TABLE IF NOT EXISTS `table_errorlog` (
   `idx` int NOT NULL AUTO_INCREMENT,
   `procedure_name` varchar(45) DEFAULT NULL,
   `error_state` varchar(10) DEFAULT NULL,
@@ -162,7 +162,7 @@ CREATE TABLE `table_errorlog` (
   PRIMARY KEY (`idx`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
-CREATE TABLE `table_user_accounts` (
+CREATE TABLE IF NOT EXISTS `table_user_accounts` (
   `account_db_key` bigint unsigned NOT NULL,
   `account_number` varchar(20) NOT NULL,
   `balance` decimal(15,2) DEFAULT 0.00,
@@ -177,7 +177,7 @@ CREATE TABLE `table_user_accounts` (
   INDEX `idx_updated_at` (`updated_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
-CREATE TABLE `table_transactions` (
+CREATE TABLE IF NOT EXISTS `table_transactions` (
   `transaction_id` varchar(32) NOT NULL,
   `account_db_key` bigint unsigned NOT NULL,
   `account_number` varchar(20),
@@ -196,7 +196,7 @@ CREATE TABLE `table_transactions` (
   INDEX `idx_created_at` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
-CREATE TABLE `table_user_portfolios` (
+CREATE TABLE IF NOT EXISTS `table_user_portfolios` (
   `portfolio_id` bigint NOT NULL AUTO_INCREMENT,
   `account_db_key` bigint unsigned NOT NULL,
   `asset_code` varchar(10) NOT NULL,

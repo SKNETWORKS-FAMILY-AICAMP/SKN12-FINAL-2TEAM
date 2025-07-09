@@ -8,7 +8,7 @@ CREATE DATABASE finance_global CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 USE finance_global;
 
 -- 1. 에러 로그 테이블 (game_server 방식)
-CREATE TABLE `table_errorlog` (
+CREATE TABLE IF NOT EXISTS `table_errorlog` (
   `idx` int NOT NULL AUTO_INCREMENT,
   `procedure_name` varchar(45) DEFAULT NULL,
   `error_state` varchar(10) DEFAULT NULL,
@@ -20,7 +20,7 @@ CREATE TABLE `table_errorlog` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- 2. 계정 ID 테이블 (game_server table_accountid 참고)
-CREATE TABLE `table_accountid` (
+CREATE TABLE IF NOT EXISTS `table_accountid` (
   `idx` bigint unsigned NOT NULL AUTO_INCREMENT,
   `platform_type` tinyint NOT NULL DEFAULT 1,
   `account_id` varchar(100) NOT NULL,
@@ -43,7 +43,7 @@ CREATE TABLE `table_accountid` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- 3. 사용자 샤드 매핑 테이블
-CREATE TABLE `table_user_shard_mapping` (
+CREATE TABLE IF NOT EXISTS `table_user_shard_mapping` (
   `account_db_key` bigint unsigned NOT NULL,
   `shard_id` int NOT NULL,
   `assigned_at` datetime DEFAULT CURRENT_TIMESTAMP,
@@ -54,7 +54,7 @@ CREATE TABLE `table_user_shard_mapping` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- 4. 샤드 설정 테이블
-CREATE TABLE `table_shard_config` (
+CREATE TABLE IF NOT EXISTS `table_shard_config` (
   `shard_id` int NOT NULL,
   `shard_name` varchar(50) NOT NULL,
   `host` varchar(255) NOT NULL,
@@ -71,7 +71,7 @@ CREATE TABLE `table_shard_config` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- 5. 샤드 통계 테이블
-CREATE TABLE `table_shard_stats` (
+CREATE TABLE IF NOT EXISTS `table_shard_stats` (
   `shard_id` int NOT NULL,
   `user_count` int DEFAULT 0,
   `active_users` int DEFAULT 0,
