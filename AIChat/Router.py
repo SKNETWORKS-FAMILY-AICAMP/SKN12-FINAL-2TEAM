@@ -10,7 +10,7 @@ from langchain.tools import tool
 from langgraph.graph import StateGraph, MessagesState, END
 from langgraph.prebuilt import ToolNode
 
-from tool.specialist_agents import (
+from .tool.specialist_agents import (
     FinancialStatementAgent, FinancialStatementInput,
     NewsAgent, NewsInput,
     TechnicalAnalysisAgent, TechnicalAnalysisInput,
