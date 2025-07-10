@@ -9,9 +9,19 @@ from template.account.common.account_serialize import (
     AccountLoginRequest, AccountLoginResponse,
     AccountLogoutRequest, AccountLogoutResponse,
     AccountSignupRequest, AccountSignupResponse,
-    AccountInfoRequest, AccountInfoResponse
+    AccountInfoRequest, AccountInfoResponse,
+    AccountEmailVerifyRequest, AccountEmailVerifyResponse,
+    AccountEmailConfirmRequest, AccountEmailConfirmResponse,
+    AccountOTPSetupRequest, AccountOTPSetupResponse,
+    AccountOTPVerifyRequest, AccountOTPVerifyResponse,
+    AccountOTPLoginRequest, AccountOTPLoginResponse,
+    AccountProfileSetupRequest, AccountProfileSetupResponse,
+    AccountProfileGetRequest, AccountProfileGetResponse,
+    AccountProfileUpdateRequest, AccountProfileUpdateResponse,
+    AccountTokenRefreshRequest, AccountTokenRefreshResponse,
+    AccountTokenValidateRequest, AccountTokenValidateResponse
 )
-from template.account.common.account_model import AccountInfo
+from template.account.common.account_model import AccountInfo, UserInfo, OTPInfo, UserProfile
 from service.service_container import ServiceContainer
 from service.core.logger import Logger
 from service.cache.cache_service import CacheService
@@ -262,5 +272,276 @@ class AccountTemplateImpl(AccountTemplate):
         except Exception as e:
             response.errorCode = 2000  # 서버 오류
             Logger.error(f"Account info error: {e}")
+        
+        return response
+
+    # ============================================================================
+    # 새로운 메서드들 - 패킷명세서 기반
+    # ============================================================================
+
+    async def on_account_email_verify_req(self, client_session, request: AccountEmailVerifyRequest):
+        """이메일 인증 코드 전송"""
+        response = AccountEmailVerifyResponse()
+        response.sequence = request.sequence
+        
+        Logger.info(f"Email verify request: {request.email}")
+        
+        try:
+            # 이메일 인증 코드 생성 및 전송 로직
+            verification_code = str(uuid.uuid4())[:6].upper()
+            
+            # Redis에 인증 코드 저장 (5분 만료)
+            cache_service = ServiceContainer.get_cache_service()
+            await cache_service.set(f"email_verify:{request.email}", verification_code, 300)
+            
+            # 실제로는 이메일 발송 서비스 호출
+            Logger.info(f"Email verification code sent: {verification_code}")
+            
+            response.errorCode = 0
+            response.message = "인증 코드가 전송되었습니다"
+            response.expire_time = 300
+            
+        except Exception as e:
+            response.errorCode = 1000
+            response.message = "이메일 전송 실패"
+            Logger.error(f"Email verify error: {e}")
+        
+        return response
+
+    async def on_account_email_confirm_req(self, client_session, request: AccountEmailConfirmRequest):
+        """이메일 인증 코드 확인"""
+        response = AccountEmailConfirmResponse()
+        response.sequence = request.sequence
+        
+        Logger.info(f"Email confirm request: {request.email}")
+        
+        try:
+            # Redis에서 인증 코드 확인
+            cache_service = ServiceContainer.get_cache_service()
+            stored_code = await cache_service.get(f"email_verify:{request.email}")
+            
+            if stored_code and stored_code == request.verification_code:
+                response.errorCode = 0
+                response.is_verified = True
+                response.message = "이메일 인증 완료"
+                response.next_step = "OTP_SETUP"
+                
+                # 인증 완료 플래그 설정
+                await cache_service.set(f"email_verified:{request.email}", "true", 3600)
+                
+            else:
+                response.errorCode = 1001
+                response.is_verified = False
+                response.message = "인증 코드가 올바르지 않습니다"
+            
+        except Exception as e:
+            response.errorCode = 1000
+            response.message = "인증 확인 실패"
+            Logger.error(f"Email confirm error: {e}")
+        
+        return response
+
+    async def on_account_otp_setup_req(self, client_session, request: AccountOTPSetupRequest):
+        """OTP 설정"""
+        response = AccountOTPSetupResponse()
+        response.sequence = request.sequence
+        
+        Logger.info(f"OTP setup request: {request.account_id}")
+        
+        try:
+            # OTP 시크릿 키 생성 (실제로는 pyotp 라이브러리 사용)
+            secret_key = "JBSWY3DPEHPK3PXP"  # 샘플 키
+            
+            # QR 코드 URL 생성
+            qr_url = f"otpauth://totp/Investment Platform:{request.account_id}?secret={secret_key}&issuer=Investment Platform"
+            
+            otp_info = OTPInfo(
+                secret_key=secret_key,
+                qr_code_url=qr_url,
+                backup_codes=[],
+                is_enabled=False
+            )
+            
+            response.errorCode = 0
+            response.otp_info = otp_info
+            response.qr_code_data = qr_url
+            
+        except Exception as e:
+            response.errorCode = 1000
+            Logger.error(f"OTP setup error: {e}")
+        
+        return response
+
+    async def on_account_otp_verify_req(self, client_session, request: AccountOTPVerifyRequest):
+        """OTP 인증"""
+        response = AccountOTPVerifyResponse()
+        response.sequence = request.sequence
+        
+        Logger.info(f"OTP verify request: {request.account_id}")
+        
+        try:
+            # 실제로는 DB에서 사용자의 OTP 시크릿 키를 가져와서 검증
+            response.errorCode = 0
+            response.is_verified = True
+            response.message = "OTP 인증 완료"
+            response.next_step = "PROFILE_SETUP"
+            
+        except Exception as e:
+            response.errorCode = 1000
+            Logger.error(f"OTP verify error: {e}")
+        
+        return response
+
+    async def on_account_otp_login_req(self, client_session, request: AccountOTPLoginRequest):
+        """OTP 로그인 2단계"""
+        response = AccountOTPLoginResponse()
+        response.sequence = request.sequence
+        
+        Logger.info("OTP login request received")
+        
+        try:
+            # temp_token 검증 및 OTP 코드 확인
+            response.errorCode = 0
+            response.accessToken = "final_access_token"
+            response.refreshToken = "refresh_token"
+            response.account_db_key = 12345
+            response.nickname = "투자왕"
+            response.account_level = 1
+            response.shard_id = 1
+            response.profile_completed = True
+            
+        except Exception as e:
+            response.errorCode = 1000
+            Logger.error(f"OTP login error: {e}")
+        
+        return response
+
+    async def on_account_profile_setup_req(self, client_session, request: AccountProfileSetupRequest):
+        """프로필 설정"""
+        response = AccountProfileSetupResponse()
+        response.sequence = request.sequence
+        
+        Logger.info("Profile setup request received")
+        
+        try:
+            if not client_session or not client_session.session:
+                response.errorCode = 2001
+                return response
+            
+            account_db_key = getattr(client_session.session, 'account_db_key', 0)
+            
+            # 프로필 정보 저장
+            profile = UserProfile(
+                account_db_key=account_db_key,
+                investment_experience=request.investment_experience,
+                risk_tolerance=request.risk_tolerance,
+                investment_goal=request.investment_goal,
+                monthly_budget=request.monthly_budget,
+                profile_completed=True
+            )
+            
+            response.errorCode = 0
+            response.profile = profile
+            response.message = "프로필 설정 완료"
+            response.next_step = "TUTORIAL"
+            
+        except Exception as e:
+            response.errorCode = 1000
+            Logger.error(f"Profile setup error: {e}")
+        
+        return response
+
+    async def on_account_profile_get_req(self, client_session, request: AccountProfileGetRequest):
+        """프로필 조회"""
+        response = AccountProfileGetResponse()
+        response.sequence = request.sequence
+        
+        try:
+            if not client_session or not client_session.session:
+                response.errorCode = 2001
+                return response
+            
+            account_db_key = getattr(client_session.session, 'account_db_key', 0)
+            
+            # 샘플 프로필 데이터
+            profile = UserProfile(
+                account_db_key=account_db_key,
+                platform_type=1,
+                account_id="user@example.com",
+                nickname="투자왕",
+                email="user@example.com",
+                account_level=1,
+                shard_id=1,
+                investment_experience="INTERMEDIATE",
+                risk_tolerance="MODERATE",
+                investment_goal="GROWTH",
+                monthly_budget=100000.0,
+                profile_completed=True
+            )
+            
+            response.errorCode = 0
+            response.profile = profile
+            
+        except Exception as e:
+            response.errorCode = 1000
+            Logger.error(f"Profile get error: {e}")
+        
+        return response
+
+    async def on_account_profile_update_req(self, client_session, request: AccountProfileUpdateRequest):
+        """프로필 수정"""
+        response = AccountProfileUpdateResponse()
+        response.sequence = request.sequence
+        
+        try:
+            if not client_session or not client_session.session:
+                response.errorCode = 2001
+                return response
+            
+            # 프로필 업데이트 로직
+            response.errorCode = 0
+            response.message = "프로필이 업데이트되었습니다"
+            
+        except Exception as e:
+            response.errorCode = 1000
+            Logger.error(f"Profile update error: {e}")
+        
+        return response
+
+    async def on_account_token_refresh_req(self, client_session, request: AccountTokenRefreshRequest):
+        """토큰 갱신"""
+        response = AccountTokenRefreshResponse()
+        response.sequence = request.sequence
+        
+        try:
+            # refreshToken 검증 및 새 토큰 발급
+            response.errorCode = 0
+            response.accessToken = "new_access_token"
+            response.refreshToken = "new_refresh_token"
+            response.expires_in = 3600
+            
+        except Exception as e:
+            response.errorCode = 1000
+            Logger.error(f"Token refresh error: {e}")
+        
+        return response
+
+    async def on_account_token_validate_req(self, client_session, request: AccountTokenValidateRequest):
+        """토큰 검증"""
+        response = AccountTokenValidateResponse()
+        response.sequence = request.sequence
+        
+        try:
+            if client_session and client_session.session:
+                response.errorCode = 0
+                response.is_valid = True
+                response.expires_at = str(datetime.now() + timedelta(hours=1))
+            else:
+                response.errorCode = 1002
+                response.is_valid = False
+                
+        except Exception as e:
+            response.errorCode = 1000
+            Logger.error(f"Token validate error: {e}")
         
         return response

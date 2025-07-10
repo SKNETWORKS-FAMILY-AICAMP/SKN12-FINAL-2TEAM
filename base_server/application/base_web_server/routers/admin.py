@@ -23,7 +23,6 @@ async def health_check(request: HealthCheckRequest, req: Request):
     헬스체크 엔드포인트
     - 데이터베이스, 캐시, 서비스 상태 확인
     """
-    setup_admin_protocol_callbacks()  # 콜백 설정
     ip = req.headers.get("X-Forwarded-For")
     if not ip:
         ip = req.client.host
@@ -43,7 +42,6 @@ async def server_status(request: ServerStatusRequest, req: Request):
     서버 상태 엔드포인트
     - 서버 기본 정보 및 메트릭 조회
     """
-    setup_admin_protocol_callbacks()  # 콜백 설정
     ip = req.headers.get("X-Forwarded-For")
     if not ip:
         ip = req.client.host
@@ -63,7 +61,6 @@ async def session_count(request: SessionCountRequest, req: Request):
     세션 카운트 엔드포인트
     - 활성 세션 수 조회
     """
-    setup_admin_protocol_callbacks()  # 콜백 설정
     ip = req.headers.get("X-Forwarded-For")
     if not ip:
         ip = req.client.host
@@ -89,7 +86,6 @@ async def metrics(req: Request):
     """
     메트릭 정보만 조회하는 엔드포인트
     """
-    setup_admin_protocol_callbacks()  # 콜백 설정
     ip = req.headers.get("X-Forwarded-For")
     if not ip:
         ip = req.client.host
