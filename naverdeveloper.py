@@ -287,7 +287,7 @@ def similarity_based_removal(news_items):
         current_title = current_item.get('title', '').strip()
         is_duplicate = False
         
-        # 기존 아이템들과 유사도 비교
+        # 기존 아이템들과의 유사도 비교
         for existing_item in unique_news:
             existing_title = existing_item.get('title', '').strip()
             
