@@ -1,10 +1,9 @@
-"""기업 관련 최신 뉴스를 가져오는 도구입니다.
-이 도구는 GNews API를 사용하여 특정 키워드에 대한 최신 뉴스를"""
 import os
 import requests
 from typing import Optional, List, Dict, Any
 from AIChat.BaseFinanceTool import BaseFinanceTool
 from pydantic import BaseModel, Field
+
 class NewsInput(BaseModel):
     query: str = Field(..., description="검색할 뉴스 키워드 또는 종목 코드 (예: 'TSLA', '금리 인상')")
     k: int = Field(5, description="검색할 뉴스 개수 (기본값: 5)")
@@ -14,6 +13,7 @@ class NewsOutput(BaseModel):
     summary: str
     news: Optional[List[Dict[str, str]]] = None
     data: Optional[Any] = None
+
     def __init__(
         self,
         agent: str,
@@ -21,22 +21,29 @@ class NewsOutput(BaseModel):
         news: Optional[List[Dict[str, str]]] = None,
         data: Optional[Any] = None,
     ):
-        self.agent = agent
-        self.summary = summary
-        self.news = news
-        self.data = data
-
+        super().__init__(
+            agent=agent,
+            summary=summary,
+            news=news,
+            data=data,
+        )
 
 class NewsTool(BaseFinanceTool):
     BASE_URL = "https://gnews.io/api/v4/search"
 
-    def __init__(self, api_key: Optional[str] = os.getenv("GNEWS_API_KEY")):
-        super().__init__("GNEWS_API_KEY" if api_key is None else None)
-        self.api_key = api_key or os.getenv("GNEWS_API_KEY")
+    def __init__(self, api_key: Optional[str] = os.getenv("NEWSAPI_KEY")):
+        super().__init__("NEWSAPI_KEY" if api_key is None else None)
+        self.api_key = api_key or os.getenv("NEWSAPI_KEY")
         if not self.api_key:
-            raise ValueError("❌ GNEWS_API_KEY가 설정돼 있지 않습니다.")
+            raise ValueError("❌ NEWSAPI_KEY 설정돼 있지 않습니다.")
 
-    def get_data(self, input: NewsInput) -> NewsOutput:
+    # **params로 받도록 변경!
+    def get_data(self, **kwargs) -> NewsOutput:
+        try:
+            input = NewsInput(**kwargs)
+        except Exception as e:
+            return NewsOutput(agent="error", summary=f"❌ 매개변수 오류: {e}")
+
         params = {
             "q": input.query,
             "lang": "en",
