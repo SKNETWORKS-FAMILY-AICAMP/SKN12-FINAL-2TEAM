@@ -2,7 +2,7 @@ from typing import List, Optional, Dict, Union, Any
 from pydantic import BaseModel
 import yfinance as yf
 import ta
-from BaseFinanceTool import BaseFinanceTool
+from AIChat.BaseFinanceTool import BaseFinanceTool
 
 class TechnicalAnalysisInput(BaseModel):
     tickers: List[str]

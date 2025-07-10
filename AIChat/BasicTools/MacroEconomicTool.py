@@ -4,7 +4,7 @@ import os
 import time
 import random
 from typing import List, Optional, Dict, Any
-from BaseFinanceTool import BaseFinanceTool
+from AIChat.BaseFinanceTool import BaseFinanceTool
 from pydantic import BaseModel, Field
 
 class MacroEconomicInput(BaseModel):
@@ -15,6 +15,7 @@ class MacroEconomicInput(BaseModel):
             "예시: ['CPIAUCSL', 'FEDFUNDS', 'UNRATE']"
         )
     )
+
 def get_with_retry(url, max_retries=3, backoff=2):
     for i in range(max_retries):
         try:
@@ -53,17 +54,19 @@ class MacroEconomicOutput:
         self.series = series
         self.data = data
 
+
 class MacroEconomicTool(BaseFinanceTool):
-    def get_data(self, series_ids: List[str]) -> MacroEconomicOutput:
+    def get_data(self, **kwargs) -> MacroEconomicOutput:
         try:
-            print(f"[MacroEconomicTool] Processing: {series_ids}")
+            input = MacroEconomicInput(**kwargs)
+            print(f"[MacroEconomicTool] Processing: {input.series_ids}")
             api_key = self.api_key or os.getenv("FRED_API_KEY")
             if not api_key:
                 return MacroEconomicOutput(agent="error", summary="FRED API 키가 없습니다.", series=[], data=None)
 
             series_list = []
 
-            for sid in series_ids:
+            for sid in input.series_ids:
                 url = (
                     f"https://api.stlouisfed.org/fred/series/observations"
                     f"?series_id={sid}&api_key={api_key}&file_type=json&sort_order=desc&limit=1"
@@ -109,3 +112,4 @@ class MacroEconomicTool(BaseFinanceTool):
         except Exception as e:
             print(f"[MacroEconomicTool] 오류: {e}")
             return MacroEconomicOutput(agent="error", summary=f"거시경제 데이터 오류: {e}", series=[], data=None)
+

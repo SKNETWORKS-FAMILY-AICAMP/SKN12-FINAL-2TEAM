@@ -1,11 +1,36 @@
 import requests
 from AIChat.BaseFinanceTool import BaseFinanceTool
 from pydantic import BaseModel, Field
+from typing import List, Dict, Any, Optional
+
 
 class FinancialStatementParams(BaseModel):
     ticker: str = Field(..., description="조회할 미국 주식의 종목 코드 (예: AAPL)")
     period: str = Field("annual", description="조회 주기: 'annual' 또는 'quarter'")
     limit: int = Field(5, description="조회할 기간 개수 (최대 120)")
+
+
+class FinancialStatementOutput:
+    summary: str
+    data: List[Dict[str, Any]]
+    statement_type: str
+    ticker: str
+    period: Optional[str] = None
+
+    def __init__(
+        self,
+        summary: str,
+        data: List[Dict[str, Any]],
+        statement_type: str,
+        ticker: str,
+        period: Optional[str] = None
+    ):
+        self.summary = summary
+        self.data = data
+        self.statement_type = statement_type
+        self.ticker = ticker
+        self.period = period
+
 
 class FinancialStatementTool(BaseFinanceTool):
     SUPPORTED_TYPES = {
@@ -17,7 +42,6 @@ class FinancialStatementTool(BaseFinanceTool):
         "financial-growth": "성장률",
         "enterprise-values": "기업가치"
     }
-
     BASE_URL = "https://financialmodelingprep.com/api/v3"
 
     def __init__(self, statement_type: str, api_key_name: str = "FMP_API_KEY"):
@@ -28,12 +52,37 @@ class FinancialStatementTool(BaseFinanceTool):
         statement_type = statement_type.lower()
         if statement_type not in self.SUPPORTED_TYPES:
             raise ValueError(f"❌ 지원하지 않는 유형입니다: {statement_type}")
-        
         self.statement_type = statement_type
 
-    def get_data(self, ticker: str, period: str = "annual", limit: int = 120) -> str:
-        url = f"{self.BASE_URL}/{self.statement_type}/{ticker.upper()}"
-        params = {
+    @staticmethod
+    def format_number(val):
+        try:
+            if val in (None, '', '.', 'N/A'):
+                return str(val)
+            if isinstance(val, str) and val.replace('.', '', 1).isdigit():
+                val = float(val)
+            return f"{val:,.0f}" if isinstance(val, (int, float)) else str(val)
+        except Exception:
+            return str(val)
+
+    def get_data(self, **kwargs) -> FinancialStatementOutput:
+        try:
+            params = FinancialStatementParams(**kwargs)
+        except Exception as e:
+            return FinancialStatementOutput(
+                summary=f"❌ 매개변수 오류: {e}",
+                data=[],
+                statement_type=self.statement_type,
+                ticker=kwargs.get("ticker", "UNKNOWN"),
+                period=kwargs.get("period", "annual")
+            )
+
+        ticker = params.ticker.upper()
+        period = params.period
+        limit = params.limit
+
+        url = f"{self.BASE_URL}/{self.statement_type}/{ticker}"
+        req_params = {
             "apikey": self.api_key,
             "limit": limit
         }
@@ -42,42 +91,55 @@ class FinancialStatementTool(BaseFinanceTool):
             "income-statement", "balance-sheet-statement",
             "cash-flow-statement", "ratios", "key-metrics", "financial-growth"
         ]:
-            params["period"] = period
+            req_params["period"] = period
 
         try:
-            res = requests.get(url, params=params, timeout=5)
+            res = requests.get(url, params=req_params, timeout=5)
             res.raise_for_status()
         except requests.RequestException as e:
-            return f"🌐 HTTP 오류: {e}"
+            return FinancialStatementOutput(
+                summary=f"🌐 HTTP 오류: {e}",
+                data=[],
+                statement_type=self.statement_type,
+                ticker=ticker,
+                period=period
+            )
 
         data = res.json()
         if not data:
-            return f"📭 {ticker}의 {self.SUPPORTED_TYPES[self.statement_type]} 데이터가 없습니다."
+            return FinancialStatementOutput(
+                summary=f"📭 {ticker}의 {self.SUPPORTED_TYPES[self.statement_type]} 데이터가 없습니다.",
+                data=[],
+                statement_type=self.statement_type,
+                ticker=ticker,
+                period=period
+            )
 
-        lines = [f"📊 [ {ticker.upper()} ] 최근 {len(data)}개 {period} {self.SUPPORTED_TYPES[self.statement_type]} 요약"]
+        fn = self.format_number  # static 메서드라서 이렇게 편하게 씁니다
 
+        lines = [f"📊 [ {ticker} ] 최근 {len(data)}개 {period} {self.SUPPORTED_TYPES[self.statement_type]} 요약"]
         for report in data:
             date = report.get("date", "N/A")
             line = f"- 📅 {date}"
 
             if self.statement_type == "income-statement":
-                line += f"\n  매출액: ${report.get('revenue', 'N/A'):,}" \
-                        f"\n  순이익: ${report.get('netIncome', 'N/A'):,}" \
+                line += f"\n  매출액: ${fn(report.get('revenue', 'N/A'))}" \
+                        f"\n  순이익: ${fn(report.get('netIncome', 'N/A'))}" \
                         f"\n  EPS: {report.get('eps', 'N/A')}"
             elif self.statement_type == "balance-sheet-statement":
-                line += f"\n  총자산: ${report.get('totalAssets', 'N/A'):,}" \
-                        f"\n  총부채: ${report.get('totalLiabilities', 'N/A'):,}" \
-                        f"\n  자본: ${report.get('totalEquity', 'N/A'):,}"
+                line += f"\n  총자산: ${fn(report.get('totalAssets', 'N/A'))}" \
+                        f"\n  총부채: ${fn(report.get('totalLiabilities', 'N/A'))}" \
+                        f"\n  자본: ${fn(report.get('totalEquity', 'N/A'))}"
             elif self.statement_type == "cash-flow-statement":
-                line += f"\n  영업현금흐름: ${report.get('operatingCashFlow', 'N/A'):,}" \
-                        f"\n  투자현금흐름: ${report.get('investingCashFlow', 'N/A'):,}" \
-                        f"\n  재무현금흐름: ${report.get('financingCashFlow', 'N/A'):,}"
+                line += f"\n  영업현금흐름: ${fn(report.get('operatingCashFlow', 'N/A'))}" \
+                        f"\n  투자현금흐름: ${fn(report.get('investingCashFlow', 'N/A'))}" \
+                        f"\n  재무현금흐름: ${fn(report.get('financingCashFlow', 'N/A'))}"
             elif self.statement_type == "ratios":
                 line += f"\n  PER: {report.get('priceEarningsRatio', 'N/A')}" \
                         f"\n  ROE: {report.get('returnOnEquity', 'N/A')}" \
                         f"\n  유동비율: {report.get('currentRatio', 'N/A')}"
             elif self.statement_type == "key-metrics":
-                line += f"\n  시가총액: ${report.get('marketCap', 'N/A'):,}" \
+                line += f"\n  시가총액: ${fn(report.get('marketCap', 'N/A'))}" \
                         f"\n  영업마진: {report.get('operatingMargin', 'N/A')}" \
                         f"\n  배당수익률: {report.get('dividendYield', 'N/A')}"
             elif self.statement_type == "financial-growth":
@@ -85,10 +147,18 @@ class FinancialStatementTool(BaseFinanceTool):
                         f"\n  순이익 성장률: {report.get('netIncomeGrowth', 'N/A')}" \
                         f"\n  EPS 성장률: {report.get('epsgrowth', 'N/A')}"
             elif self.statement_type == "enterprise-values":
-                line += f"\n  EV: ${report.get('enterpriseValue', 'N/A'):,}" \
+                line += f"\n  EV: ${fn(report.get('enterpriseValue', 'N/A'))}" \
                         f"\n  EV/EBITDA: {report.get('evToEbitda', 'N/A')}" \
-                        f"\n  Net Debt: ${report.get('netDebt', 'N/A'):,}"
+                        f"\n  Net Debt: ${fn(report.get('netDebt', 'N/A'))}"
 
             lines.append(line)
 
-        return "\n\n".join(lines)
+        summary = "\n\n".join(lines)
+
+        return FinancialStatementOutput(
+            summary=summary,
+            data=data,
+            statement_type=self.statement_type,
+            ticker=ticker,
+            period=period
+        )

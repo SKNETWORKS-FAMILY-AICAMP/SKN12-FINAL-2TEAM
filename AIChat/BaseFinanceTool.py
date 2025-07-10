@@ -8,6 +8,6 @@ class BaseFinanceTool(ABC):
         self.api_key = os.getenv(key_name) if key_name else None
 
     @abstractmethod
-    def get(self, *args, **kwargs):
+    def get_data(self, **kwargs):
         """모든 툴이 구현해야 하는 메서드. 반환 형식은 자유."""
         pass

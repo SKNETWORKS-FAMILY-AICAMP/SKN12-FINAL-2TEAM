@@ -11,11 +11,11 @@ from langgraph.graph import StateGraph, MessagesState, END
 from langgraph.prebuilt import ToolNode
 
 # ──────────────────────────── -1. 기본 모듈 임포트
-from BasicTools.FinancialStatementTool import FinancialStatementTool, FinancialStatementParams
-from BasicTools.MacroEconomicTool import MacroEconomicTool, MacroEconomicInput
-from BasicTools.SectorAnalysisTool import SectorAnalysisAgent, SectorAnalysisInput
-from BasicTools.TechnicalAnalysisTool import TechnicalAnalysisAgent, TechnicalAnalysisInput
-from BasicTools.NewsTool import NewsAgent, NewsInput
+from AIChat.BasicTools.FinancialStatementTool import FinancialStatementTool, FinancialStatementParams
+from AIChat.BasicTools.MacroEconomicTool import MacroEconomicTool, MacroEconomicInput
+from AIChat.BasicTools.SectorAnalysisTool import SectorAnalysisTool, SectorAnalysisInput
+from AIChat.BasicTools.TechnicalAnalysisTool import TechnicalAnalysisTool, TechnicalAnalysisInput
+from AIChat.BasicTools.NewsTool import NewsTool, NewsInput
 
 # ──────────────────────────── 0. 환경 변수
 load_dotenv()
@@ -24,74 +24,74 @@ if not (OPENAI_API_KEY and OPENAI_API_KEY.startswith("sk-")):
     raise ValueError("❌ 유효한 OPENAI_API_KEY가 없습니다.")
 
 # ──────────────────────────── 1. Tool 정의
-@tool
-def income_statement_tool(params: FinancialStatementParams) -> str:
+@tool(args_schema=FinancialStatementParams)
+def income_statement_tool(**params):
     """기업의 손익계산서를 조회합니다 (매출, 순이익, EPS 등)."""
     agent = FinancialStatementTool("income-statement")
-    return agent.get_data(ticker=params.ticker, period=params.period, limit=params.limit)
+    return agent.get_data(**params)
 
-@tool
-def balance_sheet_tool(params: FinancialStatementParams) -> str:
+@tool(args_schema=FinancialStatementParams)
+def balance_sheet_tool(**params):
     """기업의 대차대조표를 조회합니다 (자산, 부채, 자본 등)."""
     agent = FinancialStatementTool("balance-sheet-statement")
-    return agent.get_data(ticker=params.ticker, period=params.period, limit=params.limit)
+    return agent.get_data(**params)
 
-@tool
-def cashflow_statement_tool(params: FinancialStatementParams) -> str:
+@tool(args_schema=FinancialStatementParams)
+def cashflow_statement_tool(**params):
     """기업의 현금흐름표를 조회합니다 (영업/투자/재무 현금흐름)."""
     agent = FinancialStatementTool("cash-flow-statement")
-    return agent.get_data(ticker=params.ticker, period=params.period, limit=params.limit)
+    return agent.get_data(**params)
 
-@tool
-def ratios_tool(params: FinancialStatementParams) -> str:
+@tool(args_schema=FinancialStatementParams)
+def ratios_tool(**params):
     """기업의 주요 재무비율을 조회합니다 (PER, ROE, 유동비율 등)."""
     agent = FinancialStatementTool("ratios")
-    return agent.get_data(ticker=params.ticker, period=params.period, limit=params.limit)
+    return agent.get_data(**params)
 
-@tool
-def key_metrics_tool(params: FinancialStatementParams) -> str:
+@tool(args_schema=FinancialStatementParams)
+def key_metrics_tool(**params):
     """기업의 핵심 지표를 조회합니다 (시가총액, 마진율, 배당수익률 등)."""
     agent = FinancialStatementTool("key-metrics")
-    return agent.get_data(ticker=params.ticker, period=params.period, limit=params.limit)
+    return agent.get_data(**params)
 
-@tool
-def financial_growth_tool(params: FinancialStatementParams) -> str:
+@tool(args_schema=FinancialStatementParams)
+def financial_growth_tool(**params):
     """기업의 성장률 지표를 조회합니다 (매출 성장률, EPS 성장률 등)."""
     agent = FinancialStatementTool("financial-growth")
-    return agent.get_data(ticker=params.ticker, period=params.period, limit=params.limit)
+    return agent.get_data(**params)
 
-@tool
-def enterprise_value_tool(params: FinancialStatementParams) -> str:
+@tool(args_schema=FinancialStatementParams)
+def enterprise_value_tool(**params):
     """기업의 기업가치 지표를 조회합니다 (EV, Net Debt 등)."""
     agent = FinancialStatementTool("enterprise-values")
-    return agent.get_data(ticker=params.ticker, period=params.period, limit=params.limit)
+    return agent.get_data(**params)
 
-@tool
-def news(params : NewsInput) -> str:
+@tool(args_schema=NewsInput)
+def news(**params):
     """특정 키워드에 대한 최신 뉴스를 조회합니다."""
-    agent = NewsAgent()
-    result = agent.process(NewsInput(query=params.query, k=params.k))
+    agent = NewsTool()
+    result = agent.get_data(**params)
     return result.summary
 
-@tool
-def technical_analysis(tickers: TechnicalAnalysisInput) -> str:
+@tool(args_schema=TechnicalAnalysisInput)
+def technical_analysis(**params):
     """종목들의 기술적 지표 (RSI, MACD, EMA)를 분석합니다."""
-    agent = TechnicalAnalysisAgent()
-    results = agent.process(TechnicalAnalysisInput(tickers=tickers))
+    agent = TechnicalAnalysisTool()
+    results = agent.get_data(**params)
     return "\n".join([r.summary for r in results])
 
-@tool
-def macro_economic(params: MacroEconomicInput) -> str:
+@tool(args_schema=MacroEconomicInput)
+def macro_economic(**params):
     """거시경제 지표 (금리, CPI 등)를 조회합니다."""
     agent = MacroEconomicTool()
-    result = agent.process(MacroEconomicInput(series_ids=params.series_ids))
+    result = agent.get_data(**params)
     return result.summary
 
-@tool
-def sector_analysis(sector_name: str) -> str:
+@tool(args_schema=SectorAnalysisInput)
+def sector_analysis(**params):
     """섹터 PER/PBR 및 대표 종목을 조회합니다."""
-    agent = SectorAnalysisAgent()
-    result = agent.process(SectorAnalysisInput(sector_name=sector_name))
+    agent = SectorAnalysisTool()
+    result = agent.get_data(**params)
     return result.summary
 
 TOOLS = [
