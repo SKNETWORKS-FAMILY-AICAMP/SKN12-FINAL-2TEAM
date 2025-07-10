@@ -10,11 +10,12 @@ from langchain.tools import tool
 from langgraph.graph import StateGraph, MessagesState, END
 from langgraph.prebuilt import ToolNode
 
+# ──────────────────────────── -1. 기본 모듈 임포트
 from BasicTools.FinancialStatementTool import FinancialStatementTool, FinancialStatementParams
-from BasicTools.MacroEconomicTool import MacroEconomicAgent, MacroEconomicInput
-from BasicTools.MarketDataTool import NewsAgent, NewsInput
+from BasicTools.MacroEconomicTool import MacroEconomicTool, MacroEconomicInput
 from BasicTools.SectorAnalysisTool import SectorAnalysisAgent, SectorAnalysisInput
 from BasicTools.TechnicalAnalysisTool import TechnicalAnalysisAgent, TechnicalAnalysisInput
+from BasicTools.NewsTool import NewsAgent, NewsInput
 
 # ──────────────────────────── 0. 환경 변수
 load_dotenv()
@@ -66,24 +67,24 @@ def enterprise_value_tool(params: FinancialStatementParams) -> str:
     return agent.get_data(ticker=params.ticker, period=params.period, limit=params.limit)
 
 @tool
-def news(query: str, k: int = 5) -> str:
+def news(params : NewsInput) -> str:
     """특정 키워드에 대한 최신 뉴스를 조회합니다."""
     agent = NewsAgent()
-    result = agent.process(NewsInput(query=query, k=k))
+    result = agent.process(NewsInput(query=params.query, k=params.k))
     return result.summary
 
 @tool
-def technical_analysis(tickers: list[str]) -> str:
+def technical_analysis(tickers: TechnicalAnalysisInput) -> str:
     """종목들의 기술적 지표 (RSI, MACD, EMA)를 분석합니다."""
     agent = TechnicalAnalysisAgent()
     results = agent.process(TechnicalAnalysisInput(tickers=tickers))
     return "\n".join([r.summary for r in results])
 
 @tool
-def macro_economic(series_ids: list[str]) -> str:
+def macro_economic(params: MacroEconomicInput) -> str:
     """거시경제 지표 (금리, CPI 등)를 조회합니다."""
-    agent = MacroEconomicAgent()
-    result = agent.process(MacroEconomicInput(series_ids=series_ids))
+    agent = MacroEconomicTool()
+    result = agent.process(MacroEconomicInput(series_ids=params.series_ids))
     return result.summary
 
 @tool
@@ -158,3 +159,29 @@ def run_question(question: str) -> str:
     graph = build_workflow()
     result = graph.invoke({"messages": [{"role": "user", "content": question}]})
     return "\n".join(getattr(m, "content", str(m)) for m in result["messages"])
+
+
+#----------------------------------------------------------------- CLI
+def main():
+    print("🧠 AI 주식 분석 CLI (LangGraph 기반)")
+    print("질문을 입력하세요. 종료하려면 'exit'를 입력하세요.\n")
+
+    while True:
+        try:
+            question = input("❓ 질문: ").strip()
+            if question.lower() in {"exit", "quit"}:
+                print("👋 종료합니다.")
+                break
+            print("\n🔍 AI 분석 중...\n")
+            result = run_question(question)
+            print("📊 결과:\n")
+            print(result)
+            print("\n" + "-"*50 + "\n")
+        except KeyboardInterrupt:
+            print("\n👋 종료합니다.")
+            break
+        except Exception as e:
+            print(f"❌ 오류 발생: {e}")
+
+if __name__ == "__main__":
+    main()
