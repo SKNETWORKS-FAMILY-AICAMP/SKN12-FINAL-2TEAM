@@ -185,7 +185,7 @@ def get_weekly_news_and_save_to_csv():
         print("❌ 전처리 후 저장할 뉴스가 없습니다.")
         return
 
-    # 현재 스크립트가 있는 폴더에 저장
+    # 현재의 스크립트가 있는 폴더에 저장
     current_dir = os.path.dirname(os.path.abspath(__file__))
     filename = os.path.join(current_dir, f"주간_해외뉴스_{today.strftime('%Y%m%d')}.csv")
 
