@@ -1,6 +1,7 @@
 import yfinance as yf
 import pandas as pd
 import os
+import json
 from datetime import datetime
 import time
 
@@ -58,11 +59,11 @@ TICKER_LIST = [
 
 START_DATE = pd.to_datetime(datetime(2025, 7, 3)).tz_localize('UTC')
 END_DATE = pd.to_datetime(datetime(2025, 7, 9, 23, 59, 59)).tz_localize('UTC')
-OUTPUT_FILE = "yfinance_news.csv"
+OUTPUT_FILE = "yahoo_finance_news.json"  # JSON 파일로 변경
 # --- 설정 끝 ---
 
 def get_news_for_tickers():
-    """yfinance를 이용해 여러 종목의 뉴스 목록을 CSV로 저장합니다."""
+    """yfinance를 이용해 여러 종목의 뉴스 목록을 JSON으로 저장합니다."""
     
     all_news_list = []
     
@@ -157,24 +158,74 @@ def get_news_for_tickers():
         print(f"❌ 해당 기간에 해당하는 뉴스가 없습니다.")
         return
 
-    # 4. CSV로 저장
+    # 4. JSON으로 저장하기 위한 데이터 준비
     final_df = filtered_df[['datetime', 'ticker', 'title', 'publisher', 'link']].copy()
-    final_df.rename(columns={'datetime': '날짜', 'ticker': '티커', 'title': '제목', 'publisher': '언론사', 'link': '링크'}, inplace=True)
     
-    # 타임존 제거하고 문자열로 변환
-    final_df['날짜'] = final_df['날짜'].dt.tz_convert('UTC').dt.tz_localize(None)
-    final_df['날짜'] = final_df['날짜'].dt.strftime('%Y-%m-%d %H:%M')
-    final_df.sort_values(by='날짜', ascending=False, inplace=True) # 최신순으로 정렬
+    # 날짜 컬럼을 문자열로 변환 (JSON 직렬화를 위해)
+    final_df['datetime'] = final_df['datetime'].dt.tz_convert('UTC').dt.tz_localize(None)
+    final_df['datetime'] = final_df['datetime'].dt.strftime('%Y-%m-%d %H:%M')
+    
+    # 최신순으로 정렬
+    final_df = final_df.sort_values(by='datetime', ascending=False)
+    
+    # JSON 구조 생성: {"articles": [뉴스 객체들의 리스트]}
+    articles_list = []
+    for _, row in final_df.iterrows():
+        article = {
+            "날짜": row['datetime'],
+            "티커": row['ticker'],
+            "제목": row['title'],
+            "언론사": row['publisher'],
+            "링크": row['link']
+        }
+        articles_list.append(article)
+    
+    # 최종 JSON 구조
+    json_data = {
+        "articles": articles_list,
+        "metadata": {
+            "total_count": len(articles_list),
+            "collection_period": {
+                "start": START_DATE.strftime('%Y-%m-%d'),
+                "end": END_DATE.strftime('%Y-%m-%d')
+            },
+            "tickers_covered": len(TICKER_LIST),
+            "generated_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+    }
 
-    # 현재 스크립트가 있는 폴더(crawling)에 저장
+    # 현재 스크립트가 있는 폴더(crawling)에 JSON 파일로 저장
     current_dir = os.path.dirname(os.path.abspath(__file__))
     output_path = os.path.join(current_dir, OUTPUT_FILE)
 
-    final_df.to_csv(output_path, index=False, encoding='utf-8-sig', sep='/')
+    # JSON 파일 저장 (한글 깨짐 방지: ensure_ascii=False, 들여쓰기 적용: indent=2)
+    with open(output_path, 'w', encoding='utf-8') as json_file:
+        json.dump(json_data, json_file, ensure_ascii=False, indent=2)
 
     print("-" * 50)
-    print(f"✅ 총 {len(final_df)}개의 필터링된 뉴스를 성공적으로 저장했습니다!")
+    print(f"✅ 총 {len(articles_list)}개의 필터링된 뉴스를 성공적으로 JSON 파일로 저장했습니다!")
     print(f"   -> 파일 위치: {output_path}")
+    print(f"   -> JSON 구조:")
+    print(f"      📁 articles: {len(articles_list)}개 뉴스 객체")
+    print(f"      📁 metadata: 수집 정보 및 통계")
+    
+    # JSON 구조 미리보기
+    print("\n🔍 JSON 구조 미리보기:")
+    print("```json")
+    print("{")
+    print('  "articles": [')
+    print('    {')
+    print(f'      "날짜": "{articles_list[0]["날짜"]}",')
+    print(f'      "티커": "{articles_list[0]["티커"]}",')
+    print(f'      "제목": "{articles_list[0]["제목"][:50]}...",')
+    print(f'      "언론사": "{articles_list[0]["언론사"]}",')
+    print(f'      "링크": "{articles_list[0]["링크"][:50]}..."')
+    print('    },')
+    print('    ...')
+    print('  ],')
+    print('  "metadata": { ... }')
+    print('}')
+    print("```")
 
 if __name__ == "__main__":
-    get_news_for_tickers()
+    get_news_for_tickers() 
