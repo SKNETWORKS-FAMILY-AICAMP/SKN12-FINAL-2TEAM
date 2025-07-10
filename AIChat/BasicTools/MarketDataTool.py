@@ -127,4 +127,12 @@ class MarketDataTool(BaseFinanceTool):
                 std = std * (252 ** 0.5)
             elif freq == 'monthly':
                 std = std * (21 ** 0.5)
-            return std.to_dict() 
+            return std.to_dict()
+
+    def get_vix_data(self) -> Dict[str, float]:
+        """
+        VIX(S&P500 변동성지수) 최신 종가 반환
+        """
+        vix_hist = yf.Ticker("^VIX").history(period="1d")
+        vix = float(vix_hist["Close"].iloc[-1]) if not vix_hist.empty else None
+        return {"vix": vix} 
