@@ -5,8 +5,16 @@ import time
 import random
 from typing import List, Optional, Dict, Any
 from BaseFinanceTool import BaseFinanceTool
+from pydantic import BaseModel, Field
 
-
+class MacroEconomicInput(BaseModel):
+    series_ids: List[str] = Field(
+        ...,
+        description=(
+            "FRED(Federal Reserve Economic Data)의 시리즈 ID 리스트.\n"
+            "예시: ['CPIAUCSL', 'FEDFUNDS', 'UNRATE']"
+        )
+    )
 def get_with_retry(url, max_retries=3, backoff=2):
     for i in range(max_retries):
         try:

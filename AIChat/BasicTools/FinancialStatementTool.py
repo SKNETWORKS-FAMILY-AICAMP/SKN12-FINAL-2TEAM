@@ -1,5 +1,11 @@
 import requests
 from AIChat.BaseFinanceTool import BaseFinanceTool
+from pydantic import BaseModel, Field
+
+class FinancialStatementParams(BaseModel):
+    ticker: str = Field(..., description="조회할 미국 주식의 종목 코드 (예: AAPL)")
+    period: str = Field("annual", description="조회 주기: 'annual' 또는 'quarter'")
+    limit: int = Field(5, description="조회할 기간 개수 (최대 120)")
 
 class FinancialStatementTool(BaseFinanceTool):
     SUPPORTED_TYPES = {

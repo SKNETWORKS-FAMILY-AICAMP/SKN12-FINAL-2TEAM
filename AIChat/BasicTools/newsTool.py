@@ -2,8 +2,11 @@
 이 도구는 GNews API를 사용하여 특정 키워드에 대한 최신 뉴스를"""
 import requests
 from typing import Optional, List, Dict, Any
-from BaseFinanceTool import BaseFinanceTool
-
+from AIChat.BaseFinanceTool import BaseFinanceTool
+from pydantic import BaseModel, Field
+class NewsInput(BaseModel):
+    query: str = Field(..., description="검색할 뉴스 키워드 또는 종목 코드 (예: 'TSLA', '금리 인상')")
+    k: int = Field(5, description="검색할 뉴스 개수 (기본값: 5)")
 
 class NewsOutput:
     def __init__(
