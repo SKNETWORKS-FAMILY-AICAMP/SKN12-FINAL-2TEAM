@@ -18,3 +18,5 @@ class CacheConfig(BaseModel):
     password: str = ""
     session_expire_seconds: int = 3600
     connection_pool: ConnectionPoolConfig = ConnectionPoolConfig()
+    max_retries: int = 3
+    connection_timeout: int = 5

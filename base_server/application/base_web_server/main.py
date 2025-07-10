@@ -26,6 +26,10 @@ from service.db.database_config import DatabaseConfig
 from service.cache.cache_service import CacheService
 from service.cache.redis_cache_client_pool import RedisCacheClientPool
 from service.cache.cache_config import CacheConfig
+from service.external.external_service import ExternalService
+from service.storage.storage_service import StorageService
+from service.search.search_service import SearchService
+from service.vectordb.vectordb_service import VectorDbService
 from service.service_container import ServiceContainer
 
 # uvicorn base_server.application.base_web_server.main:app --reload --  logLevel=Debug
@@ -88,10 +92,88 @@ async def lifespan(app: FastAPI):
             app_id=app_config.templateConfig.appId,
             env=app_config.templateConfig.env,
             db=app_config.cacheConfig.db,
-            password=app_config.cacheConfig.password
+            password=app_config.cacheConfig.password,
+            max_retries=app_config.cacheConfig.max_retries,
+            connection_timeout=app_config.cacheConfig.connection_timeout
         )
         CacheService.Init(cache_client_pool)
         Logger.info("캐시 서비스 초기화 완료")
+        
+        # External 서비스 초기화
+        try:
+            await ExternalService.init(app_config.externalConfig)
+            Logger.info("External 서비스 초기화 완료")
+            
+            # 테스트 API 호출 (httpbin.org/get - 무조건 응답하는 테스트 엔드포인트)
+            test_result = await ExternalService.get("test_api", "/get")
+            if test_result["success"]:
+                Logger.info(f"External 서비스 테스트 성공: {test_result['data'].get('url', 'N/A')}")
+            else:
+                Logger.warn(f"External 서비스 테스트 실패: {test_result.get('error', 'Unknown')}")
+                
+        except Exception as e:
+            Logger.error(f"External 서비스 초기화 실패: {e}")
+            Logger.info("External 서비스 없이 계속 진행")
+        
+        # Storage 서비스 초기화 (S3)
+        try:
+            if StorageService.init(app_config.storageConfig):
+                Logger.info("Storage 서비스 초기화 완료")
+                
+                # AWS 연결 테스트
+                try:
+                    test_result = await StorageService.list_files("test-bucket", "", max_keys=1)
+                    if test_result["success"]:
+                        Logger.info("Storage 서비스 AWS 연결 성공")
+                    else:
+                        Logger.warn(f"Storage 서비스 AWS 연결 실패: {test_result.get('error', 'Unknown')}")
+                except Exception as conn_e:
+                    Logger.warn(f"Storage 서비스 AWS 연결 테스트 실패: {conn_e}")
+            else:
+                Logger.warn("Storage 서비스 초기화 실패")
+        except Exception as e:
+            Logger.error(f"Storage 서비스 초기화 실패: {e}")
+            Logger.info("Storage 서비스 없이 계속 진행")
+        
+        # Search 서비스 초기화 (OpenSearch)
+        try:
+            if SearchService.init(app_config.searchConfig):
+                Logger.info("Search 서비스 초기화 완료")
+                
+                # OpenSearch 연결 테스트
+                try:
+                    test_result = await SearchService.index_exists("test-index")
+                    if test_result["success"]:
+                        Logger.info("Search 서비스 OpenSearch 연결 성공")
+                    else:
+                        Logger.warn(f"Search 서비스 OpenSearch 연결 실패: {test_result.get('error', 'Unknown')}")
+                except Exception as conn_e:
+                    Logger.warn(f"Search 서비스 OpenSearch 연결 테스트 실패: {conn_e}")
+            else:
+                Logger.warn("Search 서비스 초기화 실패")
+        except Exception as e:
+            Logger.error(f"Search 서비스 초기화 실패: {e}")
+            Logger.info("Search 서비스 없이 계속 진행")
+        
+        # VectorDB 서비스 초기화 (Bedrock)
+        try:
+            if VectorDbService.init(app_config.vectordbConfig):
+                Logger.info("VectorDB 서비스 초기화 완료")
+                
+                # Bedrock 연결 테스트
+                try:
+                    test_result = await VectorDbService.embed_text("test connection")
+                    if test_result["success"]:
+                        Logger.info("VectorDB 서비스 Bedrock 연결 성공")
+                    else:
+                        Logger.warn(f"VectorDB 서비스 Bedrock 연결 실패: {test_result.get('error', 'Unknown')}")
+                except Exception as conn_e:
+                    Logger.warn(f"VectorDB 서비스 Bedrock 연결 테스트 실패: {conn_e}")
+            else:
+                Logger.warn("VectorDB 서비스 초기화 실패")
+        except Exception as e:
+            Logger.error(f"VectorDB 서비스 초기화 실패: {e}")
+            Logger.info("VectorDB 서비스 없이 계속 진행")
         
     except Exception as e:
         Logger.error(f"Config 파일 로드 실패: {config_file} - {e}")
@@ -162,17 +244,105 @@ async def lifespan(app: FastAPI):
     
     yield
     
-    # 정리
-    if database_service:
-        await database_service.close_service()
-        Logger.info("데이터베이스 서비스 종료")
+    # 서비스 정리 - 예외 처리와 함께
+    Logger.info("서비스 종료 시작...")
     
-    # 캐시 서비스 정리
-    if CacheService.is_initialized():
-        await CacheService.shutdown()
-        Logger.info("캐시 서비스 종료")
+    # VectorDB 서비스 종료 (Bedrock 세션 먼저)
+    try:
+        if VectorDbService.is_initialized():
+            await VectorDbService.shutdown()
+            Logger.info("VectorDB 서비스 종료")
+    except Exception as e:
+        Logger.error(f"VectorDB 서비스 종료 오류: {e}")
+    
+    # Search 서비스 종료 (OpenSearch 세션)
+    try:
+        if SearchService.is_initialized():
+            await SearchService.shutdown()
+            Logger.info("Search 서비스 종료")
+    except Exception as e:
+        Logger.error(f"Search 서비스 종료 오류: {e}")
+    
+    # Storage 서비스 종료 (S3 세션)
+    try:
+        if StorageService.is_initialized():
+            await StorageService.shutdown()
+            Logger.info("Storage 서비스 종료")
+    except Exception as e:
+        Logger.error(f"Storage 서비스 종료 오류: {e}")
+        
+    # External 서비스 종료 (HTTP 세션)  
+    try:
+        if ExternalService.is_initialized():
+            await ExternalService.shutdown()
+            Logger.info("External 서비스 종료")
+    except Exception as e:
+        Logger.error(f"External 서비스 종료 오류: {e}")
+        
+    # 캐시 서비스 종료 (Redis 연결)
+    try:
+        if CacheService.is_initialized():
+            await CacheService.shutdown()
+            Logger.info("캐시 서비스 종료")
+    except Exception as e:
+        Logger.error(f"캐시 서비스 종료 오류: {e}")
+    
+    # 데이터베이스 서비스 종료 (마지막)
+    try:
+        if database_service:
+            await database_service.close_service()
+            Logger.info("데이터베이스 서비스 종료")
+    except Exception as e:
+        Logger.error(f"데이터베이스 서비스 종료 오류: {e}")
+    
+    # 진행 중인 작업들 완료 대기
+    try:
+        import asyncio
+        import gc
+        
+        # 가비지 컬렉션 강제 실행
+        gc.collect()
+        
+        # 간단한 대기만 수행 (작업 취소는 uvicorn에 맡김)
+        await asyncio.sleep(0.2)  # 짧은 대기
+        Logger.info("모든 서비스 종료 완료")
+        
+        # 활성 스레드 수 확인
+        import threading
+        active_threads = threading.active_count()
+        Logger.info(f"Active threads: {active_threads}")
+        
+    except Exception as e:
+        Logger.error(f"종료 대기 오류: {e}")
+    
+    # 리소스 정리 완료 로그
+    try:
+        Logger.info("전역 리소스 정리 완료")
+        Logger.info("Application lifespan ended")
+    except Exception as e:
+        Logger.error(f"전역 리소스 정리 오류: {e}")
 
 
+# 전역 종료 핸들러 추가
+import signal
+import sys
+
+def signal_handler(signum, frame):
+    """SIGINT/SIGTERM 시그널 핸들러"""
+    Logger.info(f"Signal {signum} received. Shutting down gracefully...")
+    
+    # 정상 종료 시도
+    try:
+        sys.exit(0)
+    except SystemExit:
+        # 만약 정상 종료가 실패하면 강제 종료
+        import os
+        Logger.info("Force exiting...")
+        os._exit(0)
+
+# 시그널 핸들러 등록
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
 app = FastAPI(lifespan=lifespan)
 

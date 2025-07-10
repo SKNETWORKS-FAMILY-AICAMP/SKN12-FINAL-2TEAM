@@ -7,7 +7,7 @@ from template.autotrade.common.autotrade_serialize import (
     AutoTradeBacktestRequest, AutoTradeBacktestResponse,
     AutoTradeAIStrategyRequest, AutoTradeAIStrategyResponse
 )
-from template.autotrade.common.autotrade_model import TradingStrategy, StrategyPerformance, TradeExecution, BacktestResult
+from template.autotrade.common.autotrade_model import TradingStrategy, StrategyPerformance, TradeExecution, StrategyBacktest
 from service.core.logger import Logger
 from service.service_container import ServiceContainer
 import json
@@ -39,40 +39,40 @@ class AutoTradeTemplateImpl(BaseTemplate):
             
             # 가데이터로 응답 생성
             response.strategies = [
-                {
-                    "strategy_id": f"strat_{account_db_key}_1",
-                    "name": "RSI 역추세 전략",
-                    "description": "RSI 과매수/과매도 구간에서의 역추세 매매",
-                    "strategy_type": "TECHNICAL",
-                    "target_symbols": ["AAPL", "GOOGL"],
-                    "status": "ACTIVE",
-                    "created_at": str(datetime.now()),
-                    "risk_level": "MODERATE"
-                },
-                {
-                    "strategy_id": f"strat_{account_db_key}_2",
-                    "name": "AI 추천 전략",
-                    "description": "AI가 추천하는 종목 자동 매매",
-                    "strategy_type": "AI_GENERATED",
-                    "target_symbols": ["TSLA", "MSFT"],
-                    "status": "PAUSED",
-                    "created_at": str(datetime.now()),
-                    "risk_level": "HIGH"
-                }
+                TradingStrategy(
+                    strategy_id=f"strat_{account_db_key}_1",
+                    name="RSI 역추세 전략",
+                    description="RSI 과매수/과매도 구간에서의 역추세 매매",
+                    algorithm_type="MEAN_REVERSION",
+                    target_symbols=["AAPL", "GOOGL"],
+                    is_active=True,
+                    created_at=str(datetime.now())
+                ),
+                TradingStrategy(
+                    strategy_id=f"strat_{account_db_key}_2",
+                    name="AI 추천 전략",
+                    description="AI가 추천하는 종목 자동 매매",
+                    algorithm_type="AI_GENERATED",
+                    target_symbols=["TSLA", "MSFT"],
+                    is_active=False,
+                    created_at=str(datetime.now())
+                )
             ]
             response.performances = {
-                f"strat_{account_db_key}_1": {
-                    "total_return": 12.5,
-                    "win_rate": 65.0,
-                    "sharpe_ratio": 1.2,
-                    "max_drawdown": -8.5
-                },
-                f"strat_{account_db_key}_2": {
-                    "total_return": 8.3,
-                    "win_rate": 58.0,
-                    "sharpe_ratio": 0.9,
-                    "max_drawdown": -12.0
-                }
+                f"strat_{account_db_key}_1": StrategyPerformance(
+                    strategy_id=f"strat_{account_db_key}_1",
+                    total_return=12.5,
+                    win_rate=65.0,
+                    sharpe_ratio=1.2,
+                    max_drawdown=-8.5
+                ),
+                f"strat_{account_db_key}_2": StrategyPerformance(
+                    strategy_id=f"strat_{account_db_key}_2",
+                    total_return=8.3,
+                    win_rate=58.0,
+                    sharpe_ratio=0.9,
+                    max_drawdown=-12.0
+                )
             }
             response.errorCode = 0
             

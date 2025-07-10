@@ -6,7 +6,7 @@ class RedisCacheClientPool:
     - app_id, env 등 네이밍 파라미터 사용
     - new() 메서드로 RedisCacheClient 인스턴스 반환
     """
-    def __init__(self, host: str, port: int, session_expire_time: int, app_id: str, env: str, db: int = 0, password: str = ""):
+    def __init__(self, host: str, port: int, session_expire_time: int, app_id: str, env: str, db: int = 0, password: str = "", max_retries: int = 3, connection_timeout: int = 5):
         self._host = host
         self._port = port
         self._session_expire_time = session_expire_time
@@ -14,6 +14,8 @@ class RedisCacheClientPool:
         self._env = env
         self._db = db
         self._password = password
+        self._max_retries = max_retries
+        self._connection_timeout = connection_timeout
 
     def new(self) -> RedisCacheClient:
         """
@@ -29,5 +31,7 @@ class RedisCacheClientPool:
             self._app_id,
             self._env,
             self._db,
-            self._password
+            self._password,
+            self._max_retries,
+            self._connection_timeout
         )

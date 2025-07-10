@@ -39,9 +39,10 @@ class MarketTemplateImpl(BaseTemplate):
             )
             
             # 가데이터 응답
+            from template.market.common.market_model import SecurityInfo
             response.securities = [
-                {"symbol": "AAPL", "name": "Apple Inc.", "exchange": "NASDAQ", "sector": "Technology"},
-                {"symbol": "GOOGL", "name": "Alphabet Inc.", "exchange": "NASDAQ", "sector": "Technology"}
+                SecurityInfo(symbol="AAPL", name="Apple Inc.", exchange="NASDAQ", sector="Technology"),
+                SecurityInfo(symbol="GOOGL", name="Alphabet Inc.", exchange="NASDAQ", sector="Technology")
             ]
             response.total_count = 2
             response.errorCode = 0
@@ -70,13 +71,14 @@ class MarketTemplateImpl(BaseTemplate):
             # - 차트 데이터 생성
             
             # 가데이터 응답
+            from template.market.common.market_model import PriceData, TechnicalIndicators
             response.price_data = {
-                "AAPL": {"price": 150.0, "change": 2.5, "change_percent": 1.69},
-                "GOOGL": {"price": 240.0, "change": -3.2, "change_percent": -1.31}
+                "AAPL": [PriceData(symbol="AAPL", close=150.0, change=2.5, change_percent=1.69)],
+                "GOOGL": [PriceData(symbol="GOOGL", close=240.0, change=-3.2, change_percent=-1.31)]
             }
             response.technical_indicators = {
-                "AAPL": {"rsi": 65.5, "macd": 1.2, "ma20": 148.5},
-                "GOOGL": {"rsi": 45.2, "macd": -0.8, "ma20": 242.3}
+                "AAPL": TechnicalIndicators(symbol="AAPL", rsi=65.5, macd=1.2, ma20=148.5),
+                "GOOGL": TechnicalIndicators(symbol="GOOGL", rsi=45.2, macd=-0.8, ma20=242.3)
             }
             response.errorCode = 0
             
@@ -101,12 +103,13 @@ class MarketTemplateImpl(BaseTemplate):
             # - 종목 연관성 분석
             
             # 가데이터 응답
+            from template.market.common.market_model import NewsItem
             response.news = [
-                {"title": "Apple announces new product", "source": "Reuters", "sentiment": "POSITIVE"},
-                {"title": "Tech stocks rally", "source": "Bloomberg", "sentiment": "POSITIVE"}
+                NewsItem(title="Apple announces new product", source="Reuters", sentiment_score=0.8),
+                NewsItem(title="Tech stocks rally", source="Bloomberg", sentiment_score=0.6)
             ]
             response.total_count = 2
-            response.sentiment_summary = {"positive": 2, "negative": 0, "neutral": 0}
+            response.sentiment_summary = {"positive": 2.0, "negative": 0.0, "neutral": 0.0}
             response.errorCode = 0
             
         except Exception as e:
@@ -156,13 +159,14 @@ class MarketTemplateImpl(BaseTemplate):
             )
             
             # 가데이터 응답
+            from template.market.common.market_model import PriceData
             response.indices = {
-                "KOSPI": {"value": 2500.0, "change": 15.2, "change_percent": 0.61},
-                "KOSDAQ": {"value": 850.0, "change": -8.5, "change_percent": -0.99}
+                "KOSPI": PriceData(symbol="KOSPI", close=2500.0, change=15.2, change_percent=0.61),
+                "KOSDAQ": PriceData(symbol="KOSDAQ", close=850.0, change=-8.5, change_percent=-0.99)
             }
-            response.top_gainers = [{"symbol": "AAPL", "change_percent": 5.2}]
-            response.top_losers = [{"symbol": "GOOGL", "change_percent": -3.1}]
-            response.most_active = [{"symbol": "TSLA", "volume": 50000000}]
+            response.top_gainers = [PriceData(symbol="AAPL", change_percent=5.2)]
+            response.top_losers = [PriceData(symbol="GOOGL", change_percent=-3.1)]
+            response.most_active = [PriceData(symbol="TSLA", volume=50000000)]
             response.market_sentiment = "NEUTRAL"
             response.errorCode = 0
             
