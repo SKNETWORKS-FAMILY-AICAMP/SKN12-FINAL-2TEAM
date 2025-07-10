@@ -1,6 +1,54 @@
+'''
+1. 거시경제 + 기술적 지표 데이터를 받아서
+2. Bayesian + Hidden Markov Model 스타일로 각 국면의 likelihood(매수, 매도, 회보중 제일 유사) 계산 후
+3. 마르코프 전이 확률(prior) 곱하여 posterior 계산
+4. 가장 확률 높은 국면(Bull/Bear/Sideways)을 최종 시장 상태로 예측
+'''
+
 from typing import Dict, Any, List, Optional
 import numpy as np
 from AIChat.BaseFinanceTool import BaseFinanceTool
+from pydantic import BaseModel, Field
+from AIChat.BasicTools.MacroEconomicTool import MacroEconomicTool
+from AIChat.BasicTools.TechnicalAnalysisTool import TechnicalAnalysisTool, TechnicalAnalysisInput
+from AIChat.BasicTools.MarketDataTool import MarketDataTool, MarketDataInput
+
+class MarketRegimeDetectorInput(BaseModel):
+    """
+    Market Regime Detector Tool 입력 스키마.
+    이 클래스는 고급툴 내부에서 MacroEconomicTool, TechnicalAnalysisTool 호출 시 필요한 모든 파라미터를 포함한다.
+    """
+    series_ids: List[str] = Field(
+        ...,
+        description=(
+            "FRED macroeconomic series IDs 리스트.\n"
+            "예시: ['CPIAUCSL', 'FEDFUNDS', 'UNRATE']"
+        )
+    )
+    tickers: List[str] = Field(
+        ...,
+        description=(
+            "기술적 분석용 ticker 리스트.\n"
+            "예시: ['AAPL', 'MSFT', 'GOOG']"
+        )
+    )
+    start_date: str = Field(
+        ...,
+        description="조회 시작일 (yyyy-mm-dd). 예: '2024-01-01'"
+    )
+    end_date: str = Field(
+        ...,
+        description="조회 종료일 (yyyy-mm-dd). 예: '2024-12-31'"
+    )
+    prev_state: Optional[str] = Field(
+        None,
+        description="이전 시장 상태 (예: 'Bull', 'Bear', 'Sideways')"
+    )
+
+class MarketRegimeDetectorOutput(BaseModel):
+    summary: str
+    data: Dict[str, Any]
+
 # 현재 시장이 Bear, Sideways, Bull 중 어디 상태인지 판별하는 클래스
 class MarketRegimeDetector:
     def __init__(self):
@@ -86,18 +134,52 @@ class MarketRegimeDetectorTool(BaseFinanceTool):
         self.detector = MarketRegimeDetector() # 핵심 로직 클래스 인스턴스화
 
     # macro_data + technical_data 입력 받아 regime 결과 반환
-    def get_data(self, macro_data: Dict[str, Any], technical_data: Dict[str, Any], prev_state: Optional[str] = None) -> Dict[str, Any]:
+    def get_data(
+        self,
+        input_data: MarketRegimeDetectorInput,
+        max_latency: float = 1.0,
+    ) -> MarketRegimeDetectorOutput:
         """
-        macro_data: {'gdp_growth': float, 'cpi': float}
-        technical_data: {'rsi': float, 'vix': float, 'macd': float}
-        prev_state: 이전 상태명 (선택)
+        단일 시점 Regime 예측. (하급툴 직접 호출)
         """
+        # 1. MacroEconomicTool 호출
+        macro_tool = MacroEconomicTool()
+        macro_output = macro_tool.get_data(input_data.series_ids)
+        # macro_output.data: List[dict] → {'series_id': ..., 'latest_value': ...}
+        macro_data = {s['series_id']: s['latest_value'] for s in macro_output.data if s.get('latest_value') is not None}
+        # 2. TechnicalAnalysisTool 호출
+        ta_tool = TechnicalAnalysisTool()
+        ta_input = TechnicalAnalysisInput(tickers=input_data.tickers)
+        ta_output = ta_tool.get_data(ta_input, as_dict=True)
+        # 예시: 첫 번째 ticker만 사용 (확장 가능)
+        ticker = input_data.tickers[0]
+        ta_result = ta_output.results[ticker]
+        technical_data = {
+            'rsi': ta_result.rsi,
+            'macd': ta_result.macd,
+            'ema': ta_result.ema
+        }
+        # 3. MarketDataTool에서 VIX 추출
+        market_data_tool = MarketDataTool()
+        market_input = MarketDataInput(
+            tickers=input_data.tickers,
+            start_date=input_data.start_date,
+            end_date=input_data.end_date
+        )
+        market_data = market_data_tool.get_data(market_input)
+        technical_data['vix'] = market_data['vix']
+        # 4. prev_state
+        prev_state = input_data.prev_state
+        # 5. regime 예측
         regime, probabilities, transition_matrix = self.detector.detect_regime(macro_data, technical_data, prev_state)
-        return {
+        # summary 생성 예시
+        summary = f"예측 Regime: {regime}, 확률: {probabilities}, 전이행렬: {transition_matrix.tolist()}"
+        data = {
             'regime': regime,
             'probabilities': probabilities,
-            'transition_matrix': transition_matrix
+            'transition_matrix': transition_matrix.tolist()
         }
+        return MarketRegimeDetectorOutput(summary=summary, data=data)
 
 # --- 워크플로우 예시 (LangGraph 등 오케스트레이션 툴에서 노드/엣지 구조 정의) ---
 workflow_nodes = [

@@ -9,7 +9,7 @@ from template.chat.common.chat_serialize import (
     ChatPersonaListRequest, ChatPersonaListResponse,
     ChatRoomDeleteRequest, ChatRoomDeleteResponse
 )
-from template.chat.common.chat_model import ChatRoom, ChatMessage, AIAnalysisResult, InvestmentRecommendation, AIPersona
+from template.chat.common.chat_model import ChatRoom, ChatMessage, AnalysisResult, InvestmentRecommendation, AIPersona
 from service.core.logger import Logger
 from service.service_container import ServiceContainer
 import json

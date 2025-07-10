@@ -5,7 +5,13 @@
 import yfinance as yf
 import pandas as pd
 from typing import List, Dict, Optional, Any
+from pydantic import BaseModel
 from AIChat.BaseFinanceTool import BaseFinanceTool
+
+class MarketDataInput(BaseModel):
+    tickers: List[str]
+    start_date: str
+    end_date: str
 
 class MarketDataTool(BaseFinanceTool):
     def __init__(self):
@@ -13,11 +19,12 @@ class MarketDataTool(BaseFinanceTool):
 
     def get_data(
         self,
-        tickers: List[str],
-        start_date: str,
-        end_date: str,
+        input_data: MarketDataInput,
         as_dict: bool = False
     ) -> Dict[str, Any]:
+        tickers = input_data.tickers
+        start_date = input_data.start_date
+        end_date = input_data.end_date
         result = {}
         data = yf.download(tickers, start=start_date, end=end_date, group_by='ticker', auto_adjust=False)
         price_data = {}
@@ -44,6 +51,7 @@ class MarketDataTool(BaseFinanceTool):
         cov = self.get_covariance_matrix(tickers, start_date, end_date)
         exp_ret = self.get_expected_returns(tickers, start_date, end_date)
         vol = self.get_volatility(tickers, start_date, end_date)
+        vix = self._get_latest_vix_value()
         if as_dict:
             # DataFrame을 dict로 변환
             price_data = {k: v.to_dict(orient='records') for k, v in price_data.items()}
@@ -52,8 +60,10 @@ class MarketDataTool(BaseFinanceTool):
             'price_data': price_data,
             'covariance_matrix': cov,
             'expected_returns': exp_ret,
-            'volatility': vol
-        }
+            'volatility': vol,
+            'vix': vix
+            }
+        # 항상 최신 VIX 값 포함
         return result
 
     def get_covariance_matrix(
@@ -128,11 +138,13 @@ class MarketDataTool(BaseFinanceTool):
             elif freq == 'monthly':
                 std = std * (21 ** 0.5)
             return std.to_dict()
-
-    def get_vix_data(self) -> Dict[str, float]:
+        
+    def _get_latest_vix_value(self) -> float:
         """
-        VIX(S&P500 변동성지수) 최신 종가 반환
+        VIX(S&P500 변동성지수) 최신 종가 반환 (실패시 None)
         """
         vix_hist = yf.Ticker("^VIX").history(period="1d")
-        vix = float(vix_hist["Close"].iloc[-1]) if not vix_hist.empty else None
-        return {"vix": vix} 
+        if not vix_hist.empty:
+            return float(vix_hist["Close"].iloc[-1])
+        return None
+            

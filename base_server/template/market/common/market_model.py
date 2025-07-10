@@ -2,27 +2,26 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 
 class SecurityInfo(BaseModel):
-    """종목 기본 정보"""
+    """종목 정보"""
     symbol: str = ""
     name: str = ""
     exchange: str = ""
     sector: str = ""
-    industry: str = ""
-    market_cap: int = 0
+    market_cap: float = 0.0
     currency: str = "KRW"
-    description: str = ""
+    country: str = "KR"
 
 class PriceData(BaseModel):
     """가격 데이터"""
     symbol: str = ""
     timestamp: str = ""
-    open_price: float = 0.0
-    high_price: float = 0.0
-    low_price: float = 0.0
-    close_price: float = 0.0
+    open: float = 0.0
+    high: float = 0.0
+    low: float = 0.0
+    close: float = 0.0
     volume: int = 0
-    change_amount: float = 0.0
-    change_rate: float = 0.0
+    change: float = 0.0
+    change_percent: float = 0.0
 
 class TechnicalIndicators(BaseModel):
     """기술적 지표"""

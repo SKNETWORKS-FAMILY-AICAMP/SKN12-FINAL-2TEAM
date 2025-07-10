@@ -293,7 +293,7 @@ class NotificationTemplateImpl(BaseTemplate):
                         failed_alerts.append(alert_id)
                 except Exception as e:
                     failed_alerts.append(alert_id)
-                    Logger.warning(f"Failed to delete alert {alert_id}: {e}")
+                    Logger.warn(f"Failed to delete alert {alert_id}: {e}")
             
             # 삭제 이력 저장
             await db_service.call_shard_procedure(

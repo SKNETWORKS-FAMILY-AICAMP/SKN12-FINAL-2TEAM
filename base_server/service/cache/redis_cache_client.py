@@ -1,15 +1,40 @@
 import aioredis
-from typing import List, Dict, Tuple, Optional
+import asyncio
+import time
+import random
+from typing import List, Dict, Tuple, Optional, Any
+from dataclasses import dataclass
+from enum import Enum
+from service.core.logger import Logger
 from .cache_client import AbstractCacheClient
+
+class ConnectionState(Enum):
+    HEALTHY = "healthy"
+    DEGRADED = "degraded"
+    FAILED = "failed"
+
+@dataclass
+class CacheMetrics:
+    total_operations: int = 0
+    successful_operations: int = 0
+    failed_operations: int = 0
+    total_response_time: float = 0.0
+    cache_hits: int = 0
+    cache_misses: int = 0
+    last_operation_time: Optional[float] = None
+    connection_failures: int = 0
+    timeout_errors: int = 0
+    redis_errors: int = 0
 
 class RedisCacheClient(AbstractCacheClient):
     """
-    비동기 Redis 캐시 클라이언트.
+    비동기 Redis 캐시 클라이언트 - 연결 관리, 재시도, 메트릭 포함
     - aioredis를 사용하여 비동기 Redis 연동
     - context manager 지원 (async with)
     - app_id, env 기반 네임스페이스 키 사용
+    - 향상된 연결 관리 및 모니터링
     """
-    def __init__(self, host: str, port: int, session_expire_time: int, app_id: str, env: str, db: int = 0, password: str = ""):
+    def __init__(self, host: str, port: int, session_expire_time: int, app_id: str, env: str, db: int = 0, password: str = "", max_retries: int = 3, connection_timeout: int = 5):
         self._host = host
         self._port = port
         self._db = db
@@ -17,6 +42,13 @@ class RedisCacheClient(AbstractCacheClient):
         self.session_expire_time = session_expire_time
         self.cache_key = f"{app_id}:{env}"
         self._client: Optional[aioredis.Redis] = None
+        self.metrics = CacheMetrics()
+        self.connection_state = ConnectionState.HEALTHY
+        self._last_health_check = 0
+        self._max_retries = max_retries
+        self._retry_delay_base = 0.5
+        self._connection_timeout = connection_timeout
+        self._socket_timeout = 30
 
     async def __aenter__(self):
         await self.connect()
@@ -26,31 +58,143 @@ class RedisCacheClient(AbstractCacheClient):
         await self.close()
 
     async def connect(self):
-        if self._client is None:
-            # Redis URL 구성
-            if self._password:
-                url = f"redis://:{self._password}@{self._host}:{self._port}/{self._db}"
-            else:
-                url = f"redis://{self._host}:{self._port}/{self._db}"
-            self._client = await aioredis.from_url(url, decode_responses=True)
+        """Redis 연결 생성 (Enhanced connection management with retry)"""
+        for attempt in range(self._max_retries):
+            try:
+                if self._client is None:
+                    # Redis URL 구성
+                    if self._password:
+                        url = f"redis://:{self._password}@{self._host}:{self._port}/{self._db}"
+                    else:
+                        url = f"redis://{self._host}:{self._port}/{self._db}"
+                    
+                    # 향상된 연결 설정
+                    self._client = await aioredis.from_url(
+                        url, 
+                        decode_responses=True,
+                        socket_connect_timeout=self._connection_timeout,
+                        socket_timeout=self._socket_timeout,
+                        retry_on_timeout=True,
+                        health_check_interval=30,
+                        max_connections=20
+                    )
+                    
+                    # 연결 테스트
+                    await self._test_connection()
+                    self.connection_state = ConnectionState.HEALTHY
+                    Logger.info(f"Redis cache client connected to {self._host}:{self._port}/{self._db}")
+                
+                return
+                
+            except aioredis.ConnectionError as e:
+                self.metrics.connection_failures += 1
+                self.connection_state = ConnectionState.FAILED
+                Logger.warn(f"Redis connection failed (attempt {attempt + 1}/{self._max_retries}): {e}")
+                
+            except Exception as e:
+                self.metrics.connection_failures += 1
+                self.connection_state = ConnectionState.DEGRADED
+                Logger.warn(f"Redis client initialization failed (attempt {attempt + 1}/{self._max_retries}): {e}")
+            
+            # 재시도 대기
+            if attempt < self._max_retries - 1:
+                delay = self._retry_delay_base * (2 ** attempt) + random.uniform(0, 0.5)
+                await asyncio.sleep(delay)
+        
+        # 모든 재시도 실패
+        self.connection_state = ConnectionState.FAILED
+        raise aioredis.ConnectionError(f"Failed to connect to Redis after {self._max_retries} attempts")
 
     def _get_key(self, key: str) -> str:
         return f"{self.cache_key}:{key}"
 
+    async def _test_connection(self):
+        """Redis 연결 테스트"""
+        if self._client:
+            await self._client.ping()
+            Logger.debug("Redis connection test successful")
+    
+    async def _execute_with_retry(self, operation_name: str, operation_func, *args, **kwargs):
+        """재시도 로직을 포함한 Redis 작업 실행"""
+        start_time = time.time()
+        self.metrics.total_operations += 1
+        self.metrics.last_operation_time = start_time
+        
+        for attempt in range(self._max_retries):
+            try:
+                if self._client is None:
+                    await self.connect()
+                
+                result = await operation_func(*args, **kwargs)
+                
+                # 성공 메트릭
+                operation_time = time.time() - start_time
+                self.metrics.successful_operations += 1
+                self.metrics.total_response_time += operation_time
+                
+                # Cache hit/miss 추적 (get 계열 작업)
+                if 'get' in operation_name.lower() and result is not None:
+                    self.metrics.cache_hits += 1
+                elif 'get' in operation_name.lower() and result is None:
+                    self.metrics.cache_misses += 1
+                
+                return result
+                
+            except aioredis.ConnectionError as e:
+                self.metrics.connection_failures += 1
+                self.connection_state = ConnectionState.FAILED
+                Logger.warn(f"Redis {operation_name} connection error (attempt {attempt + 1}/{self._max_retries}): {e}")
+                
+                # 연결 재설정
+                await self.close()
+                
+            except asyncio.TimeoutError as e:
+                self.metrics.timeout_errors += 1
+                Logger.warn(f"Redis {operation_name} timeout error (attempt {attempt + 1}/{self._max_retries}): {e}")
+                
+            except aioredis.RedisError as e:
+                self.metrics.redis_errors += 1
+                Logger.warn(f"Redis {operation_name} error (attempt {attempt + 1}/{self._max_retries}): {e}")
+                
+            except Exception as e:
+                Logger.warn(f"Redis {operation_name} unexpected error (attempt {attempt + 1}/{self._max_retries}): {e}")
+            
+            # 재시도 대기
+            if attempt < self._max_retries - 1:
+                delay = self._retry_delay_base * (2 ** attempt) + random.uniform(0, 0.5)
+                await asyncio.sleep(delay)
+        
+        # 모든 재시도 실패
+        self.metrics.failed_operations += 1
+        total_time = time.time() - start_time
+        Logger.error(f"Redis {operation_name} failed after {self._max_retries} attempts (total: {total_time:.3f}s)")
+        raise aioredis.ConnectionError(f"Redis {operation_name} failed after {self._max_retries} attempts")
+    
     async def close(self):
         if self._client:
-            await self._client.close()
+            try:
+                await self._client.close()
+            except:
+                pass
             self._client = None
+            Logger.info("Redis cache client closed")
+            
+            # 최종 메트릭 로깅
+            final_metrics = self.get_metrics()
+            Logger.info(f"Final Redis cache metrics: {final_metrics}")
 
     async def scan_keys(self, pattern: str) -> List[str]:
-        keys = []
-        cursor = 0
-        while True:
-            cursor, found = await self._client.scan(cursor=cursor, match=pattern)
-            keys.extend(found)
-            if cursor == 0:
-                break
-        return keys
+        async def _scan_operation():
+            keys = []
+            cursor = 0
+            while True:
+                cursor, found = await self._client.scan(cursor=cursor, match=pattern)
+                keys.extend(found)
+                if cursor == 0:
+                    break
+            return keys
+        
+        return await self._execute_with_retry("scan_keys", _scan_operation)
 
     async def delete_keys(self, pattern: str) -> int:
         keys = await self.scan_keys(pattern)
@@ -65,12 +209,12 @@ class RedisCacheClient(AbstractCacheClient):
     async def set_string(self, key: str, val: str, expire: Optional[int] = None) -> bool:
         k = self._get_key(key)
         if expire:
-            return await self._client.set(k, val, ex=expire)
-        return await self._client.set(k, val)
+            return await self._execute_with_retry("set_string", self._client.set, k, val, ex=expire)
+        return await self._execute_with_retry("set_string", self._client.set, k, val)
 
     async def get_string(self, key: str) -> Optional[str]:
         k = self._get_key(key)
-        return await self._client.get(k)
+        return await self._execute_with_retry("get_string", self._client.get, k)
 
     async def set_add(self, key: str, val: str) -> bool:
         k = self._get_key(key)
@@ -82,7 +226,8 @@ class RedisCacheClient(AbstractCacheClient):
 
     async def exists(self, key: str) -> bool:
         k = self._get_key(key)
-        return await self._client.exists(k) != 0
+        result = await self._execute_with_retry("exists", self._client.exists, k)
+        return result != 0
 
     async def expire(self, key: str, seconds: int) -> bool:
         k = self._get_key(key)
@@ -90,7 +235,8 @@ class RedisCacheClient(AbstractCacheClient):
 
     async def delete(self, key: str) -> bool:
         k = self._get_key(key)
-        return await self._client.delete(k) > 0
+        result = await self._execute_with_retry("delete", self._client.delete, k)
+        return result > 0
 
     async def incre(self, key: str) -> int:
         k = self._get_key(key)
@@ -201,4 +347,99 @@ class RedisCacheClient(AbstractCacheClient):
 
     async def set_random_members(self, key: str, count: int) -> List[str]:
         k = self._get_key(key)
-        return await self._client.srandmember(k, count)
+        return await self._execute_with_retry("set_random_members", self._client.srandmember, k, count)
+    
+    # === 모니터링 및 관리 메소드들 ===
+    
+    async def health_check(self) -> Dict[str, Any]:
+        """Redis 연결 상태 확인"""
+        start_time = time.time()
+        
+        try:
+            if self._client is None:
+                await self.connect()
+            
+            # PING 테스트
+            await self._client.ping()
+            
+            # INFO 명령으로 서버 정보 가져오기
+            info = await self._client.info()
+            
+            response_time = time.time() - start_time
+            self.connection_state = ConnectionState.HEALTHY
+            self._last_health_check = time.time()
+            
+            return {
+                "healthy": True,
+                "response_time": response_time,
+                "connection_state": self.connection_state.value,
+                "host": self._host,
+                "port": self._port,
+                "db": self._db,
+                "redis_version": info.get('redis_version', 'unknown'),
+                "connected_clients": info.get('connected_clients', 0),
+                "used_memory_human": info.get('used_memory_human', 'unknown'),
+                "keyspace": info.get(f'db{self._db}', {}),
+                "metrics": self.get_metrics()
+            }
+            
+        except aioredis.ConnectionError as e:
+            self.connection_state = ConnectionState.FAILED
+            return {
+                "healthy": False,
+                "error": f"Connection error: {e}",
+                "error_type": "connection",
+                "connection_state": self.connection_state.value,
+                "host": self._host,
+                "port": self._port,
+                "metrics": self.get_metrics()
+            }
+        except Exception as e:
+            self.connection_state = ConnectionState.DEGRADED
+            return {
+                "healthy": False,
+                "error": str(e),
+                "error_type": "unknown",
+                "connection_state": self.connection_state.value,
+                "host": self._host,
+                "port": self._port,
+                "metrics": self.get_metrics()
+            }
+    
+    def get_metrics(self) -> Dict[str, Any]:
+        """Redis 캐시 클라이언트 메트릭 조회"""
+        avg_response_time = 0.0
+        success_rate = 0.0
+        cache_hit_rate = 0.0
+        
+        if self.metrics.successful_operations > 0:
+            avg_response_time = self.metrics.total_response_time / self.metrics.successful_operations
+        
+        if self.metrics.total_operations > 0:
+            success_rate = self.metrics.successful_operations / self.metrics.total_operations
+        
+        total_cache_operations = self.metrics.cache_hits + self.metrics.cache_misses
+        if total_cache_operations > 0:
+            cache_hit_rate = self.metrics.cache_hits / total_cache_operations
+        
+        return {
+            "total_operations": self.metrics.total_operations,
+            "successful_operations": self.metrics.successful_operations,
+            "failed_operations": self.metrics.failed_operations,
+            "success_rate": success_rate,
+            "average_response_time": avg_response_time,
+            "cache_hits": self.metrics.cache_hits,
+            "cache_misses": self.metrics.cache_misses,
+            "cache_hit_rate": cache_hit_rate,
+            "connection_failures": self.metrics.connection_failures,
+            "timeout_errors": self.metrics.timeout_errors,
+            "redis_errors": self.metrics.redis_errors,
+            "last_operation_time": self.metrics.last_operation_time,
+            "connection_state": self.connection_state.value,
+            "last_health_check": self._last_health_check
+        }
+    
+    def reset_metrics(self):
+        """메트릭 초기화"""
+        self.metrics = CacheMetrics()
+        Logger.info("Redis cache client metrics reset")
