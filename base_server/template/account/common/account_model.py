@@ -22,13 +22,9 @@ class OTPInfo(BaseModel):
 
 class UserProfile(BaseModel):
     """사용자 투자 프로필"""
-    account_db_key: int = 0
-    platform_type: int = 1
     account_id: str = ""
     nickname: str = ""
     email: str = ""
-    account_level: int = 1
-    shard_id: int = 0
     investment_experience: str = "BEGINNER"  # BEGINNER, INTERMEDIATE, EXPERT
     risk_tolerance: str = "MODERATE"         # CONSERVATIVE, MODERATE, AGGRESSIVE  
     investment_goal: str = "GROWTH"          # GROWTH, INCOME, PRESERVATION

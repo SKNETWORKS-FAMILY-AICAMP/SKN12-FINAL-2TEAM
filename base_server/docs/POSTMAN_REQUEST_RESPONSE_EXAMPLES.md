@@ -133,15 +133,9 @@ Content-Type: application/json
 {
   "errorCode": 0,
   "sequence": 2003,
-  "account_db_key": 12345,
-  "platform_type": 1,
-  "account_id": "testuser123",
-  "nickname": "테스트유저",
-  "email": "testuser@example.com",
-  "account_level": 1,
-  "shard_id": 1,
-  "profile_completed": false,
-  "created_at": "2024-01-15T09:30:00Z"
+  "user_id": "testuser123",
+  "message": "회원가입 성공",
+  "next_step": "EMAIL_VERIFICATION"
 }
 ```
 
@@ -168,19 +162,8 @@ Content-Type: application/json
   "errorCode": 0,
   "sequence": 2004,
   "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
-  "refreshToken": "refresh_token_example_12345",
-  "account_db_key": 12345,
+  "refreshToken": "refresh_token_example_12345", 
   "nickname": "테스트유저",
-  "account_level": 1,
-  "shard_id": 1,
-  "account_info": {
-    "account_db_key": 12345,
-    "platform_type": 1,
-    "account_id": "testuser123",
-    "account_level": 1,
-    "shard_id": 1
-  },
-  "expires_in": 3600,
   "profile_completed": false,
   "requires_otp": false
 }
@@ -205,20 +188,14 @@ Authorization: Bearer {{access_token}}
   "errorCode": 0,
   "sequence": 2005,
   "profile": {
-    "account_db_key": 12345,
-    "platform_type": 1,
     "account_id": "testuser123",
     "nickname": "테스트유저",
     "email": "testuser@example.com",
-    "account_level": 1,
-    "shard_id": 1,
     "investment_experience": "INTERMEDIATE",
     "risk_tolerance": "MODERATE",
     "investment_goal": "GROWTH",
     "monthly_budget": 1000000.0,
-    "profile_completed": true,
-    "created_at": "2024-01-15T09:30:00Z",
-    "last_login": "2024-01-15T10:30:00Z"
+    "profile_completed": true
   }
 }
 ```
@@ -248,19 +225,14 @@ Authorization: Bearer {{access_token}}
   "errorCode": 0,
   "sequence": 2006,
   "profile": {
-    "account_db_key": 12345,
-    "platform_type": 1,
     "account_id": "testuser123",
     "nickname": "테스트유저",
     "email": "testuser@example.com",
-    "account_level": 1,
-    "shard_id": 1,
     "investment_experience": "BEGINNER",
     "risk_tolerance": "MODERATE",
     "investment_goal": "GROWTH",
     "monthly_budget": 1000000.0,
-    "profile_completed": true,
-    "created_at": "2024-01-15T09:30:00Z"
+    "profile_completed": true
   }
 }
 ```
