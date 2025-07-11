@@ -23,3 +23,17 @@
 단점 : 실질적 중요 부분은 날짜 & 제목 등만 나옴, 
        yahoo finance 측의 구조 변경이 생길 시 해당 코드는 무용지물
 ```
+
+# 4. 최종 결정 -> yfinance_scheduler.py
+```
+1. yahoo finance의 뉴스를 n분마다 수집하는 Python 스케쥴러 파일 제작
+2. 뉴스 제목 -> Hashkey로 바꿔서 고유하게 구분
+3. 기존에 같은 Hashkey -> 중복된 뉴스임!! -> 저장 X
+4. 기존에 다른 Hashkey -> 다른 뉴스임!! -> 저장 O
+
+최종 구조
+- yfinance_scheduler.py : 메인 파일
+- requirements.txt : 필요한 라이브러리
+- yahoo_finance_news.json : 결과 파일(자동 생성/업데이트)
+- news_hashes.json : 해시값 저장(자동 생성)
+```
