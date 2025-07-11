@@ -1,4 +1,4 @@
-# 1. marketaux.py
+# 1. marketaux_news
 ```
 작동 방식 : API 키 발급, request 라이브러리로 호출
 무료 플랜 : Daily requests - 100회
@@ -6,7 +6,7 @@
 단점 : API 요청 횟수 낮음, csv파일의 뉴스 제목 및 요약본 중간에 끊김
 ```
 
-# 2. naverdeveloper.py
+# 2. naverdeveloper_news
 ```
 작동 방식 : API 키 발급
 무료 플랜 : Daily requests - 25,000회
@@ -16,7 +16,7 @@
        csv파일의 뉴스 제목 및 요약본 중간에 끊김
 ```
 
-# 3. yahoo_finance.py
+# 3. yahoo_finance
 ```
 작동 방식 : yfinance 라이브러리를 활용하여 yahoo finance의 news들을 수집
 장점 : 무료, API 불필요, 굉장히 많은 양의 기사를 제약 없이 뽑아올 수 있음
@@ -24,7 +24,7 @@
        yahoo finance 측의 구조 변경이 생길 시 해당 코드는 무용지물
 ```
 
-# 4. 최종 결정 -> yfinance_scheduler.py
+# 4. 최종 결정 -> yahoo_finance!!
 ```
 1. yahoo finance의 뉴스를 n분마다 수집하는 Python 스케쥴러 파일 제작
 2. 뉴스 제목 -> Hashkey로 바꿔서 고유하게 구분
