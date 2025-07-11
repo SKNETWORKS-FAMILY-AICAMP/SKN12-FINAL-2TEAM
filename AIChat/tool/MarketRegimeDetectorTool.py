@@ -181,36 +181,33 @@ class MarketRegimeDetectorTool(BaseFinanceTool):
         }
         return MarketRegimeDetectorOutput(summary=summary, data=data)
 
-# --- 워크플로우 예시 (LangGraph 등 오케스트레이션 툴에서 노드/엣지 구조 정의) ---
+# --- 워크플로우 예시 (MarketRegimeDetectorTool 단일 호출 구조) ---
+
 workflow_nodes = [
     {
-        'id': 'macro_node',
-        'tool': 'MacroEconomicTool', # 거시경제 데이터를 불러오는 하급툴
-        'input': {'macro_series_ids': ['GDP', 'CPI']}, # 필요한 시리즈 ID
-        'output_key': 'macro_data'
-    },
-    {
-        'id': 'tech_node',
-        'tool': 'TechnicalAnalysisTool', # 기술적 분석 하급툴
-        'input': {'tickers': ['AAPL', 'MSFT', 'GOOG']},
-        'output_key': 'technical_data'
-    },
-    {
-        'id': 'regime_detector_node',
-        'tool': 'MarketRegimeDetectorTool', # 지금 정의한 고급툴
+        'id': 'market_regime_detector_node',
+        'tool': 'MarketRegimeDetectorTool',
         'input': {
-            'macro_data': {'from_node': 'macro_node', 'output_key': 'macro_data'},
-            'technical_data': {'from_node': 'tech_node', 'output_key': 'technical_data'}
+            'series_ids': ['CPIAUCSL', 'GDP'],        # FRED macroeconomic series IDs
+            'tickers': ['AAPL', 'MSFT', 'GOOG'],     # 기술적 분석용 tickers
+            'start_date': '2024-01-01',              # 조회 시작일
+            'end_date': '2024-12-31',                # 조회 종료일
+            'prev_state': 'Bull'                     # 이전 시장 상태 (선택)
         },
         'output_key': 'market_regime_result'
     },
     {
         'id': 'print_node',
-        'tool': 'PrintTool',  # 최종 출력 노드 (실제 구현 필요)
+        'tool': 'PrintTool',
         'input': {
-            'regime': {'from_node': 'regime_detector_node', 'output_key': 'market_regime_result.regime'},
-            'probabilities': {'from_node': 'regime_detector_node', 'output_key': 'market_regime_result.probabilities'},
-            'transition_matrix': {'from_node': 'regime_detector_node', 'output_key': 'market_regime_result.transition_matrix'}
+            'summary': {
+                'from_node': 'market_regime_detector_node',
+                'output_key': 'market_regime_result.summary'
+            },
+            'data': {
+                'from_node': 'market_regime_detector_node',
+                'output_key': 'market_regime_result.data'
+            }
         },
         'output_key': None
     }
@@ -218,9 +215,16 @@ workflow_nodes = [
 
 # --- 노드 간 데이터 흐름 정의 ---
 workflow_edges = [
-    {'from': 'macro_node', 'to': 'regime_detector_node', 'output_key': 'macro_data', 'input_key': 'macro_data'},
-    {'from': 'tech_node', 'to': 'regime_detector_node', 'output_key': 'technical_data', 'input_key': 'technical_data'},
-    {'from': 'regime_detector_node', 'to': 'print_node', 'output_key': 'market_regime_result.regime', 'input_key': 'regime'},
-    {'from': 'regime_detector_node', 'to': 'print_node', 'output_key': 'market_regime_result.probabilities', 'input_key': 'probabilities'},
-    {'from': 'regime_detector_node', 'to': 'print_node', 'output_key': 'market_regime_result.transition_matrix', 'input_key': 'transition_matrix'},
+    {
+        'from': 'market_regime_detector_node',
+        'to': 'print_node',
+        'output_key': 'market_regime_result.summary',
+        'input_key': 'summary'
+    },
+    {
+        'from': 'market_regime_detector_node',
+        'to': 'print_node',
+        'output_key': 'market_regime_result.data',
+        'input_key': 'data'
+    }
 ]
