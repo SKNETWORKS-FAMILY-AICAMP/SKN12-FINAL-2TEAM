@@ -127,72 +127,74 @@ class MarketRegimeDetector:
         # regime, 각 상태 posterior 확률, 전이행렬 반환
         return regime, posteriors, self.transition_matrix.copy()
 
-# --- MarketRegimeDetectorTool: 워크플로우에서 호출하기 위한 래퍼 클래스 ---
-class MarketRegimeDetectorTool(BaseFinanceTool):
-    def __init__(self):
-        super().__init__()
-        self.detector = MarketRegimeDetector() # 핵심 로직 클래스 인스턴스화
-
-class MarketRegimeDetectorTool(BaseFinanceTool):
-    def __init__(self):
-        super().__init__()
-        self.detector = MarketRegimeDetector()  # 핵심 로직 클래스 인스턴스화
-
     def get_data(self, **kwargs) -> MarketRegimeDetectorOutput:
-        """
-        단일 시점 Regime 예측. (하급툴 직접 호출)
-
-        kwargs:
-            series_ids, tickers, start_date, end_date, prev_state 포함
-        """
-        # --- [0] 함수 내부 상수 정의 ---
+        print("[MarketRegimeDetectorTool] get_data 시작")
         max_latency = 1.0
 
-        # --- [1] kwargs → input class 파싱 ---
+        # [1] kwargs → input class 파싱
         input_data = MarketRegimeDetectorInput(**kwargs)
+        print("  [1] input_data:", input_data)
 
-        # --- [2] MacroEconomicTool 호출 ---
+        # [2] MacroEconomicTool 호출 (series_ids를 키워드 인자로)
         macro_tool = MacroEconomicTool()
-        macro_output = macro_tool.get_data(input_data.series_ids)
+        macro_output = macro_tool.get_data(series_ids=input_data.series_ids)
         macro_data = {s['series_id']: s['latest_value'] for s in macro_output.data if s.get('latest_value') is not None}
+        print("  [2] macro_data:", macro_data)
 
-        # --- [3] TechnicalAnalysisTool 호출 ---
+        # [3] TechnicalAnalysisTool 호출 (**키워드 인자 사용**)
         ta_tool = TechnicalAnalysisTool()
         ta_input = TechnicalAnalysisInput(tickers=input_data.tickers)
-        ta_output = ta_tool.get_data(ta_input, as_dict=True)
-        ticker = input_data.tickers[0]
-        ta_result = ta_output.results[ticker]
+        # 반드시 **키워드 인자**로 넘긴다!
+        ta_output = ta_tool.get_data(**ta_input.dict())
+        # ta_output.results는 리스트 형태일 수 있으니 첫 번째 결과만 가져옴
+        if isinstance(ta_output.results, list):
+            ta_result = ta_output.results[0]
+        elif isinstance(ta_output.results, dict):
+            ticker = input_data.tickers[0]
+            ta_result = ta_output.results[ticker]
+        else:
+            raise Exception("TechnicalAnalysisTool 결과 구조가 예상과 다릅니다.")
+
         technical_data = {
             'rsi': ta_result.rsi,
             'macd': ta_result.macd,
             'ema': ta_result.ema
         }
+        print("  [3] technical_data:", technical_data)
 
-        # --- [4] MarketDataTool에서 VIX 추출 ---
+        # [4] MarketDataTool에서 VIX 추출 (키워드 인자 방식)
         market_data_tool = MarketDataTool()
         market_input = MarketDataInput(
             tickers=input_data.tickers,
             start_date=input_data.start_date,
             end_date=input_data.end_date
         )
-        market_data = market_data_tool.get_data(market_input)
+        market_data = market_data_tool.get_data(**market_input.dict())
         technical_data['vix'] = market_data['vix']
+        print("  [4] technical_data (with VIX):", technical_data)
 
-        # --- [5] prev_state ---
+        # [5] prev_state
         prev_state = input_data.prev_state
+        print("  [5] prev_state:", prev_state)
 
-        # --- [6] regime 예측 ---
+        # [6] regime 예측
         regime, probabilities, transition_matrix = self.detector.detect_regime(macro_data, technical_data, prev_state)
+        print("  [6] regime:", regime)
+        print("  [6] probabilities:", probabilities)
+        print("  [6] transition_matrix:", transition_matrix)
 
-        # --- [7] summary + output ---
+        # [7] summary + output
         summary = f"예측 Regime: {regime}, 확률: {probabilities}, 전이행렬: {transition_matrix.tolist()}"
         data = {
             'regime': regime,
             'probabilities': probabilities,
             'transition_matrix': transition_matrix.tolist()
         }
+        print("  [7] summary:", summary)
+        print("  [7] data:", data)
 
         return MarketRegimeDetectorOutput(summary=summary, data=data)
+
 
 # --- 워크플로우 예시 (MarketRegimeDetectorTool 단일 호출 구조) ---
 

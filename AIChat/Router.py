@@ -17,6 +17,7 @@ from AIChat.BasicTools.SectorAnalysisTool import SectorAnalysisTool, SectorAnaly
 from AIChat.BasicTools.TechnicalAnalysisTool import TechnicalAnalysisTool, TechnicalAnalysisInput
 from AIChat.BasicTools.NewsTool import NewsTool, NewsInput
 from AIChat.BasicTools.IndustryAnalysisTool import IndustryAnalysisTool, IndustryAnalysisInput
+from AIChat.tool.MarketRegimeDetectorTool import MarketRegimeDetector, MarketRegimeDetectorInput, MarketRegimeDetectorOutput
 
 # ──────────────────────────── 0. 환경 변수
 load_dotenv()
@@ -79,7 +80,7 @@ def technical_analysis(**params):
     """종목들의 기술적 지표 (RSI, MACD, EMA)를 분석합니다."""
     agent = TechnicalAnalysisTool()
     results = agent.get_data(**params)
-    return "\n".join([r.summary for r in results])
+    return "\n".join([r.summary for r in results.results])
 
 @tool(args_schema=MacroEconomicInput)
 def macro_economic(**params):
@@ -103,6 +104,14 @@ def industry_analysis(**params):
     result = agent.get_data(**params)
     return result.summary
 
+@tool(args_schema=MarketRegimeDetectorInput)
+def MarketRegimeDetector(**params):
+    """거시,기술 지표를 기반으로 시장 흐름 예측합니다.
+    (예: Bull, Bear, Sideways 등)"""
+    agent = MarketRegimeDetector()
+    result = agent.get_data(**params)
+    return result.summary
+
 TOOLS = [
     income_statement_tool,
     balance_sheet_tool,
@@ -115,7 +124,8 @@ TOOLS = [
     technical_analysis,
     macro_economic,
     sector_analysis,
-    industry_analysis
+    industry_analysis,
+    MarketRegimeDetector
 ]
 
 # ──────────────────────────── 2. LLM + 툴 바인딩
