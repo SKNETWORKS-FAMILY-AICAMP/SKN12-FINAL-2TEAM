@@ -16,6 +16,7 @@ from AIChat.BasicTools.MacroEconomicTool import MacroEconomicTool, MacroEconomic
 from AIChat.BasicTools.SectorAnalysisTool import SectorAnalysisTool, SectorAnalysisInput
 from AIChat.BasicTools.TechnicalAnalysisTool import TechnicalAnalysisTool, TechnicalAnalysisInput
 from AIChat.BasicTools.NewsTool import NewsTool, NewsInput
+from AIChat.BasicTools.IndustryAnalysisTool import IndustryAnalysisTool, IndustryAnalysisInput
 
 # ──────────────────────────── 0. 환경 변수
 load_dotenv()
@@ -94,6 +95,14 @@ def sector_analysis(**params):
     result = agent.get_data(**params)
     return result.summary
 
+@tool(args_schema=IndustryAnalysisInput)
+def industry_analysis(**params):
+    """산업별 주요 상장 기업, 시가총액, 평균 주가, 평균 배당, 국가 정보를 요약해 보여줍니다.
+    (예: Semiconductors, Software - Infrastructure 등)"""
+    agent = IndustryAnalysisTool()
+    result = agent.get_data(**params)
+    return result.summary
+
 TOOLS = [
     income_statement_tool,
     balance_sheet_tool,
@@ -105,7 +114,8 @@ TOOLS = [
     news,
     technical_analysis,
     macro_economic,
-    sector_analysis
+    sector_analysis,
+    industry_analysis
 ]
 
 # ──────────────────────────── 2. LLM + 툴 바인딩

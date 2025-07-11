@@ -1,11 +1,14 @@
 from typing import List, Optional, Dict, Union, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import yfinance as yf
 import ta
 from AIChat.BaseFinanceTool import BaseFinanceTool
 
 class TechnicalAnalysisInput(BaseModel):
-    tickers: List[str]
+    tickers: List[str] = Field(
+        ...,
+        description="분석할 미국 주식의 종목 코드 리스트. 예: ['AAPL', 'TSLA', 'NVDA']"
+    )
 
 class TechnicalAnalysisSingleOutput:
     def __init__(
@@ -34,12 +37,22 @@ class TechnicalAnalysisOutput:
     ):
         self.agent = agent
         self.results = results  # 여러 종목의 기술적 분석 결과들
+
 class TechnicalAnalysisTool(BaseFinanceTool):
-    def get_data(
-        self,
-        input_data: TechnicalAnalysisInput,
-        as_dict: bool = False
-    ) -> TechnicalAnalysisOutput:
+    def get_data(self, **params) -> TechnicalAnalysisOutput:
+        # params: dict로 들어오므로 모델로 변환
+        try:
+            input_data = TechnicalAnalysisInput(**params)
+        except Exception as e:
+            return TechnicalAnalysisOutput(
+                agent="error",
+                results=[TechnicalAnalysisSingleOutput(
+                    agent="error",
+                    ticker=params.get('tickers', ['UNKNOWN'])[0],
+                    summary=f"입력 파라미터 오류: {e}"
+                )]
+            )
+
         results = []
 
         for ticker in input_data.tickers:
@@ -82,5 +95,5 @@ class TechnicalAnalysisTool(BaseFinanceTool):
 
         return TechnicalAnalysisOutput(
             agent="TechnicalAnalysisTool",
-            results={r.ticker: r for r in results} if as_dict else results
+            results=results
         )

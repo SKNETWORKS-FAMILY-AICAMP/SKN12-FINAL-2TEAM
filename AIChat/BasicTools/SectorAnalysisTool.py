@@ -38,21 +38,26 @@ class SectorAnalysisOutput:
 class SectorAnalysisTool(BaseFinanceTool):
     BASE_URL = "https://financialmodelingprep.com/api/v3/stock-screener"
 
-    def get_data(self, params: SectorAnalysisInput) -> SectorAnalysisOutput:
+    def get_data(self, **kwargs) -> SectorAnalysisOutput:
         try:
-            api_key = self.api_key or os.getenv("FMP_API_KEY")
-            if not api_key:
-                return SectorAnalysisOutput(agent="error", summary="❌ FMP_API_KEY가 설정돼 있지 않습니다.")
+            # kwargs를 pydantic 모델로 변환 (필수!)
+            params = SectorAnalysisInput(**kwargs)
+        except Exception as e:
+            return SectorAnalysisOutput(agent="error", summary=f"❌ 매개변수 오류: {e}")
 
-            params_dict = {
-                "sector": params.sector_name,
-                "apikey": api_key,
-                "limit": params.limit
-            }
+        api_key = self.api_key or os.getenv("FMP_API_KEY")
+        if not api_key:
+            return SectorAnalysisOutput(agent="error", summary="❌ FMP_API_KEY가 설정돼 있지 않습니다.")
 
+        params_dict = {
+            "sector": params.sector_name,
+            "apikey": api_key,
+            "limit": params.limit
+        }
+
+        try:
             res = requests.get(self.BASE_URL, params=params_dict, timeout=5)
             res.raise_for_status()
-
             stocks = res.json()
             if not stocks:
                 return SectorAnalysisOutput(agent="error", summary=f"📭 '{params.sector_name}' 섹터의 종목을 찾을 수 없습니다.")
@@ -61,11 +66,9 @@ class SectorAnalysisTool(BaseFinanceTool):
             pers = [s.get("pe") for s in stocks if isinstance(s.get("pe"), (int, float))]
             pbrs = [s.get("pb") for s in stocks if isinstance(s.get("pb"), (int, float))]
             roes = [s.get("roe") for s in stocks if isinstance(s.get("roe"), (int, float))]
-
             avg_per = round(sum(pers) / len(pers), 2) if pers else None
             avg_pbr = round(sum(pbrs) / len(pbrs), 2) if pbrs else None
             avg_roe = round(sum(roes) / len(roes), 4) if roes else None
-
             perf_6m = [s.get("priceChange6M") for s in stocks if isinstance(s.get("priceChange6M"), (int, float))]
             sector_performance = round(sum(perf_6m) / len(perf_6m), 4) if perf_6m else None
 
