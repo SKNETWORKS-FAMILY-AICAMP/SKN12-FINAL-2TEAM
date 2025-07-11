@@ -23,7 +23,6 @@ class AccountSignupRequest(BaseRequest):
 
 class AccountSignupResponse(BaseResponse):
     """회원가입 응답"""
-    account_db_key: int = 0
     user_id: str = ""
     message: str = ""
     next_step: str = "EMAIL_VERIFICATION"
@@ -93,13 +92,10 @@ class AccountLoginResponse(BaseResponse):
     """로그인 1단계 응답"""
     accessToken: str = ""  # OTP 미사용시 바로 발급
     temp_token: str = ""   # OTP 사용시 임시 토큰
-    account_db_key: int = 0
     nickname: str = ""
-    account_level: int = 1
-    shard_id: int = 0
-    account_info: Optional[Dict[str, Any]] = None
     requires_otp: bool = False
     profile_completed: bool = False
+    account_info: Optional[Dict[str, Any]] = None  # 내부 세션 생성용, 클라이언트 응답에서는 제거됨
 
 class AccountOTPLoginRequest(BaseRequest):
     """로그인 2단계 OTP 인증"""
@@ -110,11 +106,7 @@ class AccountOTPLoginResponse(BaseResponse):
     """로그인 2단계 OTP 인증 응답"""
     accessToken: str = ""
     refreshToken: str = ""
-    account_db_key: int = 0
     nickname: str = ""
-    account_level: int = 1
-    shard_id: int = 0
-    user_info: Optional[UserInfo] = None
     profile_completed: bool = False
 
 class AccountLogoutRequest(BaseRequest):
@@ -136,7 +128,6 @@ class AccountInfoRequest(BaseRequest):
 class AccountInfoResponse(BaseResponse):
     """계좌 정보 조회 응답"""
     account_info: Optional[AccountInfo] = None
-    shard_id: int = 0  # 디버깅용
 
 # ============================================================================
 # 프로필 설정 (사용자 정의 질문)

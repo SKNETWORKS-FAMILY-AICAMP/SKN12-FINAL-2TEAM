@@ -72,12 +72,9 @@ class AccountTemplateImpl(AccountTemplate):
                     
                     # 응답 설정
                     response.errorCode = 0
-                    response.account_db_key = account_db_key
                     response.nickname = user_data.get('nickname', '')
-                    response.account_level = user_data.get('account_level', 1)
-                    response.shard_id = shard_id
                     
-                    # account_info 설정 (run_anonymous에서 accessToken 생성 및 Redis 세션 생성에 사용됨)
+                    # account_info 설정 (내부 세션 생성용, 클라이언트 응답에서는 제거됨)
                     response.account_info = {
                         "account_db_key": account_db_key,
                         "platform_type": request.platform_type,
@@ -159,7 +156,6 @@ class AccountTemplateImpl(AccountTemplate):
                     account_db_key = signup_result.get('account_db_key', 0)
                     
                     response.errorCode = 0
-                    response.account_db_key = account_db_key
                     response.message = "회원가입 성공"
                     Logger.info(f"Signup successful: account_db_key={account_db_key}")
                     
@@ -231,7 +227,6 @@ class AccountTemplateImpl(AccountTemplate):
                 
                 response.errorCode = 0
                 response.account_info = account_info
-                response.shard_id = shard_id  # 디버깅용
                 
                 Logger.info(f"Account info retrieved successfully from shard {shard_id}")
             else:
@@ -259,7 +254,6 @@ class AccountTemplateImpl(AccountTemplate):
                         
                         response.errorCode = 0
                         response.account_info = account_info
-                        response.shard_id = shard_id
                         
                         Logger.info(f"New account created: {account_number} on shard {shard_id}")
                     else:
@@ -404,10 +398,7 @@ class AccountTemplateImpl(AccountTemplate):
             response.errorCode = 0
             response.accessToken = "final_access_token"
             response.refreshToken = "refresh_token"
-            response.account_db_key = 12345
             response.nickname = "투자왕"
-            response.account_level = 1
-            response.shard_id = 1
             response.profile_completed = True
             
         except Exception as e:
@@ -465,13 +456,9 @@ class AccountTemplateImpl(AccountTemplate):
             
             # 샘플 프로필 데이터
             profile = UserProfile(
-                account_db_key=account_db_key,
-                platform_type=1,
                 account_id="user@example.com",
                 nickname="투자왕",
                 email="user@example.com",
-                account_level=1,
-                shard_id=1,
                 investment_experience="INTERMEDIATE",
                 risk_tolerance="MODERATE",
                 investment_goal="GROWTH",

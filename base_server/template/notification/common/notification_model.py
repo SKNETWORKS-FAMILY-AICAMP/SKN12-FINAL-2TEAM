@@ -4,7 +4,6 @@ from typing import Optional, List, Dict, Any
 class Notification(BaseModel):
     """알림 정보"""
     notification_id: str = ""
-    user_id: str = ""
     title: str = ""
     message: str = ""
     type: str = ""  # PRICE_ALERT, NEWS, PORTFOLIO, TRADE, SYSTEM

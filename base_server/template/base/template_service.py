@@ -88,6 +88,11 @@ class TemplateService:
                 
                 # 응답에 accessToken 추가
                 j_obj['accessToken'] = access_token
+                
+                # account_info는 내부 세션 생성용이므로 클라이언트 응답에서 제거
+                if 'account_info' in j_obj:
+                    del j_obj['account_info']
+                
                 res_json = json.dumps(j_obj)
                 
                 account_db_key = getattr(client_session.session, 'account_db_key', 0) if client_session else 0
