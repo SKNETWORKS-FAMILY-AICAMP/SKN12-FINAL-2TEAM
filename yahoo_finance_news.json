@@ -1,6 +1,790 @@
 {
   "articles": [
     {
+      "날짜": "2025-07-11 02:25",
+      "티커": "NVDA",
+      "제목": "Dow Jones Futures Fall As Trump Sets Canada Tariff After S&P 500 Hits High; CoreWeave Dives",
+      "언론사": "Investor's Business Daily",
+      "링크": "N/A",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-11 01:03",
+      "티커": "AAPL",
+      "제목": "Cathie Wood drops bold message on Apple, Tesla stock",
+      "언론사": "TheStreet",
+      "링크": "https://finance.yahoo.com/news/cathie-wood-drops-bold-message-010300239.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-11 01:01",
+      "티커": "TSLA",
+      "제목": "'Everybody Is Chasing The Next AI Hype,' Says Investor. But They're Asking: What Are The Boring Stocks With 'Tech-Like Returns?'",
+      "언론사": "Benzinga",
+      "링크": "https://finance.yahoo.com/news/everybody-chasing-next-ai-hype-010100877.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 23:58",
+      "티커": "TSLA",
+      "제목": "Tesla is already trying to expand its robotaxi service to Arizona",
+      "언론사": "TechCrunch",
+      "링크": "https://finance.yahoo.com/news/tesla-already-trying-expand-robotaxi-235812297.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 23:31",
+      "티커": "META",
+      "제목": "Musk Vs Zuckerberg: Two Richest Men Battle Over Daily Social Media Users",
+      "언론사": "Benzinga",
+      "링크": "https://finance.yahoo.com/news/musk-vs-zuckerberg-two-richest-233132860.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 23:15",
+      "티커": "NVDA",
+      "제목": "Tech investors are benefiting from being loud online",
+      "언론사": "Business Insider",
+      "링크": "https://finance.yahoo.com/news/tech-investors-benefiting-being-loud-151528056.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 22:37",
+      "티커": "NVDA",
+      "제목": "Podcast: New Highs for S&P, Nasdaq and Nvidia; WK Kellogg Shares Pop on Deal",
+      "언론사": "The Wall Street Journal",
+      "링크": "N/A",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 22:34",
+      "티커": "AAPL",
+      "제목": "These 3 Companies Generate Big Cash",
+      "언론사": "Zacks",
+      "링크": "https://finance.yahoo.com/news/3-companies-generate-big-cash-223400917.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 22:00",
+      "티커": "NVDA",
+      "제목": "Wall Street stocks close higher, Delta forecast boosts sentiment",
+      "언론사": "Reuters Videos",
+      "링크": "https://finance.yahoo.com/video/wall-street-stocks-close-higher-220016404.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 21:45",
+      "티커": "CRM",
+      "제목": "Salesforce.com (CRM) Stock Declines While Market Improves: Some Information for Investors",
+      "언론사": "Zacks",
+      "링크": "https://finance.yahoo.com/news/salesforce-com-crm-stock-declines-214503128.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 21:45",
+      "티커": "INTC",
+      "제목": "Intel (INTC) Surpasses Market Returns: Some Facts Worth Knowing",
+      "언론사": "Zacks",
+      "링크": "https://finance.yahoo.com/news/intel-intc-surpasses-market-returns-214504556.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 21:35",
+      "티커": "INTC",
+      "제목": "Former Intel CEO launches a benchmark to measure AI alignment",
+      "언론사": "TechCrunch",
+      "링크": "https://finance.yahoo.com/news/former-intel-ceo-launches-benchmark-213549316.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 21:13",
+      "티커": "MSFT",
+      "제목": "Microsoft Eyes $4 Trillion Badge",
+      "언론사": "GuruFocus.com",
+      "링크": "https://finance.yahoo.com/news/microsoft-eyes-4-trillion-badge-211312961.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 21:04",
+      "티커": "AAPL",
+      "제목": "Veteran trader and analysts turn heads with new Nvidia stock price targets",
+      "언론사": "TheStreet",
+      "링크": "https://finance.yahoo.com/news/veteran-trader-analysts-turn-heads-210400735.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 20:53",
+      "티커": "AAPL",
+      "제목": "These Stocks Moved the Most Today: Nvidia, Delta, WK Kellogg, MP Materials, Vertiv, Helen of Troy, and More",
+      "언론사": "Barrons.com",
+      "링크": "N/A",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 20:47",
+      "티커": "AAPL",
+      "제목": "Nvidia Hits Milestone, Helps Lift S&P, Nasdaq to All-Time Highs",
+      "언론사": "The Wall Street Journal",
+      "링크": "N/A",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 20:47",
+      "티커": "CRM",
+      "제목": "Stock Market Today: Small Caps Rise, Edging Dow; Travel Firms Jump On Oil Drop But Byrna, Axon Trip Sell Rules (Live Coverage)",
+      "언론사": "Investor's Business Daily",
+      "링크": "N/A",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 20:43",
+      "티커": "IBM",
+      "제목": "Nvidia closes above $4 trillion for the first time",
+      "언론사": "Investing.com",
+      "링크": "https://finance.yahoo.com/news/nvidia-closes-above-4-trillion-204312904.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 20:34",
+      "티커": "AMZN",
+      "제목": "Equity Markets Close Higher as Jobless Claims Fall, Fed Official Cautions on Tariffs",
+      "언론사": "MT Newswires",
+      "링크": "https://finance.yahoo.com/news/equity-markets-close-higher-jobless-203453953.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 20:34",
+      "티커": "AMD",
+      "제목": "AMD Stock Upgraded To Buy On AI Chip Pipeline",
+      "언론사": "Investor's Business Daily",
+      "링크": "N/A",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 20:32",
+      "티커": "AMD",
+      "제목": "Nvidia has 2 big 'upside opportunities' fueling long-term growth",
+      "언론사": "Yahoo Finance Video",
+      "링크": "https://finance.yahoo.com/video/nvidia-2-big-upside-opportunities-203256989.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 20:31",
+      "티커": "AAPL",
+      "제목": "Apple Needs 'Product-Focused CEO,' Say Analysts As Tim Cook Faces Heat Over AI Failures And Innovation Slump",
+      "언론사": "Benzinga",
+      "링크": "https://finance.yahoo.com/news/apple-needs-product-focused-ceo-203103999.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 20:28",
+      "티커": "ORCL",
+      "제목": "Palantir Slips. Bull Points To 'Bears In The Hibernation Cave'",
+      "언론사": "Investor's Business Daily",
+      "링크": "N/A",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 20:25",
+      "티커": "TSLA",
+      "제목": "Tesla (TSLA) Sets Shareholder Meeting; Just Beats Legal Deadline",
+      "언론사": "GuruFocus.com",
+      "링크": "https://finance.yahoo.com/news/tesla-tsla-sets-shareholder-meeting-202553143.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 20:23",
+      "티커": "TSLA",
+      "제목": "Levi Strauss stock jumps on earnings beat, raised guidance",
+      "언론사": "Yahoo Finance Video",
+      "링크": "https://finance.yahoo.com/video/levi-strauss-stock-jumps-earnings-202305636.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 20:21",
+      "티커": "GOOG",
+      "제목": "Perplexity Unveils Comet to Take on Chrome",
+      "언론사": "GuruFocus.com",
+      "링크": "https://tech.yahoo.com/ai/articles/perplexity-unveils-comet-chrome-202149382.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 20:20",
+      "티커": "TSLA",
+      "제목": "Lockheed Stock Rises Despite Downgrade. It’s Losing Wall Street Support.",
+      "언론사": "Barrons.com",
+      "링크": "N/A",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 20:17",
+      "티커": "AMZN",
+      "제목": "Amazon Rival to Elon Musk’s SpaceX Has Arrived",
+      "언론사": "Barrons.com",
+      "링크": "N/A",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 20:15",
+      "티커": "TSLA",
+      "제목": "Tesla Expands Robo-Taxi Service. What It Means for the Stock.",
+      "언론사": "Barrons.com",
+      "링크": "N/A",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 20:14",
+      "티커": "MSFT",
+      "제목": "Amazon's Azure Still Has More Room To Run",
+      "언론사": "GuruFocus.com",
+      "링크": "https://finance.yahoo.com/news/amazons-azure-still-more-room-201446606.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 20:12",
+      "티커": "AAPL",
+      "제목": "Market Chatter: Apple Plans to Launch iPhone 17e, iPads in 2026",
+      "언론사": "MT Newswires",
+      "링크": "https://finance.yahoo.com/news/market-chatter-apple-plans-launch-201231600.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 20:10",
+      "티커": "AAPL",
+      "제목": "Nvidia's market value tops $4 trillion",
+      "언론사": "Reuters",
+      "링크": "https://finance.yahoo.com/news/nvidia-notches-4-trillion-record-201014088.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 20:10",
+      "티커": "AAPL",
+      "제목": "Nvidia Stock Closes Above $4 Trillion Milestone for First Time",
+      "언론사": "Barrons.com",
+      "링크": "N/A",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 20:10",
+      "티커": "NVDA",
+      "제목": "S&P 500 closes at a new record high",
+      "언론사": "Yahoo Finance Video",
+      "링크": "https://finance.yahoo.com/video/p-500-closes-record-high-201044146.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 20:09",
+      "티커": "AMD",
+      "제목": "AMD (AMD) Gets Citi Price Target Hike Ahead of Q2 Earnings",
+      "언론사": "GuruFocus.com",
+      "링크": "https://finance.yahoo.com/news/amd-amd-gets-citi-price-200912238.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 20:02",
+      "티커": "MSFT",
+      "제목": "Wedbush: Microsoft Will Be Second to Join $4 Trillion Club",
+      "언론사": "GuruFocus.com",
+      "링크": "https://finance.yahoo.com/news/wedbush-microsoft-second-join-4-200241752.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 20:00",
+      "티커": "NVDA",
+      "제목": "Stock market today: S&P 500, Nasdaq eke out fresh records, Nvidia closes at $4T market cap",
+      "언론사": "Yahoo Finance",
+      "링크": "https://finance.yahoo.com/news/live/stock-market-today-sp-500-nasdaq-eke-out-fresh-records-nvidia-closes-at-4t-market-cap-200027558.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 19:59",
+      "티커": "MSFT",
+      "제목": "Indeed, Glassdoor to cut 1,300 jobs amid AI integration, memo shows",
+      "언론사": "Reuters",
+      "링크": "https://finance.yahoo.com/news/indeed-glassdoor-cut-1-300-195918945.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 19:54",
+      "티커": "INTC",
+      "제목": "Why Arm Holdings Gained 31% in the First Half of 2025",
+      "언론사": "Motley Fool",
+      "링크": "https://finance.yahoo.com/news/why-arm-holdings-gained-31-195403049.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 19:50",
+      "티커": "GOOG",
+      "제목": "Google's Gemini Just Unleashed AI Video Magic--But There's a Catch",
+      "언론사": "GuruFocus.com",
+      "링크": "https://finance.yahoo.com/news/googles-gemini-just-unleashed-ai-195009086.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 19:50",
+      "티커": "META",
+      "제목": "Why Mark Zuckerberg’s AI talent spending spree is no guarantee that Meta will catch up to rivals",
+      "언론사": "Fortune",
+      "링크": "https://finance.yahoo.com/news/why-mark-zuckerberg-ai-talent-195045361.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 19:37",
+      "티커": "AMZN",
+      "제목": "Equity Markets Higher as Jobless Claims Decline, Fed Official Comments",
+      "언론사": "MT Newswires",
+      "링크": "https://finance.yahoo.com/news/equity-markets-higher-jobless-claims-193751482.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 19:37",
+      "티커": "AMZN",
+      "제목": "The Nasdaq Is Mirroring the 1990s. It Isn’t a Bubble This Time.",
+      "언론사": "Barrons.com",
+      "링크": "N/A",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 19:37",
+      "티커": "INTC",
+      "제목": "Intel Is Kicking Off a Major Layoffs Push. What Do the Job Cuts Mean for INTC Stock?",
+      "언론사": "Barchart",
+      "링크": "https://finance.yahoo.com/news/intel-kicking-off-major-layoffs-193703298.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 19:34",
+      "티커": "AMD",
+      "제목": "AMD Stock Jumps After HSBC Doubles Price Target to $200",
+      "언론사": "GuruFocus.com",
+      "링크": "https://finance.yahoo.com/news/amd-stock-jumps-hsbc-doubles-193433902.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 19:29",
+      "티커": "MSFT",
+      "제목": "These Big Tech Stocks Are Cheaper than You Might Think Headed Into Earnings",
+      "언론사": "Barrons.com",
+      "링크": "N/A",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 19:20",
+      "티커": "AMZN",
+      "제목": "AI device startup that sued OpenAI and Jony Ive is now suing its own ex-employee over trade secrets",
+      "언론사": "Associated Press Finance",
+      "링크": "https://finance.yahoo.com/news/ai-device-startup-sued-openai-192012041.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 19:13",
+      "티커": "META",
+      "제목": "Meta Shares Updated Reels Ads Guide, Including Creative Tips",
+      "언론사": "Social Media Today",
+      "링크": "https://finance.yahoo.com/news/meta-shares-updated-reels-ads-191305209.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 19:09",
+      "티커": "CRM",
+      "제목": "Salesforce (CRM): A Bull Case Theory",
+      "언론사": "Insider Monkey",
+      "링크": "https://finance.yahoo.com/news/salesforce-crm-bull-case-theory-190958527.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 18:22",
+      "티커": "GOOG",
+      "제목": "AI Spending Is Surging. These Job Types Are at Risk, Say CIOs.",
+      "언론사": "Barrons.com",
+      "링크": "N/A",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 18:22",
+      "티커": "NVDA",
+      "제목": "Vertiv falls, Autodesk & PTC deal reports, Intel's Mobileye stake",
+      "언론사": "Yahoo Finance Video",
+      "링크": "https://finance.yahoo.com/video/vertiv-falls-autodesk-ptc-deal-182204979.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 18:19",
+      "티커": "GOOGL",
+      "제목": "Analysis-Trump's antitrust enforcers 'get out of the way' of multibillion-dollar deals",
+      "언론사": "Reuters",
+      "링크": "https://finance.yahoo.com/news/analysis-trumps-antitrust-enforcers-way-181954386.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 18:03",
+      "티커": "GOOGL",
+      "제목": "Google faces threat that could destroy its business",
+      "언론사": "TheStreet",
+      "링크": "https://finance.yahoo.com/news/google-faces-threat-could-destroy-180300164.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 17:15",
+      "티커": "AMD",
+      "제목": "Ferrero–WK Kellogg deal, AMD upgrade, Tesla & Musk's AI chatbot",
+      "언론사": "Yahoo Finance Video",
+      "링크": "https://finance.yahoo.com/video/ferrero-wk-kellogg-deal-amd-171513120.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 16:45",
+      "티커": "ADBE",
+      "제목": "Is Adobe (ADBE) a Solid Growth Stock? 3 Reasons to Think \"Yes\"",
+      "언론사": "Zacks",
+      "링크": "https://finance.yahoo.com/news/adobe-adbe-solid-growth-stock-164501161.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 16:27",
+      "티커": "META",
+      "제목": "xAI Launches Grok 4 Model, Which Has Achieved New Industry Benchmarks",
+      "언론사": "Social Media Today",
+      "링크": "https://finance.yahoo.com/news/xai-launches-grok-4-model-162758770.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 16:24",
+      "티커": "TSLA",
+      "제목": "Tesla robotaxi, AbbVie licenses Glenmark cancer drug, McDonald's",
+      "언론사": "Yahoo Finance Video",
+      "링크": "https://finance.yahoo.com/video/tesla-robotaxi-abbvie-licenses-glenmark-162431760.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 16:16",
+      "티커": "GOOG",
+      "제목": "Samsung Plans to Unveil Its First Trifold Smartphone in 2025",
+      "언론사": "Bloomberg",
+      "링크": "https://finance.yahoo.com/news/samsung-plans-unveil-first-trifold-161612317.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 16:16",
+      "티커": "META",
+      "제목": "As X loses its CEO, daily usage is down and competition is growing",
+      "언론사": "TechCrunch",
+      "링크": "https://finance.yahoo.com/news/x-loses-ceo-daily-usage-161654156.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 15:54",
+      "티커": "GOOGL",
+      "제목": "These Tennessee companies are among the best in the world, according to Forbes. See where they rank",
+      "언론사": "The Tennessean",
+      "링크": "https://finance.yahoo.com/news/tennessee-companies-among-best-world-155411178.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 15:52",
+      "티커": "GOOGL",
+      "제목": "OpenAI to launch AI-powered web browser",
+      "언론사": "Verdict",
+      "링크": "https://finance.yahoo.com/news/openai-launch-ai-powered-browser-155225268.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 15:10",
+      "티커": "MSFT",
+      "제목": "Nvidia becomes first company to close above $4 trillion mark",
+      "언론사": "Yahoo Finance",
+      "링크": "https://finance.yahoo.com/news/nvidia-becomes-first-company-to-close-above-4-trillion-mark-151019750.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 15:06",
+      "티커": "ORCL",
+      "제목": "Piper Sandler raises Oracle, cuts Workday as AI reshapes CIO spending priorities",
+      "언론사": "Investing.com",
+      "링크": "https://finance.yahoo.com/news/piper-sandler-raises-oracle-cuts-150638720.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 15:01",
+      "티커": "GOOG",
+      "제목": "Oracle Stock Is a Buy, Analyst Says. How AI and the Cloud Can Keep the Rally Going.",
+      "언론사": "Barrons.com",
+      "링크": "N/A",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 15:00",
+      "티커": "GOOG",
+      "제목": "Google’s Gemini AI App Can Now Turn Photos Into Short Video Clips",
+      "언론사": "Bloomberg",
+      "링크": "https://finance.yahoo.com/news/google-gemini-ai-app-now-150020429.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 14:59",
+      "티커": "META",
+      "제목": "Meta Platforms Enticed Apple AI Executive With $200M Pay Package, Report Says",
+      "언론사": "Investopedia",
+      "링크": "https://finance.yahoo.com/news/meta-platforms-enticed-apple-ai-145926033.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 14:42",
+      "티커": "INTC",
+      "제목": "TSMC Sales Surge. It Might Be an Even Bigger AI Chip Winner than Nvidia.",
+      "언론사": "Barrons.com",
+      "링크": "N/A",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 14:40",
+      "티커": "ORCL",
+      "제목": "The world’s 10 richest people: The wealthiest have $100 billion or more",
+      "언론사": "Bankrate",
+      "링크": "https://finance.yahoo.com/news/world-10-richest-people-wealthiest-150953619.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 14:40",
+      "티커": "ORCL",
+      "제목": "Palantir May Become Next Oracle in Coming Years, Wedbush Says",
+      "언론사": "MT Newswires",
+      "링크": "https://finance.yahoo.com/news/palantir-may-become-next-oracle-144026018.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 14:35",
+      "티커": "IBM",
+      "제목": "Big Tech stock picks: Nvidia & IBM",
+      "언론사": "Yahoo Finance Video",
+      "링크": "https://finance.yahoo.com/video/big-tech-stock-picks-nvidia-143558377.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 14:31",
+      "티커": "CSCO",
+      "제목": "Cisco Shares Trade Near 52-Week High: What's Next for CSCO Investors?",
+      "언론사": "Zacks",
+      "링크": "https://finance.yahoo.com/news/cisco-shares-trade-near-52-143100061.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 14:17",
+      "티커": "IBM",
+      "제목": "D-Wave Slips as IBM and Google Threaten Its Quantum Edge: What Now?",
+      "언론사": "Zacks",
+      "링크": "https://finance.yahoo.com/news/d-wave-slips-ibm-google-141700715.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 14:00",
+      "티커": "NFLX",
+      "제목": "Netflix (NFLX) Reports Next Week: Wall Street Expects Earnings Growth",
+      "언론사": "Zacks",
+      "링크": "https://finance.yahoo.com/news/netflix-nflx-reports-next-week-140007314.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 13:42",
+      "티커": "ORCL",
+      "제목": "Nvidia initiated, Roku upgraded: Wall Street's top analyst calls",
+      "언론사": "The Fly",
+      "링크": "https://finance.yahoo.com/news/nvidia-initiated-roku-upgraded-wall-134259634.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 13:40",
+      "티커": "IBM",
+      "제목": "Are Computer and Technology Stocks Lagging  Credo Technology Group (CRDO) This Year?",
+      "언론사": "Zacks",
+      "링크": "https://finance.yahoo.com/news/computer-technology-stocks-lagging-credo-134001651.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 13:39",
+      "티커": "GOOG",
+      "제목": "Analyst Explains Why Alphabet (GOOG) is ‘Real Alpha’ for Portfolios",
+      "언론사": "Insider Monkey",
+      "링크": "https://finance.yahoo.com/news/analyst-explains-why-alphabet-goog-133935999.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 13:34",
+      "티커": "ORCL",
+      "제목": "Analyst on Nvidia (NVDA): ‘That’s a Multiple I’m Comfortable With’",
+      "언론사": "Insider Monkey",
+      "링크": "https://finance.yahoo.com/news/analyst-nvidia-nvda-multiple-m-133425659.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 13:33",
+      "티커": "ORCL",
+      "제목": "Security, AI, and IoT to drive robust IT spend in 2H25, Piper Sandler says",
+      "언론사": "Investing.com",
+      "링크": "https://finance.yahoo.com/news/security-ai-iot-drive-robust-133332258.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 13:17",
+      "티커": "IBM",
+      "제목": "LiveRamp and Abercrombie & Fitch have been highlighted as Zacks Bull and Bear of the Day",
+      "언론사": "Zacks",
+      "링크": "https://finance.yahoo.com/news/liveramp-abercrombie-fitch-highlighted-zacks-131700063.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 13:10",
+      "티커": "INTC",
+      "제목": "Can Intel Be Leaner & More Agile by Laying Off 529 Employees?",
+      "언론사": "Zacks",
+      "링크": "https://finance.yahoo.com/news/intel-leaner-more-agile-laying-131000455.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 13:00",
+      "티커": "NFLX",
+      "제목": "How to Find Strong Consumer Discretionary Stocks Slated for Positive Earnings Surprises",
+      "언론사": "Zacks",
+      "링크": "https://finance.yahoo.com/news/strong-consumer-discretionary-stocks-slated-130004568.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 12:55",
+      "티커": "ORCL",
+      "제목": "Oracle Stock Upgraded To Bullish View By Analyst On Cloud Infrastructure Momentum",
+      "언론사": "Investor's Business Daily",
+      "링크": "N/A",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 12:47",
+      "티커": "INTC",
+      "제목": "Mobileye Global (MBLY) Dives as Intel Unloads $900-Million Stake",
+      "언론사": "Insider Monkey",
+      "링크": "https://finance.yahoo.com/news/mobileye-global-mbly-dives-intel-124712303.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 12:43",
+      "티커": "GOOG",
+      "제목": "Stocks Are Rallying on a Meat Loaf Theme: Two Out of Three Ain’t Bad",
+      "언론사": "Barrons.com",
+      "링크": "N/A",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 12:37",
+      "티커": "ADBE",
+      "제목": "E-Commerce Today - E-Commerce's Expanding Role Amid Industry Shifts And Inflation",
+      "언론사": "Simply Wall St.",
+      "링크": "https://finance.yahoo.com/news/e-commerce-today-e-commerces-123731368.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 12:33",
+      "티커": "INTC",
+      "제목": "Intel Q2 Earnings Preview: What to Expect From Upcoming Report",
+      "언론사": "GuruFocus.com",
+      "링크": "https://finance.yahoo.com/news/intel-q2-earnings-preview-expect-123316815.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 12:08",
+      "티커": "GOOG",
+      "제목": "Google Bets Big on AI Back End",
+      "언론사": "GuruFocus.com",
+      "링크": "https://finance.yahoo.com/news/google-bets-big-ai-back-120850153.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 12:08",
+      "티커": "CRM",
+      "제목": "Zoom Communications (ZM) Launches Zoom Virtual Agent 2.0",
+      "언론사": "Insider Monkey",
+      "링크": "https://finance.yahoo.com/news/zoom-communications-zm-launches-zoom-120848103.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 11:55",
+      "티커": "NVDA",
+      "제목": "Nvida hits $4T market cap, who is next?",
+      "언론사": "Yahoo Finance Video",
+      "링크": "https://finance.yahoo.com/video/nvida-hits-4t-market-cap-115511863.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 11:46",
+      "티커": "CRM",
+      "제목": "Salesforce surpasses 1 million AI agent-customer conversations, says finance chief",
+      "언론사": "Fortune",
+      "링크": "https://finance.yahoo.com/news/salesforce-surpasses-1-million-ai-114652836.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 10:57",
+      "티커": "CRM",
+      "제목": "Salesforce Stock Outlook: A Strong Business at a Discounted Price",
+      "언론사": "GuruFocus.com",
+      "링크": "https://finance.yahoo.com/news/salesforce-stock-outlook-strong-business-105721461.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 10:45",
+      "티커": "IBM",
+      "제목": "2 Top Artificial Intelligence (AI) Stocks That Pay Decent Dividends and Have Good Dividend-Paying Histories",
+      "언론사": "Motley Fool",
+      "링크": "https://finance.yahoo.com/news/2-top-artificial-intelligence-ai-104500249.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 10:20",
+      "티커": "IBM",
+      "제목": "Should iShares MSCI USA Min Vol Factor ETF (USMV) Be on Your Investing Radar?",
+      "언론사": "Zacks",
+      "링크": "https://finance.yahoo.com/news/ishares-msci-usa-min-vol-102005021.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 10:00",
+      "티커": "AMZN",
+      "제목": "Nvidia has the best product, but its real edge is having the best customers",
+      "언론사": "Yahoo Finance",
+      "링크": "https://finance.yahoo.com/news/nvidia-has-the-best-product-but-its-real-edge-is-having-the-best-customers-100032421.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 09:03",
+      "티커": "NFLX",
+      "제목": "Disney and UK's ITV tie-up in joint streaming deal",
+      "언론사": "Reuters",
+      "링크": "https://finance.yahoo.com/news/disney-uks-itv-tie-joint-090305804.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 08:17",
+      "티커": "NFLX",
+      "제목": "Should You Buy Netflix Stock Before July 17?",
+      "언론사": "Motley Fool",
+      "링크": "https://finance.yahoo.com/news/buy-netflix-stock-july-17-081700572.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 08:00",
+      "티커": "TSLA",
+      "제목": "The early winner in the 'Dexit' war for corporate relocations: Nevada",
+      "언론사": "Yahoo Finance",
+      "링크": "https://finance.yahoo.com/news/the-early-winner-in-the-dexit-war-for-corporate-relocations-nevada-080015108.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-10 04:33",
+      "티커": "ADBE",
+      "제목": "3 Large-Cap Stocks to Keep an Eye On",
+      "언론사": "StockStory",
+      "링크": "https://finance.yahoo.com/news/3-large-cap-stocks-keep-043305761.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
       "날짜": "2025-07-09 23:33",
       "티커": "JPM",
       "제목": "Finance Earnings Outlook Improves: A Closer Look",
@@ -288,6 +1072,14 @@
       "링크": "https://finance.yahoo.com/news/salesforce-crm-agentforce-gets-real-211317323.html"
     },
     {
+      "날짜": "2025-07-09 21:13",
+      "티커": "CRM",
+      "제목": "Salesforce’s (CRM) Agentforce Gets Real-World Testimony in Analyst-Led Call",
+      "언론사": "Insider Monkey",
+      "링크": "https://finance.yahoo.com/news/salesforce-crm-agentforce-gets-real-211317323.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
       "날짜": "2025-07-09 21:07",
       "티커": "GOOG",
       "제목": "How Nvidia Became the World’s First $4 Trillion Company",
@@ -379,6 +1171,14 @@
       "링크": "https://finance.yahoo.com/news/amazon-prime-day-sales-plunge-174618573.html"
     },
     {
+      "날짜": "2025-07-09 21:02",
+      "티커": "ADBE",
+      "제목": "Amazon Prime Day Sales Off 41% First Day, Brand Adviser Says",
+      "언론사": "Bloomberg",
+      "링크": "https://finance.yahoo.com/news/amazon-prime-day-sales-plunge-174618573.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
       "날짜": "2025-07-09 20:57",
       "티커": "CRM",
       "제목": "Salesforce's Head of AI Sees Digital Labor Revolution",
@@ -391,6 +1191,14 @@
       "제목": "Salesforce's Head of AI Sees Digital Labor Revolution",
       "언론사": "Bloomberg",
       "링크": "https://finance.yahoo.com/video/salesforces-head-ai-sees-digital-205723192.html"
+    },
+    {
+      "날짜": "2025-07-09 20:57",
+      "티커": "CRM",
+      "제목": "Salesforce's Head of AI Sees Digital Labor Revolution",
+      "언론사": "Bloomberg",
+      "링크": "https://finance.yahoo.com/video/salesforces-head-ai-sees-digital-205723192.html",
+      "수집시간": "2025-07-11 11:27:00"
     },
     {
       "날짜": "2025-07-09 20:53",
@@ -510,6 +1318,14 @@
       "제목": "Amazon’s Prime Day Starts Strong but the Game Is Long",
       "언론사": "Barrons.com",
       "링크": "N/A"
+    },
+    {
+      "날짜": "2025-07-09 20:19",
+      "티커": "ADBE",
+      "제목": "Amazon’s Prime Day Starts Strong but the Game Is Long",
+      "언론사": "Barrons.com",
+      "링크": "N/A",
+      "수집시간": "2025-07-11 11:27:00"
     },
     {
       "날짜": "2025-07-09 20:18",
@@ -897,6 +1713,14 @@
       "링크": "N/A"
     },
     {
+      "날짜": "2025-07-09 18:47",
+      "티커": "CRM",
+      "제목": "Microsoft Touts $500 Million AI Savings While Slashing Jobs",
+      "언론사": "Bloomberg",
+      "링크": "https://finance.yahoo.com/news/microsoft-touts-500-million-ai-171149783.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
       "날짜": "2025-07-09 18:41",
       "티커": "F",
       "제목": "Ford Motor Stock Gets Relative Strength Rating Lift",
@@ -932,6 +1756,14 @@
       "링크": "https://finance.yahoo.com/news/gold-stock-may-antoher-shot-184023996.html"
     },
     {
+      "날짜": "2025-07-09 18:40",
+      "티커": "ADBE",
+      "제목": "Customers seeking deals gave Amazon's Prime Day and competing sales a solid start",
+      "언론사": "Associated Press Finance",
+      "링크": "https://finance.yahoo.com/news/customers-seeking-deals-gave-amazons-184021818.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
       "날짜": "2025-07-09 18:32",
       "티커": "PEP",
       "제목": "Hershey Stock Is the Worst Performer in the S&P 500 Today. Investors Are Mixed on the Outlook.",
@@ -965,6 +1797,14 @@
       "제목": "SoundHound AI (SOUN) Jumps 11.7% on Agentic AI Boom",
       "언론사": "Insider Monkey",
       "링크": "https://finance.yahoo.com/news/soundhound-ai-soun-jumps-11-183008860.html"
+    },
+    {
+      "날짜": "2025-07-09 18:30",
+      "티커": "CRM",
+      "제목": "SoundHound AI (SOUN) Jumps 11.7% on Agentic AI Boom",
+      "언론사": "Insider Monkey",
+      "링크": "https://finance.yahoo.com/news/soundhound-ai-soun-jumps-11-183008860.html",
+      "수집시간": "2025-07-11 11:27:00"
     },
     {
       "날짜": "2025-07-09 18:22",
@@ -1632,6 +2472,14 @@
       "링크": "https://finance.yahoo.com/news/pnc-launches-digital-direct-deposit-164200162.html"
     },
     {
+      "날짜": "2025-07-09 16:42",
+      "티커": "IBM",
+      "제목": "PNC Launches New Digital Direct Deposit: A Move to Boost Fee Income?",
+      "언론사": "Zacks",
+      "링크": "https://finance.yahoo.com/news/pnc-launches-digital-direct-deposit-164200162.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
       "날짜": "2025-07-09 16:40",
       "티커": "SNAP",
       "제목": "Snapchat Partners with American Eagle on New Snap Map Promotion Type",
@@ -1658,6 +2506,14 @@
       "제목": "Salesforce Adds 2 Board Members. It’s Gearing Up for the Agentic AI Era.",
       "언론사": "Barrons.com",
       "링크": "N/A"
+    },
+    {
+      "날짜": "2025-07-09 16:37",
+      "티커": "CSCO",
+      "제목": "Salesforce Adds 2 Board Members. It’s Gearing Up for the Agentic AI Era.",
+      "언론사": "Barrons.com",
+      "링크": "N/A",
+      "수집시간": "2025-07-11 11:27:00"
     },
     {
       "날짜": "2025-07-09 16:29",
@@ -1742,6 +2598,22 @@
       "제목": "Cisco president: AI is moving fast, but most companies are struggling to keep up",
       "언론사": "Yahoo Finance",
       "링크": "https://finance.yahoo.com/news/cisco-president-ai-is-moving-fast-but-most-companies-are-struggling-to-keep-up-161014811.html"
+    },
+    {
+      "날짜": "2025-07-09 16:10",
+      "티커": "NFLX",
+      "제목": "Will Netflix (NFLX) Beat Estimates Again in Its Next Earnings Report?",
+      "언론사": "Zacks",
+      "링크": "https://finance.yahoo.com/news/netflix-nflx-beat-estimates-again-161002230.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-09 16:10",
+      "티커": "CSCO",
+      "제목": "Cisco president: AI is moving fast, but most companies are struggling to keep up",
+      "언론사": "Yahoo Finance",
+      "링크": "https://finance.yahoo.com/news/cisco-president-ai-is-moving-fast-but-most-companies-are-struggling-to-keep-up-161014811.html",
+      "수집시간": "2025-07-11 11:27:00"
     },
     {
       "날짜": "2025-07-09 16:08",
@@ -1910,6 +2782,14 @@
       "제목": "Photonics, Satellites, Repeaters: Is IonQ Building the Next Cloud?",
       "언론사": "Zacks",
       "링크": "https://finance.yahoo.com/news/photonics-satellites-repeaters-ionq-building-153200642.html"
+    },
+    {
+      "날짜": "2025-07-09 15:32",
+      "티커": "IBM",
+      "제목": "Photonics, Satellites, Repeaters: Is IonQ Building the Next Cloud?",
+      "언론사": "Zacks",
+      "링크": "https://finance.yahoo.com/news/photonics-satellites-repeaters-ionq-building-153200642.html",
+      "수집시간": "2025-07-11 11:27:00"
     },
     {
       "날짜": "2025-07-09 15:29",
@@ -2253,6 +3133,14 @@
       "제목": "Nvidia stock eyes more gains after chipmaker becomes first company to reach $4 trillion market value",
       "언론사": "Yahoo Finance",
       "링크": "https://finance.yahoo.com/news/nvidia-stock-eyes-more-gains-after-chipmaker-becomes-first-company-to-reach-4-trillion-market-value-141526893.html"
+    },
+    {
+      "날짜": "2025-07-09 14:15",
+      "티커": "AAPL",
+      "제목": "Nvidia stock eyes more gains after chipmaker becomes first company to reach $4 trillion market value",
+      "언론사": "Yahoo Finance",
+      "링크": "https://finance.yahoo.com/news/nvidia-stock-eyes-more-gains-after-chipmaker-becomes-first-company-to-reach-4-trillion-market-value-141526893.html",
+      "수집시간": "2025-07-11 11:27:00"
     },
     {
       "날짜": "2025-07-09 14:14",
@@ -3305,6 +4193,14 @@
       "링크": "https://finance.yahoo.com/video/3-reasons-ciscos-president-says-115711096.html"
     },
     {
+      "날짜": "2025-07-09 11:57",
+      "티커": "CSCO",
+      "제목": "3 reasons Cisco's president says CEOs aren't ready for AI",
+      "언론사": "Yahoo Finance Video",
+      "링크": "https://finance.yahoo.com/video/3-reasons-ciscos-president-says-115711096.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
       "날짜": "2025-07-09 11:51",
       "티커": "AAPL",
       "제목": "ProKidney, Meta & EssilorLuxottica, Apple COO: Trending Tickers",
@@ -3515,6 +4411,22 @@
       "링크": "https://finance.yahoo.com/video/portfolio-picks-why-cant-ignore-110058082.html"
     },
     {
+      "날짜": "2025-07-09 11:00",
+      "티커": "ADBE",
+      "제목": "Adobe (NASDAQ:ADBE) Is Investing Its Capital With Increasing Efficiency",
+      "언론사": "Simply Wall St.",
+      "링크": "https://finance.yahoo.com/news/adobe-nasdaq-adbe-investing-capital-110022012.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
+      "날짜": "2025-07-09 11:00",
+      "티커": "CSCO",
+      "제목": "Covered Call Screener Results For July 9th",
+      "언론사": "Barchart",
+      "링크": "https://finance.yahoo.com/news/covered-call-screener-results-july-110003751.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
       "날짜": "2025-07-09 10:58",
       "티커": "MA",
       "제목": "Visa, Mastercard vie for Treasury role",
@@ -3590,6 +4502,14 @@
       "제목": "2 Phenomenal Stock Bargains to Buy With the Market at All-Time Highs",
       "언론사": "Motley Fool",
       "링크": "https://finance.yahoo.com/news/2-phenomenal-stock-bargains-buy-094500408.html"
+    },
+    {
+      "날짜": "2025-07-09 09:45",
+      "티커": "ADBE",
+      "제목": "2 Phenomenal Stock Bargains to Buy With the Market at All-Time Highs",
+      "언론사": "Motley Fool",
+      "링크": "https://finance.yahoo.com/news/2-phenomenal-stock-bargains-buy-094500408.html",
+      "수집시간": "2025-07-11 11:27:00"
     },
     {
       "날짜": "2025-07-09 09:40",
@@ -4040,6 +4960,14 @@
       "링크": "https://finance.yahoo.com/news/adobe-projects-3-200-increase-221114694.html"
     },
     {
+      "날짜": "2025-07-08 22:11",
+      "티커": "ADBE",
+      "제목": "Adobe Projects 3,200% Increase in Gen AI Traffic During Amazon Prime Day Event",
+      "언론사": "Sourcing Journal",
+      "링크": "https://finance.yahoo.com/news/adobe-projects-3-200-increase-221114694.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
       "날짜": "2025-07-08 22:00",
       "티커": "AMGN",
       "제목": "Amgen (AMGN) Advances While Market Declines: Some Information for Investors",
@@ -4152,6 +5080,14 @@
       "링크": "https://finance.yahoo.com/news/paypal-pypl-declines-more-market-214506477.html"
     },
     {
+      "날짜": "2025-07-08 21:45",
+      "티커": "NFLX",
+      "제목": "Why Netflix (NFLX) Dipped More Than Broader Market Today",
+      "언론사": "Zacks",
+      "링크": "https://finance.yahoo.com/news/why-netflix-nflx-dipped-more-214505350.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
       "날짜": "2025-07-08 21:25",
       "티커": "NKE",
       "제목": "Factbox-Retailers' exposure to tariffs on Asian countries",
@@ -4199,6 +5135,14 @@
       "제목": "Trump Tariffs Set To Reflect In Q2 Earnings; Consumers Next In Line",
       "언론사": "Investor's Business Daily",
       "링크": "N/A"
+    },
+    {
+      "날짜": "2025-07-08 20:44",
+      "티커": "NFLX",
+      "제목": "Trump Tariffs Set To Reflect In Q2 Earnings; Consumers Next In Line",
+      "언론사": "Investor's Business Daily",
+      "링크": "N/A",
+      "수집시간": "2025-07-11 11:27:00"
     },
     {
       "날짜": "2025-07-08 20:43",
@@ -4915,6 +5859,14 @@
       "링크": "https://finance.yahoo.com/news/goldman-sachs-lifts-netflix-inc-151133178.html"
     },
     {
+      "날짜": "2025-07-08 15:11",
+      "티커": "NFLX",
+      "제목": "Goldman Sachs Lifts Netflix, Inc. (NFLX) Price Target Ahead of Q2",
+      "언론사": "Insider Monkey",
+      "링크": "https://finance.yahoo.com/news/goldman-sachs-lifts-netflix-inc-151133178.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
       "날짜": "2025-07-08 15:08",
       "티커": "WFC",
       "제목": "Wells Fargo to Raise Dividend Following CCAR Results",
@@ -5363,6 +6315,14 @@
       "링크": "https://finance.yahoo.com/news/navitas-strengthens-gan-sic-footprint-125700373.html"
     },
     {
+      "날짜": "2025-07-08 12:57",
+      "티커": "CSCO",
+      "제목": "Cisco's AI-fueled gains, Apple loses top AI engineer to Meta",
+      "언론사": "Yahoo Finance Video",
+      "링크": "https://finance.yahoo.com/video/ciscos-ai-fueled-gains-apple-125700408.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
       "날짜": "2025-07-08 12:56",
       "티커": "MCD",
       "제목": "KFC's Global Strength: Is it a Key Growth Lever for Yum! Brands?",
@@ -5412,11 +6372,27 @@
       "링크": "https://finance.yahoo.com/news/forget-big-tech-vc-betting-124147623.html"
     },
     {
+      "날짜": "2025-07-08 12:41",
+      "티커": "CSCO",
+      "제목": "Forget Big Tech: This VC Is Betting $100M on AI That Serves 30M Neglected Small Businesses",
+      "언론사": "Benzinga",
+      "링크": "https://finance.yahoo.com/news/forget-big-tech-vc-betting-124147623.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
       "날짜": "2025-07-08 12:32",
       "티커": "CSCO",
       "제목": "Cisco president talks AI future: The networking giant's role in AI",
       "언론사": "Yahoo Finance Video",
       "링크": "https://finance.yahoo.com/video/cisco-president-talks-ai-future-123259255.html"
+    },
+    {
+      "날짜": "2025-07-08 12:32",
+      "티커": "CSCO",
+      "제목": "Cisco president talks AI future: The networking giant's role in AI",
+      "언론사": "Yahoo Finance Video",
+      "링크": "https://finance.yahoo.com/video/cisco-president-talks-ai-future-123259255.html",
+      "수집시간": "2025-07-11 11:27:00"
     },
     {
       "날짜": "2025-07-08 12:31",
@@ -5783,6 +6759,14 @@
       "링크": "https://finance.yahoo.com/news/zacks-analyst-blog-highlights-mastercard-091100352.html"
     },
     {
+      "날짜": "2025-07-08 09:11",
+      "티커": "CSCO",
+      "제목": "The Zacks Analyst Blog Highlights Mastercard, Cisco Systems, TJX, Gencor and SIFCO",
+      "언론사": "Zacks",
+      "링크": "https://finance.yahoo.com/news/zacks-analyst-blog-highlights-mastercard-091100352.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
       "날짜": "2025-07-08 09:06",
       "티커": "RIVN",
       "제목": "Where Will Rivian Be in 3 Years?",
@@ -5972,6 +6956,14 @@
       "링크": "https://finance.yahoo.com/news/netflix-gets-downgraded-hitting-record-205228302.html"
     },
     {
+      "날짜": "2025-07-07 20:52",
+      "티커": "NFLX",
+      "제목": "Netflix Gets Downgraded After Hitting Record Highs; Wall Street Cools Its Hype",
+      "언론사": "GuruFocus.com",
+      "링크": "https://finance.yahoo.com/news/netflix-gets-downgraded-hitting-record-205228302.html",
+      "수집시간": "2025-07-11 11:27:00"
+    },
+    {
       "날짜": "2025-07-07 20:42",
       "티커": "MCHP",
       "제목": "Stocks Slide on Trade Tensions",
@@ -6054,6 +7046,14 @@
       "제목": "CoreWeave & Core Scientific, Netflix, Chime: Trending Tickers",
       "언론사": "Yahoo Finance Video",
       "링크": "https://finance.yahoo.com/video/coreweave-core-scientific-netflix-chime-202613365.html"
+    },
+    {
+      "날짜": "2025-07-07 20:26",
+      "티커": "NFLX",
+      "제목": "CoreWeave & Core Scientific, Netflix, Chime: Trending Tickers",
+      "언론사": "Yahoo Finance Video",
+      "링크": "https://finance.yahoo.com/video/coreweave-core-scientific-netflix-chime-202613365.html",
+      "수집시간": "2025-07-11 11:27:00"
     },
     {
       "날짜": "2025-07-07 20:20",
@@ -8017,12 +9017,9 @@
     }
   ],
   "metadata": {
-    "total_count": 1145,
-    "collection_period": {
-      "start": "2025-07-03",
-      "end": "2025-07-09"
-    },
-    "tickers_covered": 188,
-    "generated_at": "2025-07-10 20:30:22"
+    "total_count": 1270,
+    "last_updated": "2025-07-11 11:27:00",
+    "unique_hashes_count": 125,
+    "collection_method": "Scheduled with duplicate removal"
   }
 }
