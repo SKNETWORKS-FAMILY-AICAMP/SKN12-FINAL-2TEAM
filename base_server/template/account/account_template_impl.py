@@ -26,10 +26,53 @@ from service.service_container import ServiceContainer
 from service.core.logger import Logger
 from service.cache.cache_service import CacheService
 from service.security.security_utils import SecurityUtils
+from service.data.data_table_manager import DataTableManager
 
 class AccountTemplateImpl(AccountTemplate):
     def __init__(self):
         super().__init__()
+        
+    def on_load_data(self, config):
+        """계정 템플릿 전용 데이터 로딩"""
+        try:
+            # 예: 계정 관련 설정 테이블이 있다면 여기서 로드
+            Logger.info("Account 템플릿 데이터 로드 시작")
+            
+            # 아이템 테이블 예제 (다른 템플릿에서도 사용 가능)
+            items_table = DataTableManager.get_table("items")
+            if items_table:
+                Logger.info(f"Account 템플릿에서 아이템 테이블 접근 가능: {items_table.count()}개")
+            
+            Logger.info("Account 템플릿 데이터 로드 완료")
+        except Exception as e:
+            Logger.error(f"Account 템플릿 데이터 로드 실패: {e}")
+            
+    def on_client_create(self, db_client, client_session):
+        """신규 클라이언트 생성 시 호출"""
+        try:
+            Logger.info(f"Account: 신규 클라이언트 생성 - User ID: {client_session.user_id}")
+            
+            # 예: 신규 유저 기본 아이템 지급
+            items_table = DataTableManager.get_table("items")
+            if items_table:
+                # 초급 검과 초급 갑옷 지급
+                starter_sword = items_table.get("1001")
+                starter_armor = items_table.get("2001")
+                
+                if starter_sword and starter_armor:
+                    Logger.info(f"신규 유저에게 시작 아이템 지급: {starter_sword.name}, {starter_armor.name}")
+                    # TODO: 실제 DB에 아이템 추가 로직
+                    
+        except Exception as e:
+            Logger.error(f"Account 클라이언트 생성 처리 실패: {e}")
+            
+    def on_client_update(self, db_client, client_session):
+        """클라이언트 업데이트 시 호출"""
+        try:
+            Logger.info(f"Account: 클라이언트 업데이트 - User ID: {client_session.user_id}")
+            # 예: 로그인 시간 업데이트, 일일 보상 체크 등
+        except Exception as e:
+            Logger.error(f"Account 클라이언트 업데이트 처리 실패: {e}")
     
     def _hash_password(self, password: str) -> str:
         """패스워드 해시화 - bcrypt 사용"""

@@ -123,9 +123,9 @@ BEGIN
         SET v_account_db_key = UNIX_TIMESTAMP() * 1000 + CONNECTION_ID() % 1000;
         
         INSERT INTO table_accountid (
-            platform_type, account_id, account_db_key, password_hash, nickname, email
+            platform_type, account_id, account_db_key, password_hash, nickname, email, login_count
         ) VALUES (
-            p_platform_type, p_account_id, v_account_db_key, p_password_hash, p_nickname, p_email
+            p_platform_type, p_account_id, v_account_db_key, p_password_hash, p_nickname, p_email, 0
         );
         
         IF ROW_COUNT() > 0 THEN

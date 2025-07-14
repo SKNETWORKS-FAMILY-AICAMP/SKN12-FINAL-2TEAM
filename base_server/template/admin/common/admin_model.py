@@ -38,3 +38,28 @@ class SessionCountResponse(BaseModel):
     active_sessions: int
     error_code: int = 0
     error_message: Optional[str] = None
+
+class QueueStatsRequest(BaseModel):
+    """큐 통계 요청"""
+    queue_names: Optional[List[str]] = None
+
+class QueueStatsResponse(BaseModel):
+    """큐 통계 응답"""
+    service_stats: Dict[str, Any]
+    event_stats: Dict[str, Any]
+    queue_details: Dict[str, Any]
+    timestamp: str
+    error_code: int = 0
+    error_message: Optional[str] = None
+
+class QuickTestRequest(BaseModel):
+    """빠른 테스트 요청"""
+    test_types: Optional[List[str]] = None
+
+class QuickTestResponse(BaseModel):
+    """빠른 테스트 응답"""
+    results: Dict[str, Any]
+    summary: Dict[str, Any]
+    timestamp: str
+    error_code: int = 0
+    error_message: Optional[str] = None
