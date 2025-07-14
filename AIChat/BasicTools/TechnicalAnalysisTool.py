@@ -1,5 +1,6 @@
 from typing import List, Optional, Dict, Union, Any
 from pydantic import BaseModel, Field
+from sqlalchemy import false
 import yfinance as yf
 import ta
 from AIChat.BaseFinanceTool import BaseFinanceTool
@@ -58,17 +59,20 @@ class TechnicalAnalysisTool(BaseFinanceTool):
         for ticker in input_data.tickers:
             try:
                 stock = yf.Ticker(ticker)
-                hist = stock.history(period="6mo")
+                hist = stock.history(period="6mo", auto_adjust=False)
+                print(hist)
 
-                if hist.empty:
+                if "Adj Close" in hist.columns:
+                    close = hist["Adj Close"]
+                elif "Close" in hist.columns:
+                    close = hist["Close"]
+                else:
                     results.append(TechnicalAnalysisSingleOutput(
                         agent="error",
                         ticker=ticker,
-                        summary=f"{ticker}의 가격 데이터를 찾을 수 없습니다."
+                        summary=f"{ticker}의 가격 데이터에 'Close' 또는 'Adj Close' 컬럼이 없습니다."
                     ))
                     continue
-
-                close = hist["Close"]
                 rsi = ta.momentum.RSIIndicator(close).rsi().iloc[-1]
                 macd = ta.trend.MACD(close).macd().iloc[-1]
                 ema = ta.trend.EMAIndicator(close, window=20).ema_indicator().iloc[-1]

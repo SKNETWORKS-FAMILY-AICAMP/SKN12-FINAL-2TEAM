@@ -15,9 +15,11 @@ from AIChat.BasicTools.FinancialStatementTool import FinancialStatementTool, Fin
 from AIChat.BasicTools.MacroEconomicTool import MacroEconomicTool, MacroEconomicInput
 from AIChat.BasicTools.SectorAnalysisTool import SectorAnalysisTool, SectorAnalysisInput
 from AIChat.BasicTools.TechnicalAnalysisTool import TechnicalAnalysisTool, TechnicalAnalysisInput
+from AIChat.BasicTools.MarketDataTool import MarketDataTool, MarketDataInput
 from AIChat.BasicTools.NewsTool import NewsTool, NewsInput
 from AIChat.BasicTools.IndustryAnalysisTool import IndustryAnalysisTool, IndustryAnalysisInput
-from AIChat.tool.MarketRegimeDetectorTool import MarketRegimeDetector, MarketRegimeDetectorInput, MarketRegimeDetectorOutput
+from AIChat.tool.MarketRegimeDetectorTool import MarketRegimeDetector, MarketRegimeDetectorInput
+from AIChat.tool.KalmanRegimeFilterTool import KalmanRegimeFilterTool, KalmanRegimeFilterInput
 
 # ──────────────────────────── 0. 환경 변수
 load_dotenv()
@@ -82,6 +84,15 @@ def technical_analysis(**params):
     results = agent.get_data(**params)
     return "\n".join([r.summary for r in results.results])
 
+@tool(args_schema=MarketDataInput)
+def market_data(**params):
+    """[종목 시세/수익률/통계 데이터 조회]
+    미국/글로벌 주식·ETF·채권·원자재 등의 과거~오늘까지의 일별 수익률, 기대수익률, 변동성, 공분산, 최신 VIX 등 시장 데이터를 반환합니다.
+"""
+    agent = MarketDataTool()
+    results = agent.get_data(**params)
+    return results.summary
+
 @tool(args_schema=MacroEconomicInput)
 def macro_economic(**params):
     """거시경제 지표 (금리, CPI 등)를 조회합니다."""
@@ -91,7 +102,7 @@ def macro_economic(**params):
 
 @tool(args_schema=SectorAnalysisInput)
 def sector_analysis(**params):
-    """섹터 PER/PBR 및 대표 종목을 조회합니다."""
+    """섹터 대표 종목의 시가총액, 배당, 가격을 조회합니다."""
     agent = SectorAnalysisTool()
     result = agent.get_data(**params)
     return result.summary
@@ -105,10 +116,16 @@ def industry_analysis(**params):
     return result.summary
 
 @tool(args_schema=MarketRegimeDetectorInput)
-def MarketRegimeDetector(**params):
-    """거시,기술 지표를 기반으로 시장 흐름 예측합니다.
-    (예: Bull, Bear, Sideways 등)"""
+def MarketRegimeDetectortool(**params):
+    """시장흐름과 기술적 지표를 통해 매수세인지 매도세인지 또는 횡보할지 예측합니다."""
     agent = MarketRegimeDetector()
+    result = agent.get_data(**params)
+    return result.summary
+
+@tool(args_schema=KalmanRegimeFilterInput)
+def KalmanRegimeFiltertool(**params):
+    """칼만 필터를 사용해서 종목의 진입 시점과 청산 시점을 예측합니다."""
+    agent = KalmanRegimeFilterTool()
     result = agent.get_data(**params)
     return result.summary
 
@@ -122,10 +139,12 @@ TOOLS = [
     enterprise_value_tool,
     news,
     technical_analysis,
+    market_data,
     macro_economic,
     sector_analysis,
     industry_analysis,
-    MarketRegimeDetector
+    MarketRegimeDetectortool,
+    KalmanRegimeFiltertool
 ]
 
 # ──────────────────────────── 2. LLM + 툴 바인딩
@@ -205,3 +224,33 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+def print_clean_messages(messages):
+    print("🔄 요약된 모델 호출 로그")
+    for m in messages:
+        if hasattr(m, "content") and hasattr(m, "__class__"):
+            cname = m.__class__.__name__
+            if cname == "HumanMessage":
+                print(f"👤 Human: {m.content}")
+            elif cname == "AIMessage":
+                calls = m.additional_kwargs.get("tool_calls", []) if hasattr(m, "additional_kwargs") else []
+                if calls:
+                    for call in calls:
+                        # 새로운 구조 대응
+                        if "name" in call:
+                            print(f"🤖 AI -> Tool: {call['name']} {call.get('args', '')}")
+                        elif "function" in call:
+                            func = call["function"]
+                            print(f"🤖 AI -> Tool: {func.get('name', '')} {func.get('arguments', '')}")
+                        else:
+                            print(f"🤖 AI -> Tool: {call}")
+                if m.content and m.content.strip():
+                    print(f"🤖 AI 응답: {m.content.strip()}")
+            elif cname == "ToolMessage":
+                name = getattr(m, "name", None)
+                print(f"🛠️ Tool({name}) 결과: {getattr(m, 'content', '')}")
+            else:
+                print(f"❓ {cname}: {getattr(m, 'content', '')}")
+        else:
+            print(str(m))

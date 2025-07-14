@@ -1,23 +1,3 @@
-    """	
-    1.	거시경제 데이터 (GDP, CPI) 가져옴
-	2.	기술적 지표 (RSI, MACD 등) 가져옴
-	3.	시장 데이터 (VIX 등) 가져옴
-	4.	이 데이터로 관측 벡터(obs_vector) 구성
-	5.	Kalman Filter 실행 → 시장 상태(state) + 공분산(cov) 계산
-	6.	계산된 state, cov, elapsed를 기반으로 → 트레이딩 시그널, 전략, 포지션 크기, 레버리지, 손절/익절, 리스크 스코어, 안정성 등 추천안을 산출
-	7.	최종적으로 recommendations 딕셔너리 형태로 반환
-
-    
-    알수 있는거 :
-    시장의 모멘텀, 변동성, 유동성을 실시간 계산해서
-    매수/매도 시그널,
-    권장 포지션 크기,
-    레버리지 배율,
-    추천 전략 (추세추종, 역추세, 중립),
-    손절/익절 가격,
-    시장 리스크 스코어,
-    시장 안정성 평가
-    """
 from __future__ import annotations
 
 import time
@@ -27,7 +7,7 @@ from numpy.typing import NDArray
 from pydantic import BaseModel, Field
 
 from AIChat.BaseFinanceTool import BaseFinanceTool
-from AIChat.BasicTools.MacroEconomicTool import MacroEconomicTool
+from AIChat.BasicTools.MacroEconomicTool import MacroEconomicTool, MacroEconomicInput
 from AIChat.BasicTools.TechnicalAnalysisTool import TechnicalAnalysisTool, TechnicalAnalysisInput
 from AIChat.BasicTools.MarketDataTool import MarketDataTool, MarketDataInput
 
@@ -38,20 +18,30 @@ __all__ = ["KalmanRegimeFilterTool"]
 class KalmanRegimeFilterInput(BaseModel):
     tickers: list[str] = Field(..., description="분석할 ticker 리스트. 예: ['AAPL', 'MSFT']")
     start_date: str = Field(..., description="조회 시작일 (yyyy-mm-dd). 예: '2024-01-01'")
-    end_date: str = Field(..., description="조회 종료일 (yyyy-mm-dd). 예: '2024-12-31'")
+    end_date: str = Field(..., description="조회 종료일 (yyyy-mm-dd). 예: '2024-12-31(최대한 최근 날짜)'")
 
 class KalmanRegimeFilterActionOutput(BaseModel):
     summary: str
     recommendations: Dict[str, Any]
 
-# ------------------- 🔷 Kalman Filter Core -------------------- #
+# ------------------- 🔷 Kalman Filter Core (7차원 입력에 맞춰 수정) -------------------- #
 
 class KalmanRegimeFilterCore:
     def __init__(self) -> None:
+        # x: 3차원 상태, z: 7차원 관측
         self.F: NDArray = np.array([[0.9, 0.1, 0.0], [0.0, 0.8, 0.2], [0.1, 0.0, 0.9]])
-        self.H: NDArray = np.array([[1.0,0.0,0.0],[0.0,1.0,0.0],[0.0,0.0,1.0],[0.5,0.5,0.0],[0.0,0.7,0.3]])
+        # H: (7, 3)로 확장. 필요한 만큼 자유롭게 조정해도 됨
+        self.H: NDArray = np.array([
+            [1.0, 0.0, 0.0],   # gdp
+            [0.0, 1.0, 0.0],   # cpi
+            [0.0, 0.0, 1.0],   # vix
+            [0.5, 0.5, 0.0],   # gdp+cpi
+            [0.0, 0.7, 0.3],   # cpi, vix
+            [0.2, 0.2, 0.6],   # rsi ("상태"와 rsi의 가상 연결)
+            [0.4, 0.3, 0.3],   # macd (동일)
+        ])
         self.Q: NDArray = np.eye(3) * 0.01
-        self.R: NDArray = np.eye(5) * 0.10
+        self.R: NDArray = np.eye(7) * 0.10   # 관측 잡음행렬 (7x7)
         self.x: NDArray = np.array([0.0, 1.0, 0.5])
         self.P: NDArray = np.eye(3)
 
@@ -78,35 +68,50 @@ class KalmanRegimeFilterTool(BaseFinanceTool):
         self.filter = KalmanRegimeFilterCore()
         self.max_latency = 1.0
 
+    def find_value(data_list, series_id, default=0.0):
+        for item in data_list:
+            if isinstance(item, dict):
+                if item.get('series_id') == series_id:
+                    return item.get('latest_value', default)
+            # 혹시 MacroEconomicSeries 객체일 경우
+            elif hasattr(item, 'series_id'):
+                if getattr(item, 'series_id', None) == series_id:
+                    return getattr(item, 'latest_value', default)
+        return default
+    
     def get_data(self, **kwargs) -> KalmanRegimeFilterActionOutput:
         t0 = time.time()
         input_data = KalmanRegimeFilterInput(**kwargs)
 
         # [1] 데이터 수집
         macro_tool = MacroEconomicTool()
-        macro_output = macro_tool.get_data(['GDP', 'CPI'])
-        gdp = macro_output.data.get('GDP', 0.0)
-        cpi = macro_output.data.get('CPI', 0.0)
+        macro_output = macro_tool.get_data(series_ids=["GDP", "CPIAUCSL"])
+        gdp = KalmanRegimeFilterTool.find_value(macro_output.data, 'GDP', 0.0)
+        cpi = KalmanRegimeFilterTool.find_value(macro_output.data, 'CPIAUCSL', 0.0)
 
         ta_tool = TechnicalAnalysisTool()
-        ta_input = TechnicalAnalysisInput(tickers=input_data.tickers)
-        ta_output = ta_tool.get_data(ta_input, as_dict=True)
-        ticker = input_data.tickers[0]
-        ta_result = ta_output.results[ticker]
+        ta_output = ta_tool.get_data(tickers=input_data.tickers)  # 리스트 결과
+        ta_result = ta_output.results[0]  # 첫 번째 종목만 사용
         rsi, macd = ta_result.rsi, ta_result.macd
 
         market_data_tool = MarketDataTool()
         market_input = MarketDataInput(tickers=input_data.tickers, start_date=input_data.start_date, end_date=input_data.end_date)
         market_data = market_data_tool.get_data(market_input)
         vix = market_data.get('vix', 0.0)
-
-        # [2] 관측 벡터
-        obs_vector = np.array([gdp, cpi, vix, 0.5 * (gdp + cpi), 0.7 * cpi + 0.3 * vix])
+        print(f"Data collected: GDP={gdp}, CPI={cpi}, VIX={vix}, RSI={rsi}, MACD={macd}")
+        # [2] 관측 벡터 (rsi, macd 추가)
+        obs_vector = np.array([
+            gdp, cpi, vix,
+            0.5 * (gdp + cpi),
+            0.7 * cpi + 0.3 * vix,
+            rsi,  # 추가
+            macd  # 추가
+        ])
 
         # [3] 칼만 필터 스텝
         self.filter.step(obs_vector)
         elapsed = time.time() - t0
-
+        print(f"KalmanRegimeFilterTool: Elapsed time: {elapsed:.3f} seconds")
         if elapsed > self.max_latency:
             raise RuntimeError(f"Latency {elapsed:.3f}s > {self.max_latency}s")
 
@@ -131,7 +136,7 @@ class KalmanRegimeFilterTool(BaseFinanceTool):
         base_size = 1000
         position_size = base_size * abs(state[0]) / (state[1] + 1e-6)
         recommendations["position_size"] = round(position_size, 2)
-
+        print(f"Position Size: {position_size:.2f}")
         # 3. Leverage
         target_volatility = 0.5
         leverage = target_volatility / (state[1] + 1e-6)

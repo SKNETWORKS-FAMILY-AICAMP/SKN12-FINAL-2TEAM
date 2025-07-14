@@ -2,7 +2,7 @@
 import requests
 import os
 import time
-import random
+import random   
 from typing import List, Optional, Dict, Any
 from AIChat.BaseFinanceTool import BaseFinanceTool
 from pydantic import BaseModel, Field

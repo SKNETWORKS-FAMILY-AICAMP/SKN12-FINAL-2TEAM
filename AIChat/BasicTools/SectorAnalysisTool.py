@@ -21,26 +21,24 @@ class SectorAnalysisOutput:
         agent: str,
         summary: str,
         tickers: Optional[List[str]] = None,
-        avg_per: Optional[float] = None,
-        avg_pbr: Optional[float] = None,
-        avg_roe: Optional[float] = None,
-        sector_performance: Optional[float] = None,
+        avg_marketcap: Optional[float] = None,
+        avg_dividend: Optional[float] = None,
+        avg_price: Optional[float] = None,
         data: Optional[Any] = None
     ):
         self.agent = agent
         self.summary = summary
         self.tickers = tickers
-        self.avg_per = avg_per
-        self.avg_pbr = avg_pbr
-        self.avg_roe = avg_roe
-        self.sector_performance = sector_performance
+        self.avg_marketcap = avg_marketcap
+        self.avg_dividend = avg_dividend
+        self.avg_price = avg_price
         self.data = data
+
 class SectorAnalysisTool(BaseFinanceTool):
     BASE_URL = "https://financialmodelingprep.com/api/v3/stock-screener"
 
     def get_data(self, **kwargs) -> SectorAnalysisOutput:
         try:
-            # kwargs를 pydantic 모델로 변환 (필수!)
             params = SectorAnalysisInput(**kwargs)
         except Exception as e:
             return SectorAnalysisOutput(agent="error", summary=f"❌ 매개변수 오류: {e}")
@@ -63,31 +61,27 @@ class SectorAnalysisTool(BaseFinanceTool):
                 return SectorAnalysisOutput(agent="error", summary=f"📭 '{params.sector_name}' 섹터의 종목을 찾을 수 없습니다.")
 
             tickers = [s["symbol"] for s in stocks if "symbol" in s]
-            pers = [s.get("pe") for s in stocks if isinstance(s.get("pe"), (int, float))]
-            pbrs = [s.get("pb") for s in stocks if isinstance(s.get("pb"), (int, float))]
-            roes = [s.get("roe") for s in stocks if isinstance(s.get("roe"), (int, float))]
-            avg_per = round(sum(pers) / len(pers), 2) if pers else None
-            avg_pbr = round(sum(pbrs) / len(pbrs), 2) if pbrs else None
-            avg_roe = round(sum(roes) / len(roes), 4) if roes else None
-            perf_6m = [s.get("priceChange6M") for s in stocks if isinstance(s.get("priceChange6M"), (int, float))]
-            sector_performance = round(sum(perf_6m) / len(perf_6m), 4) if perf_6m else None
+            marketcaps = [s.get("marketCap") for s in stocks if isinstance(s.get("marketCap"), (int, float))]
+            dividends = [s.get("lastAnnualDividend") for s in stocks if isinstance(s.get("lastAnnualDividend"), (int, float))]
+            prices = [s.get("price") for s in stocks if isinstance(s.get("price"), (int, float))]
+
+            avg_marketcap = round(sum(marketcaps) / len(marketcaps), 2) if marketcaps else None
+            avg_dividend = round(sum(dividends) / len(dividends), 4) if dividends else None
+            avg_price = round(sum(prices) / len(prices), 2) if prices else None
 
             summary = (
                 f"📊 '{params.sector_name}' 섹터 주요 종목: {', '.join(tickers)}\n"
-                f"📈 평균 PER: {avg_per}, 평균 PBR: {avg_pbr}, 평균 ROE: {avg_roe}\n"
-                f"📉 섹터 6개월 수익률(평균): {sector_performance}"
+                f"🏦 평균 시가총액: {avg_marketcap}, 평균 배당: {avg_dividend}, 평균 주가: {avg_price}"
             )
 
             return SectorAnalysisOutput(
                 agent="SectorAnalysisTool",
                 summary=summary,
                 tickers=tickers,
-                avg_per=avg_per,
-                avg_pbr=avg_pbr,
-                avg_roe=avg_roe,
-                sector_performance=sector_performance,
+                avg_marketcap=avg_marketcap,
+                avg_dividend=avg_dividend,
+                avg_price=avg_price,
                 data=stocks
             )
-
         except Exception as e:
             return SectorAnalysisOutput(agent="error", summary=f"⚠️ 섹터 분석 오류: {e}")
