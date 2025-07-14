@@ -1,7 +1,10 @@
 from fastapi import APIRouter, Request, Body
 from template.base.template_context import TemplateContext, TemplateType
 from template.base.template_service import TemplateService
-from template.admin.common.admin_model import *
+from template.admin.common.admin_model import (
+    HealthCheckRequest, ServerStatusRequest, SessionCountRequest, 
+    QueueStatsRequest, QuickTestRequest
+)
 from template.admin.common.admin_protocol import AdminProtocol
 from service.core.logger import Logger
 from datetime import datetime
@@ -16,6 +19,8 @@ def setup_admin_protocol_callbacks():
     admin_protocol.on_health_check_req_callback = getattr(admin_template, "on_health_check_req", None)
     admin_protocol.on_server_status_req_callback = getattr(admin_template, "on_server_status_req", None)
     admin_protocol.on_session_count_req_callback = getattr(admin_template, "on_session_count_req", None)
+    admin_protocol.on_queue_stats_req_callback = getattr(admin_template, "on_queue_stats_req", None)
+    admin_protocol.on_quick_test_req_callback = getattr(admin_template, "on_quick_test_req", None)
 
 @router.post("/healthcheck")
 async def health_check(request: HealthCheckRequest, req: Request):
@@ -110,3 +115,39 @@ async def metrics(req: Request):
         "uptime": response_data.get("uptime"),
         "metrics": response_data.get("metrics")
     }
+
+@router.post("/queuestats")
+async def queue_stats(request: QueueStatsRequest, req: Request):
+    """
+    큐 서비스 통계 조회
+    """
+    ip = req.headers.get("X-Forwarded-For")
+    if not ip:
+        ip = req.client.host
+    else:
+        ip = ip.split(", ")[0]
+    return await TemplateService.run_administrator(
+        req.method,
+        req.url.path,
+        ip,
+        request.model_dump_json(),
+        admin_protocol.queue_stats_req_controller
+    )
+
+@router.post("/quicktest")
+async def quick_test(request: QuickTestRequest, req: Request):
+    """
+    빠른 서비스 테스트 실행
+    """
+    ip = req.headers.get("X-Forwarded-For")
+    if not ip:
+        ip = req.client.host
+    else:
+        ip = ip.split(", ")[0]
+    return await TemplateService.run_administrator(
+        req.method,
+        req.url.path,
+        ip,
+        request.model_dump_json(),
+        admin_protocol.quick_test_req_controller
+    )

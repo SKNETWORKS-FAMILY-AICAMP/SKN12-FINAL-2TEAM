@@ -86,6 +86,10 @@ class TemplateService:
                 # Redis에 세션 정보 저장
                 client_session = await cls.set_session_info(access_token, '', session_info)
                 
+                # 로그인 성공 시 템플릿 콜백 호출
+                if client_session:
+                    await cls._handle_user_login_callbacks(client_session)
+                
                 # 응답에 accessToken 추가
                 j_obj['accessToken'] = access_token
                 
@@ -483,4 +487,98 @@ class TemplateService:
         
         Logger.info(f"RES[{method}:{path}, IP:{ip_address}]: {res_json}")
         return res_json
+
+    @classmethod
+    async def _handle_user_login_callbacks(cls, client_session: 'ClientSession'):
+        """로그인 성공 시 템플릿 콜백 처리"""
+        try:
+            from service.service_container import ServiceContainer
+            
+            db_service = ServiceContainer.get_database_service()
+            if not db_service:
+                Logger.warn("데이터베이스 서비스를 찾을 수 없어 템플릿 콜백을 건너뜀")
+                return
+            
+            account_db_key = getattr(client_session.session, 'account_db_key', 0)
+            account_id = getattr(client_session.session, 'account_id', '')
+            
+            # 로그인 카운트 기반 첫 로그인 체크
+            is_first_login = await cls._check_is_first_login_by_count(db_service, account_db_key, account_id)
+            
+            if is_first_login:
+                Logger.info(f"첫 로그인 감지 - 템플릿 CreateClient 호출: account_db_key={account_db_key}")
+                TemplateContext.create_client(db_service, client_session)
+            else:
+                Logger.info(f"재로그인 감지 - 템플릿 UpdateClient 호출: account_db_key={account_db_key}")
+                TemplateContext.update_client(db_service, client_session)
+                
+        except Exception as e:
+            Logger.error(f"템플릿 로그인 콜백 처리 실패: {e}")
+    
+    @staticmethod
+    async def _check_is_first_login_by_count(db_service, account_db_key: int, account_id: str) -> bool:
+        """로그인 카운트로 첫 로그인 여부 확인"""
+        try:
+            # 1. 계정 복구 체크
+            if '_restore' in account_id:
+                Logger.info(f"계정 복구 감지: {account_id}")
+                await cls._process_account_restore(db_service, account_db_key, account_id)
+                return True
+            
+            # 2. 현재 로그인 카운트 조회
+            query = "SELECT login_count FROM table_accountid WHERE account_db_key = %s"
+            result = await db_service.call_global_read_query(query, (account_db_key,))
+            
+            if result and len(result) > 0:
+                login_count = result[0].get('login_count', 0)
+                
+                # 로그인 카운트 증가
+                await cls._increment_login_count(db_service, account_db_key)
+                
+                # 첫 로그인 판정 (카운트가 0이면 첫 로그인)
+                if login_count == 0:
+                    Logger.info(f"첫 로그인 감지: login_count={login_count}")
+                    return True
+            
+            return False
+            
+        except Exception as e:
+            Logger.error(f"첫 로그인 체크 실패: {e}")
+            return False
+    
+    @staticmethod
+    async def _increment_login_count(db_service, account_db_key: int):
+        """로그인 카운트 증가"""
+        try:
+            query = """
+                UPDATE table_accountid 
+                SET login_count = login_count + 1,
+                    login_time = NOW()
+                WHERE account_db_key = %s
+            """
+            
+            await db_service.call_global_procedure_update(query, (account_db_key,))
+            
+        except Exception as e:
+            Logger.error(f"로그인 카운트 업데이트 실패: {e}")
+    
+    @staticmethod
+    async def _process_account_restore(db_service, account_db_key: int, account_id: str):
+        """계정 복구 처리"""
+        try:
+            new_account_id = account_id.replace('_restore', '')
+            
+            query = """
+                UPDATE table_accountid 
+                SET account_id = %s,
+                    login_count = 1,
+                    login_time = NOW()
+                WHERE account_db_key = %s
+            """
+            
+            await db_service.call_global_procedure_update(query, (new_account_id, account_db_key))
+            Logger.info(f"계정 복구 완료: {account_db_key} -> {new_account_id}")
+            
+        except Exception as e:
+            Logger.error(f"계정 복구 처리 실패: {e}")
 

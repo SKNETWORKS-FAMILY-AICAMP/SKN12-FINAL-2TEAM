@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from template.base.base_template import BaseTemplate
 from template.base.template_context import TemplateContext
 from template.tutorial.common.tutorial_serialize import (
     TutorialStartRequest, TutorialStartResponse,
@@ -11,9 +12,27 @@ from template.tutorial.common.tutorial_model import TutorialStep, TutorialProgre
 from service.service_container import ServiceContainer
 from service.core.logger import Logger
 
-class TutorialTemplateImpl:
+class TutorialTemplateImpl(BaseTemplate):
     def __init__(self):
-        pass
+        super().__init__()
+    
+    def init(self, config):
+        """튜토리얼 템플릿 초기화"""
+        try:
+            Logger.info("Tutorial 템플릿 초기화 시작")
+            # 튜토리얼 관련 초기화 작업이 있다면 여기서 수행
+            Logger.info("Tutorial 템플릿 초기화 완료")
+        except Exception as e:
+            Logger.error(f"Tutorial 템플릿 초기화 실패: {e}")
+    
+    def on_load_data(self, config):
+        """튜토리얼 데이터 로딩"""
+        try:
+            Logger.info("Tutorial 템플릿 데이터 로드 시작")
+            # 튜토리얼 관련 데이터 로딩이 있다면 여기서 수행
+            Logger.info("Tutorial 템플릿 데이터 로드 완료")
+        except Exception as e:
+            Logger.error(f"Tutorial 템플릿 데이터 로드 실패: {e}")
 
     async def on_tutorial_start_req(self, client_session, request: TutorialStartRequest):
         """튜토리얼 시작 요청 처리"""

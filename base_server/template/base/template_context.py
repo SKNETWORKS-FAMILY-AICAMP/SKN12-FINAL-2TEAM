@@ -41,9 +41,16 @@ class TemplateContext:
 
     @classmethod
     def load_data_table(cls, config):
-        # DataTable 등은 별도 구현 필요
-        for t in cls._templates.values():
-            t.on_load_data(config)
+        """모든 템플릿의 데이터 테이블 로드"""
+        with cls._lock:
+            for template_type, template in cls._templates.items():
+                try:
+                    template.on_load_data(config)
+                    from service.core.logger import Logger
+                    Logger.info(f"템플릿 데이터 로드 완료: {template_type.name}")
+                except Exception as e:
+                    from service.core.logger import Logger
+                    Logger.error(f"템플릿 데이터 로드 실패: {template_type.name} - {e}")
 
     @classmethod
     def create_client(cls, db_client, client_session):

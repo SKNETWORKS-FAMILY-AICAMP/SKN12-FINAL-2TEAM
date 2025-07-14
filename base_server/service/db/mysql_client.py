@@ -141,3 +141,8 @@ class MySQLClient:
         ]
         error_str = str(exception).lower()
         return any(msg.lower() in error_str for msg in error_messages)
+    
+    async def get_connection(self):
+        """Get a connection from the pool for transaction use"""
+        await self._ensure_connection()
+        return await self.pool.acquire()

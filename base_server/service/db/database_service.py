@@ -152,3 +152,76 @@ class DatabaseService:
     async def get_last_insert_id(self) -> int:
         """기존 호환성을 위한 메서드 - 글로벌 DB 사용"""
         return await self.global_client.get_last_insert_id()
+    
+    # === 아웃박스 패턴 및 기타 서비스용 메서드 ===
+    async def get_active_shard_ids(self) -> List[int]:
+        """활성 샤드 ID 목록 반환"""
+        try:
+            query = """
+            SELECT shard_id 
+            FROM table_shard_config 
+            WHERE status = 'active'
+            ORDER BY shard_id
+            """
+            result = await self.execute_global_query(query)
+            return [row['shard_id'] for row in result]
+        except Exception as e:
+            Logger.error(f"Failed to get active shard IDs: {e}")
+            return list(self.shard_clients.keys())  # fallback to currently connected shards
+    
+    async def call_global_procedure_update(self, query: str, params: Tuple = ()) -> int:
+        """글로벌 DB 업데이트 쿼리 실행 (affected rows 반환)"""
+        try:
+            return await self.global_client.execute_non_query(query, params)
+        except Exception as e:
+            Logger.error(f"Global procedure update failed: {e}")
+            raise
+    
+    async def call_shard_procedure_update(self, shard_id: int, query: str, params: Tuple = ()) -> int:
+        """특정 샤드 DB 업데이트 쿼리 실행 (affected rows 반환)"""
+        try:
+            shard_client = self.get_shard_client(shard_id)
+            if not shard_client:
+                raise RuntimeError(f"Shard {shard_id} not available")
+            return await shard_client.execute_non_query(query, params)
+        except Exception as e:
+            Logger.error(f"Shard {shard_id} procedure update failed: {e}")
+            raise
+    
+    async def call_shard_read_query(self, shard_id: int, query: str, params: Tuple = ()) -> List[Dict[str, Any]]:
+        """특정 샤드 DB 읽기 쿼리 실행"""
+        try:
+            shard_client = self.get_shard_client(shard_id)
+            if not shard_client:
+                raise RuntimeError(f"Shard {shard_id} not available")
+            return await shard_client.execute_query(query, params)
+        except Exception as e:
+            Logger.error(f"Shard {shard_id} read query failed: {e}")
+            raise
+    
+    async def get_transaction(self):
+        """트랜잭션 컨텍스트 매니저 반환 (글로벌 DB)"""
+        # 간단한 트랜잭션 컨텍스트 매니저 구현
+        class TransactionContext:
+            def __init__(self, client: MySQLClient):
+                self.client = client
+                self.connection = None
+            
+            async def __aenter__(self):
+                self.connection = await self.client.get_connection()
+                # MySQL 연결을 수동 커밋 모드로 설정
+                await self.connection.autocommit(False)
+                return self.connection
+            
+            async def __aexit__(self, exc_type, exc_val, exc_tb):
+                try:
+                    if exc_type is None:
+                        await self.connection.commit()
+                    else:
+                        await self.connection.rollback()
+                finally:
+                    # 커넥션을 풀로 반환
+                    await self.connection.autocommit(True)  # 원래 상태로 복구
+                    self.connection.close()
+        
+        return TransactionContext(self.global_client)

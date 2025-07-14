@@ -38,6 +38,18 @@ class CacheService:
         return cls._client_pool.new()
     
     @classmethod
+    def get_redis_client(cls):
+        """Redis 클라이언트 반환 (큐 서비스용)"""
+        if cls._client_pool is None:
+            raise RuntimeError("CacheService is not initialized. Call Init() first.")
+        return cls._client_pool.new()
+    
+    @classmethod
+    def get_instance(cls):
+        """CacheService 인스턴스 반환"""
+        return cls
+    
+    @classmethod
     def is_initialized(cls) -> bool:
         """초기화 여부 확인"""
         return cls._client_pool is not None
