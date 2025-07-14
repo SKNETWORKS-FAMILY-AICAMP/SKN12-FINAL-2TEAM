@@ -110,6 +110,94 @@ class VectorDbService:
         client = cls.get_client()
         return await client.chat_completion(messages, **kwargs)
     
+    # === Knowledge Base 전용 메서드 ===
+    @classmethod
+    async def retrieve_from_knowledge_base(cls, query: str, top_k: int = 10, **kwargs) -> Dict[str, Any]:
+        """Knowledge Base에서 문서 검색"""
+        client = cls.get_client()
+        return await client.similarity_search(query, top_k, **kwargs)
+    
+    @classmethod
+    async def rag_generate(cls, query: str, **kwargs) -> Dict[str, Any]:
+        """RAG 기반 답변 생성 (Knowledge Base + Text Generation)"""
+        if not cls._initialized:
+            raise RuntimeError("VectorDbService not initialized")
+        
+        try:
+            # Knowledge Base에서 관련 문서 검색
+            search_result = await cls.retrieve_from_knowledge_base(query, **kwargs)
+            
+            if not search_result.get('success', False):
+                return {
+                    "success": False,
+                    "error": "Knowledge base search failed",
+                    "search_error": search_result.get('error', 'Unknown error')
+                }
+            
+            # 검색 결과를 컨텍스트로 사용하여 답변 생성
+            context_docs = search_result.get('results', [])
+            if not context_docs:
+                return {
+                    "success": False,
+                    "error": "No relevant documents found in knowledge base"
+                }
+            
+            # 컨텍스트 구성
+            context = "\n\n".join([f"Document {i+1}: {doc['content']}" for i, doc in enumerate(context_docs)])
+            
+            # RAG 프롬프트 생성
+            rag_prompt = f"""Based on the following context documents, please answer the question.
+
+Context:
+{context}
+
+Question: {query}
+
+Answer:"""
+            
+            # 답변 생성
+            generation_result = await cls.generate_text(rag_prompt, **kwargs)
+            
+            if generation_result.get('success', False):
+                return {
+                    "success": True,
+                    "query": query,
+                    "answer": generation_result['generated_text'],
+                    "context_documents": context_docs,
+                    "search_time": search_result.get('search_time', 0),
+                    "generation_time": generation_result.get('generation_time', 0)
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": "Text generation failed",
+                    "generation_error": generation_result.get('error', 'Unknown error'),
+                    "context_documents": context_docs
+                }
+                
+        except Exception as e:
+            Logger.error(f"RAG generation failed: {e}")
+            return {
+                "success": False,
+                "error": f"RAG generation failed: {str(e)}"
+            }
+    
+    @classmethod
+    async def knowledge_base_sync_status(cls) -> Dict[str, Any]:
+        """Knowledge Base 동기화 상태 확인"""
+        if not cls._initialized:
+            return {"error": "Service not initialized"}
+        
+        try:
+            # Knowledge Base 상태 확인 (구현 필요)
+            return {
+                "knowledge_base_id": getattr(cls._config, 'knowledge_base_id', None),
+                "status": "active",  # 실제 구현 시 API 호출 필요
+                "last_sync_time": None  # 실제 구현 시 API 호출 필요
+            }
+        except Exception as e:
+            return {"error": str(e)}
+    
     # === 모니터링 및 관리 메서드 ===
     @classmethod
     async def health_check(cls) -> Dict[str, Any]:
