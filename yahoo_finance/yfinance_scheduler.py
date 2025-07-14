@@ -146,13 +146,24 @@ class NewsDeduplicator:
                         if not isinstance(click_url, dict):
                             click_url = {}
                         
-                        # 날짜 파싱
+                        # 날짜 파싱 및 일주일 이내 필터링
                         pub_date_str = content.get('pubDate', '')
                         if pub_date_str:
                             try:
                                 pub_date = pd.to_datetime(pub_date_str)
                                 if pub_date.tz is None:
                                     pub_date = pub_date.tz_localize('UTC')
+                                
+                                # 일주일 이내 뉴스만 필터링
+                                now = datetime.now()
+                                if now.tzinfo is None:
+                                    now = now.replace(tzinfo=pub_date.tzinfo)
+                                
+                                one_week_ago = now - pd.Timedelta(days=7)
+                                if pub_date < one_week_ago:
+                                    print(f"    ⏰ 오래된 뉴스 제외 ({pub_date.strftime('%Y-%m-%d')}): {title[:30]}...")
+                                    continue
+                                
                                 formatted_date = pub_date.strftime('%Y-%m-%d %H:%M')
                             except:
                                 formatted_date = datetime.now().strftime('%Y-%m-%d %H:%M')
@@ -208,10 +219,33 @@ class NewsDeduplicator:
             print(f"❌ 해시 파일 저장 중 오류: {e}")
     
     def _save_news_to_yahoo_file(self):
-        """중복 제거된 뉴스를 yahoo_finance_news.json 파일에 저장"""
+        """중복 제거된 뉴스를 yahoo_finance_news.json 파일에 저장 (일주일 이내만)"""
         try:
+            # 일주일 이내 뉴스만 필터링
+            now = datetime.now()
+            one_week_ago = now - pd.Timedelta(days=7)
+            
+            recent_news = []
+            old_news_count = 0
+            
+            for news in self.existing_news:
+                try:
+                    news_date = datetime.strptime(news.get('날짜', ''), '%Y-%m-%d %H:%M')
+                    if news_date >= one_week_ago:
+                        recent_news.append(news)
+                    else:
+                        old_news_count += 1
+                except:
+                    # 날짜 파싱 실패시 최근 뉴스로 처리
+                    recent_news.append(news)
+            
+            if old_news_count > 0:
+                print(f"🗑️ 일주일 이전 뉴스 {old_news_count}개 제거")
+                # 메모리의 뉴스 리스트도 업데이트
+                self.existing_news = recent_news
+            
             # 4. 최신순으로 정렬 (날짜 기준)
-            sorted_news = sorted(self.existing_news, 
+            sorted_news = sorted(recent_news, 
                                 key=lambda x: x.get('날짜', ''), 
                                 reverse=True)
             
@@ -326,12 +360,12 @@ def run_news_collection():
 def main():
     """메인 함수: 스케줄러 설정 및 실행"""
     print("📰 뉴스 수집 스케줄러 시작")
-    print("⏰ 1분마다 뉴스 수집 작업을 수행합니다.")
+    print("⏰ 5분마다 뉴스 수집 작업을 수행합니다. (최근 1주일 뉴스만)")
     print("🛑 중단하려면 Ctrl+C를 눌러주세요.")
     print()
     
-    # 5. 스케줄 설정: 1분마다 뉴스 수집 작업 실행
-    schedule.every(1).minutes.do(run_news_collection)
+    # 5. 스케줄 설정: 5분마다 뉴스 수집 작업 실행
+    schedule.every(5).minutes.do(run_news_collection)
     
     # 시작 시 즉시 한 번 실행
     print("🔄 초기 뉴스 수집 작업 실행...")
