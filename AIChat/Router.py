@@ -4,12 +4,14 @@ import json, os
 from typing import List, Dict, Any
 from dotenv import load_dotenv
 from pydantic import BaseModel
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from langchain_openai import ChatOpenAI
 from langchain.tools import tool
 from langgraph.graph import StateGraph, MessagesState, END
 from langgraph.prebuilt import ToolNode
-
+from langchain_core.prompts import ChatPromptTemplate
 # ──────────────────────────── -1. 기본 모듈 임포트
 from AIChat.BasicTools.FinancialStatementTool import FinancialStatementTool, FinancialStatementParams
 from AIChat.BasicTools.MacroEconomicTool import MacroEconomicTool, MacroEconomicInput
@@ -26,6 +28,9 @@ load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if not (OPENAI_API_KEY and OPENAI_API_KEY.startswith("sk-")):
     raise ValueError("❌ 유효한 OPENAI_API_KEY가 없습니다.")
+# 한국(서울) 기준 오늘 날짜·시간
+now_seoul = datetime.now(ZoneInfo("Asia/Seoul"))
+today = now_seoul.date() 
 
 # ──────────────────────────── 1. Tool 정의
 @tool(args_schema=FinancialStatementParams)
@@ -86,9 +91,7 @@ def technical_analysis(**params):
 
 @tool(args_schema=MarketDataInput)
 def market_data(**params):
-    """[종목 시세/수익률/통계 데이터 조회]
-    미국/글로벌 주식·ETF·채권·원자재 등의 과거~오늘까지의 일별 수익률, 기대수익률, 변동성, 공분산, 최신 VIX 등 시장 데이터를 반환합니다.
-"""
+    """주가, 시세, 일별 수익률, 기대수익률, 변동성, 공분산, 최신 VIX 등 시장 데이터를 반환합니다."""
     agent = MarketDataTool()
     results = agent.get_data(**params)
     return results.summary
@@ -148,6 +151,14 @@ TOOLS = [
 ]
 
 # ──────────────────────────── 2. LLM + 툴 바인딩
+router_prompt = ChatPromptTemplate.from_messages([
+    ("system",
+     "너는 사용자의 질문을 보고 카테고리를 분류하는 라우터다.\n"
+     "가능한 목적지: {destinations}\n"
+     "오늘은 2025‑07‑15(Asia/Seoul).\n"
+     "반드시 JSON 으로 {\"destination\":\"...\",\"reason\":\"...\"} 형식만 반환한다."),
+    ("user", "{user_input}")
+])
 llm = ChatOpenAI(
     model="gpt-4o-mini",
     api_key=OPENAI_API_KEY,

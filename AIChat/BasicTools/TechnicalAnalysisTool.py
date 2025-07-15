@@ -60,7 +60,7 @@ class TechnicalAnalysisTool(BaseFinanceTool):
             try:
                 stock = yf.Ticker(ticker)
                 hist = stock.history(period="6mo", auto_adjust=False)
-<<<<<<< Updated upstream
+
                 print(hist)
 
                 if "Adj Close" in hist.columns:
@@ -68,33 +68,31 @@ class TechnicalAnalysisTool(BaseFinanceTool):
                 elif "Close" in hist.columns:
                     close = hist["Close"]
                 else:
-=======
-                print(hist.columns.tolist())
-                if hist.empty:
->>>>>>> Stashed changes
+                    print(hist.columns.tolist())
+                    if hist.empty:
+                        results.append(TechnicalAnalysisSingleOutput(
+                            agent="error",
+                            ticker=ticker,
+                            summary=f"{ticker}의 가격 데이터에 'Close' 또는 'Adj Close' 컬럼이 없습니다."
+                        ))
+                        continue
+                    rsi = ta.momentum.RSIIndicator(close).rsi().iloc[-1]
+                    macd = ta.trend.MACD(close).macd().iloc[-1]
+                    ema = ta.trend.EMAIndicator(close, window=20).ema_indicator().iloc[-1]
+
+                    summary = (
+                        f"{ticker}의 기술적 분석: RSI={rsi:.2f}, MACD={macd:.2f}, 20일 EMA={ema:.2f}입니다."
+                    )
+
                     results.append(TechnicalAnalysisSingleOutput(
-                        agent="error",
+                        agent="TechnicalAnalysisTool",
                         ticker=ticker,
-                        summary=f"{ticker}의 가격 데이터에 'Close' 또는 'Adj Close' 컬럼이 없습니다."
+                        summary=summary,
+                        rsi=rsi,
+                        macd=macd,
+                        ema=ema,
+                        data={"rsi": rsi, "macd": macd, "ema": ema}
                     ))
-                    continue
-                rsi = ta.momentum.RSIIndicator(close).rsi().iloc[-1]
-                macd = ta.trend.MACD(close).macd().iloc[-1]
-                ema = ta.trend.EMAIndicator(close, window=20).ema_indicator().iloc[-1]
-
-                summary = (
-                    f"{ticker}의 기술적 분석: RSI={rsi:.2f}, MACD={macd:.2f}, 20일 EMA={ema:.2f}입니다."
-                )
-
-                results.append(TechnicalAnalysisSingleOutput(
-                    agent="TechnicalAnalysisTool",
-                    ticker=ticker,
-                    summary=summary,
-                    rsi=rsi,
-                    macd=macd,
-                    ema=ema,
-                    data={"rsi": rsi, "macd": macd, "ema": ema}
-                ))
             except Exception as e:
                 results.append(TechnicalAnalysisSingleOutput(
                     agent="error",
