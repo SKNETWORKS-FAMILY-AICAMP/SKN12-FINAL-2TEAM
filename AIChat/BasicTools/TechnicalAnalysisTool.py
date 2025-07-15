@@ -60,6 +60,7 @@ class TechnicalAnalysisTool(BaseFinanceTool):
             try:
                 stock = yf.Ticker(ticker)
                 hist = stock.history(period="6mo", auto_adjust=False)
+<<<<<<< Updated upstream
                 print(hist)
 
                 if "Adj Close" in hist.columns:
@@ -67,6 +68,10 @@ class TechnicalAnalysisTool(BaseFinanceTool):
                 elif "Close" in hist.columns:
                     close = hist["Close"]
                 else:
+=======
+                print(hist.columns.tolist())
+                if hist.empty:
+>>>>>>> Stashed changes
                     results.append(TechnicalAnalysisSingleOutput(
                         agent="error",
                         ticker=ticker,

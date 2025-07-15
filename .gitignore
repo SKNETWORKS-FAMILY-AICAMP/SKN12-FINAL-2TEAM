@@ -42,6 +42,7 @@ sdist/
 ########################################
 # 대용량 데이터 & 체크포인트
 data*/
+!base_server/service/data/
 datasets*/
 *.csv
 *.tsv
@@ -137,6 +138,7 @@ base_server/**/*.log
 
 # 테스트 파일
 base_server/test_*.py
+!base_server/service/data/test_data_models.py
 
 # pip 설치 스크립트
 base_server/get-pip.py
