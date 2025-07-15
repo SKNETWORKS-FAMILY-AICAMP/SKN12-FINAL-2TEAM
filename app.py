@@ -1,64 +1,118 @@
-from fastapi import FastAPI, Request
-import uuid
+"""
+app_chat_stream.py
+FastAPI  :  REST /chat   +   WebSocket /stream  (토큰 스트리밍)
+RedisChatMessageHistory :  세션별 대화 영구 저장
+"""
 
+import os, uuid, asyncio, json
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, HTTPException
 from langchain_openai import ChatOpenAI
-from langchain_core.prompts import PromptTemplate
-from AIChat.Router import run_question  # LangGraph 툴 실행 결과
+from langchain.memory import ConversationBufferMemory
+from langchain_community.chat_message_histories import RedisChatMessageHistory
+from langchain_core.prompts import ChatPromptTemplate
+from AIChat.Router import run_question           # LangGraph 툴 실행
+
+# ── 환경
+REDIS_URL  = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+KEY_PREFIX = "chat:"
+MAX_TOKENS = 8_000
 
 app = FastAPI()
 
-# ─────────────────────────── 1. LangChain GPT 모델 준비
-llm = ChatOpenAI(model="gpt-4o", temperature=0)
+llm        = ChatOpenAI(model="gpt-4o", temperature=0)
+llm_stream = ChatOpenAI(model="gpt-4o", temperature=0, streaming=True)   # 스트리밍용
 
-# ─────────────────────────── 2. GPT 응답 생성 함수
-def generate_response(user_question: str, tool_result: str | list) -> str:
-    # 문자열 배열이면 줄바꿈으로 이어붙임
-    if isinstance(tool_result, list):
-        joined_result = "\n".join(tool_result)
-    else:
-        joined_result = str(tool_result)
+# ── 세션별 메모리
+_session_mem: dict[str, ConversationBufferMemory] = {}
+def mem(session_id: str) -> ConversationBufferMemory:
+    if session_id not in _session_mem:
+        history = RedisChatMessageHistory(
+            session_id=session_id,
+            url=REDIS_URL,
+            key_prefix=KEY_PREFIX,
+        )
+        _session_mem[session_id] = ConversationBufferMemory(
+            chat_memory=history,
+            return_messages=True
+        )
+    return _session_mem[session_id]
 
-    # LLM 프롬프트 구성 (질문 + 도구 결과 모두 포함)
-    prompt = PromptTemplate.from_template(
-        "사용자의 질문: \"{user_question}\"\n\n"
-        "아래는 위 질문에 대해 도구를 통해 수집한 정보입니다:\n\n"
-        "{tool_result}\n\n"
-        "이 정보를 바탕으로 질문에 정확하고 친절하게 답변해 주세요."
-    )
-    chain = prompt | llm
-
-    # GPT 응답 생성
-    return chain.invoke({
-        "user_question": user_question,
-        "tool_result": joined_result
-    }).content
-
-# ─────────────────────────── 3. /chat 엔드포인트 (API용)
+# ─────────────────────────── REST  /chat
 @app.post("/chat")
 async def chat(req: Request):
-    data = await req.json()
-    user_msg: str = data["message"]
-    session_id: str = data.get("session_id") or str(uuid.uuid4())
+    body = await req.json()
+    q = body["message"].strip()
+    if not q:
+        raise HTTPException(400, "message empty")
+    sid = body.get("session_id") or str(uuid.uuid4())
 
-    # 툴 실행 및 GPT 응답 생성
-    tool_result = run_question(user_msg)
-    reply = generate_response(user_msg, tool_result)
+    loop = asyncio.get_event_loop()
+    tool_out = await loop.run_in_executor(None, run_question, q)
+    answer = await _full_answer(sid, q, tool_out)
+    return {"session_id": sid, "reply": answer}
 
-    return {
-        "session_id": session_id,
-        "reply": reply
-    }
-
-# ─────────────────────────── 4. CLI 실행 (터미널에서 테스트용)
-if __name__ == "__main__":
-    print("💬 LangGraph 기반 GPT CLI (종료: Ctrl+C)\n")
+# ─────────────────────────── WebSocket /stream
+@app.websocket("/stream")
+async def ws_stream(ws: WebSocket):
+    await ws.accept()
     try:
         while True:
-            q = input("질문 > ").strip()
-            if not q:
+            # ── 0) 클라이언트 질문 대기
+            data = await ws.receive_text()
+            try:
+                req = json.loads(data)
+                q   = req["message"].strip()
+                sid = req.get("session_id") or str(uuid.uuid4())
+            except (KeyError, json.JSONDecodeError):
+                await ws.send_text(json.dumps({"error": "bad payload"}))
                 continue
-            tool_result = run_question(q)
-            answer = generate_response(q, tool_result)
-            print("\n🧠 GPT 응답:\n" + answer + "\n")
-    except (EOFError, KeyboardInterrupt):
-        print("\n종료합니다.")
+            if not q:
+                await ws.send_text(json.dumps({"error": "empty message"}))
+                continue
+
+            # ── 1) LangGraph 툴 (blocking → executor)
+            tool_out = await asyncio.get_running_loop().run_in_executor(
+                None, run_question, q
+            )
+            joined = "\n".join(tool_out) if isinstance(tool_out, list) else str(tool_out)
+
+            # ── 2) 프롬프트
+            memory = mem(sid)
+            prompt = ChatPromptTemplate.from_messages(
+                [("system", "당신은 친절하고 정확한 AI 비서입니다.")] +
+                memory.buffer +
+                [("user", f'{q}\n\n🛠 도구 결과:\n{joined}')]
+            )
+
+            # ── 3) 스트리밍 호출
+            stream = (prompt | llm_stream).astream({})
+            full_resp = ""
+            async for chunk in stream:
+                token = getattr(chunk, "content", "")     # ✔️ LangChain 0.2
+                if token:
+                    full_resp += token
+                    await ws.send_text(token)             # 토큰 단위 전송
+
+            # ── 4) 종료 신호
+            await ws.send_text("[DONE]")
+
+            # ── 5) 히스토리 저장
+            memory.chat_memory.add_user_message(q)
+            memory.chat_memory.add_ai_message(full_resp)
+
+    except WebSocketDisconnect:
+        return
+
+# ─────────────────────────── 내부 함수 (REST 전체 응답)
+async def _full_answer(sid: str, question: str, tool_out):
+    joined = "\n".join(tool_out) if isinstance(tool_out, list) else str(tool_out)
+    memory = mem(sid)
+    prompt = ChatPromptTemplate.from_messages(
+        [("system", "당신은 친절하고 정확한 AI 비서입니다.")] +
+        memory.buffer +
+        [("user", f'{question}\n\n🛠 도구 결과:\n{joined}')]
+    )
+    answer = (prompt | llm).invoke({}).content
+    memory.chat_memory.add_user_message(question)
+    memory.chat_memory.add_ai_message(answer)
+    return answer
