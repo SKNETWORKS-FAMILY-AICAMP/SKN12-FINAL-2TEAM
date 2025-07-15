@@ -8,7 +8,7 @@ class StorageConfig(BaseModel):
     # AWS S3 설정
     aws_access_key_id: Optional[str] = None
     aws_secret_access_key: Optional[str] = None
-    aws_region: str = "ap-northeast-2"
+    region_name: str = "ap-northeast-2"
     aws_session_token: Optional[str] = None
     
     # 기본 버킷

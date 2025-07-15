@@ -231,11 +231,19 @@ if __name__ == "__main__":
 
 ## 5. AWS OpenSearch 설정
 
+### 🔐 **추천 설정: 마스터 사용자 인증 (보안 강화)**
+
+**선택된 방식: 마스터 사용자 인증**
+- 세분화된 액세스 제어: ✅ 활성화
+- 마스터 사용자/암호 방식 사용
+- 자동 암호화 적용 (HTTPS, 노드간, 저장시)
+- Config 파일: username/password 입력 필요
+
 ### Step 1: OpenSearch 도메인 생성 (AWS Console)
 1. AWS Console에서 "OpenSearch Service" 검색
 2. "도메인 생성" 클릭
 3. 도메인 설정:
-   - **도메인 이름**: `finance-search-domain`
+   - **도메인 이름**: `finance-opensearch-v2` (기존 이름이 사용불가하므로 새 이름 사용)
    - **도메인 생성 방법**: 표준 생성
    - **템플릿**: 개발/테스트
    - **배포 유형**: 단일 노드 도메인 (개발용)
@@ -248,60 +256,76 @@ if __name__ == "__main__":
    - **EBS 볼륨 유형**: GP3
    - **EBS 스토리지 크기**: 10 GB
 
-5. 네트워크:
+5. 네트워크 및 보안:
    - **네트워크**: 퍼블릭 액세스
-   - **세분화된 액세스 제어**: 활성화
+   - **세분화된 액세스 제어**: ✅ **활성화** 
    - **마스터 사용자 생성**: 
      - 마스터 사용자 이름: `admin`
-     - 마스터 암호: 강력한 암호 설정
+     - 마스터 암호: `FinanceApp2024!` (강력한 암호)
 
-6. 액세스 정책:
+6. 암호화 설정:
+   **⚠️ 세분화된 액세스 제어 활성화 시 필수 설정:**
+   - **HTTPS 필수**: ✅ 활성화 (자동 설정됨)
+   - **노드 간 암호화**: ✅ 활성화 (자동 설정됨)
+   - **저장 데이터 암호화**: ✅ 활성화 (자동 설정됨)
+   - **AWS KMS 키**: "AWS 소유 키 사용" 선택 (권장)
+   
+   **주의**: 이 암호화 설정들은 활성화 후 비활성화할 수 없습니다.
+
+7. 액세스 정책 설정:
+
+**마스터 사용자 인증용 도메인 액세스 정책:**
 ```json
 {
   "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Principal": {
-        "AWS": "arn:aws:iam::[계정ID]:user/finance-app-user"
-      },
-      "Action": "es:*",
-      "Resource": "arn:aws:es:ap-northeast-2:[계정ID]:domain/finance-search-domain/*"
-    }
-  ]
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": {
+      "AWS": "*"
+    },
+    "Action": "es:*",
+    "Resource": "arn:aws:es:ap-northeast-2:052533586596:domain/finance-opensearch-v2/*"
+  }]
 }
 ```
 
-7. "생성" 클릭 (도메인 생성에 10-15분 소요)
+8. "생성" 클릭 (도메인 생성에 10-15분 소요)
 
-### Step 2: OpenSearch 엔드포인트 확인
-1. 도메인 생성 완료 후 도메인 클릭
-2. "일반 정보"에서 도메인 엔드포인트 확인
-   - 예: `https://finance-search-domain-xxxxx.ap-northeast-2.es.amazonaws.com`
+### Step 2: 도메인 생성 완료 후 확인사항
 
-### Step 3: OpenSearch 연결 테스트
+#### 1. 도메인 상태 확인
+1. AWS Console > OpenSearch Service > Domains
+2. `finance-opensearch-v2` 클릭
+3. 다음 사항 확인:
+   - **도메인 상태**: Active (녹색)
+   - **도메인 엔드포인트**: `https://search-finance-opensearch-v2-xxxxx.ap-northeast-2.es.amazonaws.com`
+   - **OpenSearch 버전**: 2.11 이상
+   - **세분화된 액세스 제어**: "활성화됨" 상태
+   - **마스터 사용자**: `admin` 설정 확인
+
+#### 2. 도메인 엔드포인트 URL 복사
+**중요**: 실제 도메인 엔드포인트 URL을 복사해서 config 파일에 입력해야 함!
+
+예시: `https://search-finance-opensearch-v2-abc123def.ap-northeast-2.es.amazonaws.com`
+
+#### 3. OpenSearch Dashboards 접속 테스트
+1. 도메인 엔드포인트 URL 복사
+2. 브라우저에서 `https://[도메인엔드포인트]/_dashboards` 접속
+3. 로그인:
+   - 방법 1: 접속 불가 (정상)
+   - 방법 2: 마스터 사용자로 로그인 가능
+
+### Step 3: OpenSearch 연결 테스트 (마스터 사용자 인증)
 ```python
 # test_opensearch_connection.py
 from opensearchpy import OpenSearch, RequestsHttpConnection
-from requests_aws4auth import AWS4Auth
-import boto3
 
 def test_opensearch_connection():
-    # AWS 자격 증명
-    credentials = boto3.Session().get_credentials()
-    awsauth = AWS4Auth(
-        credentials.access_key,
-        credentials.secret_key,
-        'ap-northeast-2',
-        'es',
-        session_token=credentials.token
-    )
-    
-    # OpenSearch 클라이언트 생성
-    host = 'finance-search-domain-xxxxx.ap-northeast-2.es.amazonaws.com'  # 실제 엔드포인트로 변경
+    # OpenSearch 클라이언트 생성 (마스터 사용자 인증)
+    host = 'search-finance-opensearch-v2-xxxxx.ap-northeast-2.es.amazonaws.com'  # 실제 엔드포인트로 변경
     client = OpenSearch(
         hosts=[{'host': host, 'port': 443}],
-        http_auth=awsauth,
+        http_auth=('admin', 'FinanceApp2024!'),  # 마스터 사용자 인증
         use_ssl=True,
         verify_certs=True,
         connection_class=RequestsHttpConnection
@@ -338,6 +362,110 @@ if __name__ == "__main__":
     test_opensearch_connection()
 ```
 
+### Step 4: 마스터 사용자 인증 확인
+
+#### 설정 확인사항:
+
+1. **도메인 설정 확인**
+   - 세분화된 액세스 제어: ✅ "활성화됨" 상태
+   - 마스터 사용자: `admin` 설정 확인
+   - 도메인 액세스 정책: Principal "*" 설정
+
+2. **Config 파일 확인**
+   ```json
+   "username": "admin",              // 마스터 사용자명
+   "password": "FinanceApp2024!",    // 마스터 암호
+   "aws_access_key_id": "",         // 비어있어야 함!
+   "aws_secret_access_key": "",     // 비어있어야 함!
+   ```
+
+3. **마스터 사용자 인증 테스트**
+   브라우저에서 OpenSearch Dashboards 접속:
+   `https://[도메인엔드포인트]/_dashboards`
+   - 로그인: `admin` / `FinanceApp2024!`
+
+4. **연결 실패시 확인사항**
+   - 도메인 상태가 "Active"인지 확인
+   - 실제 도메인 엔드포인트 URL이 config에 올바르게 입력되었는지 확인
+   - 마스터 사용자 암호가 정확한지 확인
+
+### Step 3: Config 파일 업데이트
+
+#### 1. 실제 엔드포인트 URL로 교체
+다음 파일들에서 `NEW_DOMAIN_ID` 부분을 실제 도메인 ID로 교체:
+
+**파일 목록:**
+- `base_server/application/base_web_server/base_web_server-config_local.json`
+- `base_server/application/base_web_server/base_web_server-config_debug.json`
+- `base_server/application/base_web_server/base_web_server-config.json`
+
+**변경 예시:**
+```json
+// 변경 전
+"hosts": ["https://search-finance-opensearch-v2-NEW_DOMAIN_ID.ap-northeast-2.es.amazonaws.com"]
+
+// 변경 후 (실제 도메인 ID로)
+"hosts": ["https://search-finance-opensearch-v2-abc123def.ap-northeast-2.es.amazonaws.com"]
+```
+
+#### 2. 마스터 사용자 인증 설정 (이미 적용됨)
+```json
+"searchConfig": {
+  "search_type": "opensearch",
+  "hosts": ["https://search-finance-opensearch-v2-[실제도메인ID].ap-northeast-2.es.amazonaws.com"],
+  "username": "admin",                    // 마스터 사용자명
+  "password": "FinanceApp2024!",          // 마스터 사용자 암호
+  "aws_access_key_id": "",               // 비워둠! (마스터 사용자 방식)
+  "aws_secret_access_key": "",           // 비워둠! (마스터 사용자 방식)
+  "region_name": "ap-northeast-2",
+  "use_ssl": true,
+  "verify_certs": true,
+  "timeout": 30,
+  "default_index": "finance_search_local",
+  "max_retries": 3,
+  "retry_on_timeout": true
+}
+```
+
+---
+
+## ⚡ **base_server 실행 가이드**
+
+### 🚀 **main.py 실행 방법**
+
+**1. 터미널에서 base_server 디렉토리로 이동:**
+```bash
+cd base_server
+```
+
+**2. 서버 실행:**
+```bash
+python -m application.base_web_server.main --logLevel=Debug --appEnv=LOCAL
+```
+
+**3. 로그 확인사항:**
+```
+[Info] : Storage 서비스 AWS 연결 성공
+[Info] : Search 서비스 OpenSearch 연결 성공    # 이제 403 에러 없이 성공해야 함
+[Info] : VectorDB 서비스 Bedrock 연결 성공
+[Info] : base_web_server 시작 완료
+```
+
+### 🔧 **OpenSearch 인증 로직 (main.py에서 자동 처리)**
+
+main.py의 SearchService 초기화에서:
+1. **Config 읽기**: username/password가 있으면 마스터 사용자 인증
+2. **OpenSearch 클라이언트 생성**: Basic Auth 사용
+3. **연결 테스트**: `index_exists` 호출로 연결 확인
+4. **결과**: 403 에러 없이 정상 연결
+
+### 📋 **체크리스트**
+- ✅ OpenSearch 도메인: `finance-opensearch-v2` 생성 완료
+- ✅ 마스터 사용자: `admin` / `FinanceApp2024!` 설정
+- ✅ Config 파일: username/password 입력, AWS 키 제거
+- ✅ 도메인 엔드포인트: `NEW_DOMAIN_ID`를 실제 ID로 교체
+- ✅ 서버 실행: OpenSearch 연결 성공 확인
+
 ---
 
 ## 6. AWS Bedrock 설정
@@ -348,17 +476,23 @@ AWS Bedrock은 Knowledge Base 기능을 통해 S3에 저장된 문서들을 직�
 - 문서 내용을 기반으로 한 질의응답 (RAG - Retrieval Augmented Generation)
 - 실시간 문서 업데이트 및 인덱싱
 
+**리전 참고사항**: 
+- S3는 서울 리전(ap-northeast-2) 사용
+- Bedrock도 서울 리전(ap-northeast-2) 사용
+- 동일 리전 사용으로 데이터 전송비 최소화
+
 ### Step 1: Bedrock 활성화
 1. AWS Console에서 "Bedrock" 서비스 검색
-2. **중요**: Bedrock은 일부 리전에서만 사용 가능
-   - 우측 상단 리전을 "미국 동부(버지니아 북부) us-east-1"로 변경
+2. **중요**: Bedrock은 이제 서울 리전(ap-northeast-2)에서도 지원됨
+   - 서울 리전(ap-northeast-2) 사용 권장
+   - 우측 상단 리전을 "아시아 태평양(서울) ap-northeast-2"로 확인
 3. "Get started" 클릭
 4. 좌측 메뉴에서 "Model access" 클릭
 
 ### Step 2: 모델 액세스 요청
 1. "Manage model access" 클릭
 2. 사용할 모델 선택:
-   - ✅ Amazon Titan Embeddings G1 - Text
+   - ✅ Amazon Titan Text Embeddings V2
    - ✅ Anthropic Claude 3 Sonnet
    - ✅ Anthropic Claude 3 Haiku
 3. "Request model access" 클릭
@@ -366,47 +500,291 @@ AWS Bedrock은 Knowledge Base 기능을 통해 S3에 저장된 문서들을 직�
 5. "Submit" 클릭
 6. 대부분의 모델은 즉시 승인되지만, 일부는 검토 시간 필요
 
-### Step 3: Bedrock Knowledge Base 생성 (S3 연결)
+### Step 3: OpenSearch Serverless 컬렉션 생성 (옵션 B - 고급 사용자용)
 
-#### 3-1: Knowledge Base용 S3 버킷 준비
+⚠️ **주의**: 대부분의 경우 Step 4-2의 "Quick create" 옵션을 사용하는 것이 더 간단합니다. 
+이 단계는 기존 OpenSearch Serverless 컬렉션을 사용하려는 고급 사용자를 위한 옵션입니다.
+
+#### 3-1: OpenSearch Serverless 콘솔에서 컬렉션 생성
+1. AWS Console에서 "OpenSearch Service" 검색
+2. 좌측 메뉴에서 "Serverless" → "Collections" 클릭
+3. "Create collection" 클릭
+4. 컬렉션 설정:
+   - **Name**: `finance-knowledge-collection`
+   - **Type**: `Vector search`
+   - **Description**: `Vector collection for Bedrock Knowledge Base`
+
+#### 3-2: 보안 정책 설정
+1. **Encryption policy**: `finance-knowledge-encryption`
+   ```json
+   {
+     "Rules": [
+       {
+         "ResourceType": "collection",
+         "Resource": ["collection/finance-knowledge-collection"]
+       }
+     ],
+     "AWSOwnedKey": true
+   }
+   ```
+
+2. **Network access policy**: `finance-knowledge-network`
+   ```json
+   [
+     {
+       "Rules": [
+         {
+           "ResourceType": "collection",
+           "Resource": ["collection/finance-knowledge-collection"]
+         },
+         {
+           "ResourceType": "dashboard",
+           "Resource": ["collection/finance-knowledge-collection"]
+         }
+       ],
+       "AllowFromPublic": true
+     }
+   ]
+   ```
+
+3. **Data access policy**: `finance-knowledge-access`
+   ```json
+   [
+     {
+       "Rules": [
+         {
+           "ResourceType": "collection",
+           "Resource": ["collection/finance-knowledge-collection"],
+           "Permission": [
+             "aoss:CreateCollectionItems",
+             "aoss:DeleteCollectionItems",
+             "aoss:UpdateCollectionItems",
+             "aoss:DescribeCollectionItems"
+           ]
+         },
+         {
+           "ResourceType": "index",
+           "Resource": ["index/finance-knowledge-collection/*"],
+           "Permission": [
+             "aoss:CreateIndex",
+             "aoss:DeleteIndex",
+             "aoss:UpdateIndex",
+             "aoss:DescribeIndex",
+             "aoss:ReadDocument",
+             "aoss:WriteDocument"
+           ]
+         }
+       ],
+       "Principal": [
+         "arn:aws:iam::[계정ID]:user/finance-app-user",
+         "arn:aws:iam::[계정ID]:role/AmazonBedrockExecutionRoleForKnowledgeBase_*"
+       ]
+     }
+   ]
+   ```
+
+### Step 4: Bedrock Knowledge Base 생성 (S3 연결)
+
+#### 4-1: Knowledge Base용 S3 버킷 준비
 ```bash
-# 문서 저장용 S3 버킷 생성 (이미 생성했다면 생략)
-aws s3 mb s3://finance-knowledge-base-bucket --region us-east-1
+# 문서 저장용 S3 버킷 생성 (도쿄 리전에 생성)
+aws s3 mb s3://finance-knowledge-base-bucket --region ap-northeast-1
 
 # 테스트 문서 업로드
 echo "This is a test document for knowledge base." > test_document.txt
 aws s3 cp test_document.txt s3://finance-knowledge-base-bucket/documents/
 ```
 
-#### 3-2: Knowledge Base 생성 (AWS Console)
-1. **Bedrock Console** → 좌측 메뉴 "Knowledge bases" 클릭
-2. **"Create knowledge base"** 클릭
-3. **Knowledge base 설정**:
-   - Name: `finance-knowledge-base`
-   - Description: `Financial documents knowledge base`
-   - Service role: `AmazonBedrockExecutionRoleForKnowledgeBase_[timestamp]` (자동 생성)
+#### 4-2: Knowledge Base 생성 (AWS Console)
 
-4. **Data source 설정**:
-   - Data source name: `finance-documents`
-   - S3 URI: `s3://finance-knowledge-base-bucket/documents/`
-   - Chunking strategy: `Default chunking` (기본 청킹)
+**실제 AWS Console 단계별 가이드**
 
-5. **Embeddings model 설정**:
-   - Embeddings model: `Titan Embeddings G1 - Text`
-   - Dimensions: `1536`
+1. **Bedrock Console 접속**
+   - AWS Console → "Bedrock" 서비스 검색
+   - 리전을 "아시아 태평양(도쿄) ap-northeast-1"로 변경
+   - 좌측 메뉴에서 "Knowledge bases" 클릭
+   - **"Create knowledge base"** 버튼 클릭
 
-6. **Vector database 설정**:
-   - Vector database: `Quick create a new vector store` (OpenSearch Serverless 자동 생성)
-   - Collection name: `finance-knowledge-collection`
+2. **Knowledge base details (1단계)**
+   - **Name**: `finance-knowledge-base`
+   - **Description**: `Financial documents knowledge base for investment analysis`
+   - **IAM service role**: 
+     - 🟢 **Create and use a new service role** (권장)
+     - Role name: `AmazonBedrockExecutionRoleForKnowledgeBase_finance` (자동 생성됨)
+   - **Tags** (선택사항): 필요시 추가
+   - **Next** 클릭
 
-7. **"Create knowledge base"** 클릭
+3. **Set up data source (2단계)**
+   - **Data source name**: `finance-documents-source`
+   - **Description**: `S3 bucket containing financial documents`
+   - **Source type**: `S3` (기본 선택됨)
+   - **Data source location**:
+     - **S3 URI**: `s3://finance-knowledge-base-bucket/documents/`
+     - **Browse S3** 버튼으로 버킷 선택 가능
+   
+   **Chunking and parsing configurations**
+   - **Chunking strategy**: `Default chunking` (권장)
+     - Max tokens: 300
+     - Overlap percentage: 20%
+   - **Parsing strategy**: `Foundation model parsing`
+   - **Next** 클릭
 
-#### 3-3: Knowledge Base 동기화
-1. Knowledge base 생성 완료 후 **"Sync"** 클릭
-2. S3 버킷의 문서들이 자동으로 벡터화되어 인덱싱됨
-3. 동기화 완료까지 5-10분 소요
+4. **Select embeddings model (3단계)**
+   - **Embeddings model**: `Titan Embeddings G1 - Text v1.2`
+   - **Dimensions**: `1536` (자동 설정됨)
+   - **Vector encryption**: `AWS owned key` (기본값)
+   - **Next** 클릭
 
-### Step 4: Bedrock + S3 연결 테스트
+5. **Configure vector store (4단계) - 중요한 선택**
+
+   **옵션 A: Quick create a new vector store (권장 - 초보자용)**
+   ```
+   ✅ Quick create a new vector store
+   
+   자동 생성되는 항목:
+   - Collection name: finance-knowledge-collection (사용자 지정 가능)
+   - OpenSearch Serverless 컬렉션
+   - 필요한 보안 정책 (Encryption, Network, Data access)
+   - 벡터 인덱스 및 매핑 설정
+   - IAM 역할 및 권한
+   
+   장점:
+   - 복잡한 설정 없이 한 번에 생성
+   - 모든 권한과 정책이 자동으로 설정됨
+   - 초보자에게 적합
+   - 설정 오류 가능성 최소화
+   ```
+
+   **옵션 B: Select an existing vector store (고급 사용자용)**
+   ```
+   ⚪ Select an existing vector store
+   
+   필요한 정보:
+   - Vector store type: Amazon OpenSearch Serverless
+   - Collection ARN: arn:aws:aoss:ap-northeast-1:[계정ID]:collection/[컬렉션ID]
+   - Vector index name: bedrock-knowledge-base-default-index
+   - Vector field name: bedrock-knowledge-base-default-vector
+   - Text field name: AMAZON_BEDROCK_TEXT_CHUNK
+   - Metadata field name: AMAZON_BEDROCK_METADATA
+   
+   ※ 사전에 OpenSearch Serverless 컬렉션과 인덱스 생성 필요
+   ```
+
+6. **Review and create (5단계)**
+   - 설정 내용 검토
+   - **Create knowledge base** 클릭
+   - 생성 완료까지 약 5-10분 소요
+
+7. **Knowledge Base ID 확인**
+   - 생성 완료 후 Knowledge base details에서 **Knowledge base ID** 복사
+   - 예: `ABC123DEF456`
+   - 이 ID는 나중에 설정에서 사용됩니다
+
+#### 4-4: 벡터 인덱스 생성 (옵션 B - 기존 컬렉션 사용 시)
+
+기존 OpenSearch Serverless 컬렉션을 사용하는 경우, 벡터 인덱스를 수동으로 생성해야 합니다:
+
+```python
+# create_vector_index.py
+import boto3
+import json
+from opensearchpy import OpenSearch, RequestsHttpConnection
+from requests_aws4auth import AWS4Auth
+
+def create_vector_index():
+    # AWS 자격 증명
+    credentials = boto3.Session().get_credentials()
+    awsauth = AWS4Auth(
+        credentials.access_key,
+        credentials.secret_key,
+        'ap-northeast-1',
+        'aoss',
+        session_token=credentials.token
+    )
+    
+    # OpenSearch Serverless 클라이언트
+    host = 'https://[컬렉션-엔드포인트].ap-northeast-1.aoss.amazonaws.com'
+    client = OpenSearch(
+        hosts=[host],
+        http_auth=awsauth,
+        use_ssl=True,
+        verify_certs=True,
+        connection_class=RequestsHttpConnection
+    )
+    
+    # 벡터 인덱스 매핑 정의
+    index_mapping = {
+        "settings": {
+            "index": {
+                "knn": True,
+                "knn.algo_param.ef_search": 512
+            }
+        },
+        "mappings": {
+            "properties": {
+                "bedrock-knowledge-base-default-vector": {
+                    "type": "knn_vector",
+                    "dimension": 1536,
+                    "method": {
+                        "name": "hnsw",
+                        "space_type": "cosinesimil",
+                        "engine": "faiss",
+                        "parameters": {
+                            "ef_construction": 512,
+                            "m": 16
+                        }
+                    }
+                },
+                "AMAZON_BEDROCK_TEXT_CHUNK": {
+                    "type": "text"
+                },
+                "AMAZON_BEDROCK_METADATA": {
+                    "type": "text"
+                }
+            }
+        }
+    }
+    
+    try:
+        # 인덱스 생성
+        response = client.indices.create(
+            index="bedrock-knowledge-base-default-index",
+            body=index_mapping
+        )
+        print(f"벡터 인덱스 생성 성공: {response}")
+        return True
+    except Exception as e:
+        print(f"벡터 인덱스 생성 실패: {e}")
+        return False
+
+if __name__ == "__main__":
+    create_vector_index()
+```
+
+#### 4-3: Data Source 동기화 (문서 인덱싱)
+
+**생성 완료 후 첫 동기화**
+1. Knowledge base 생성 완료 후 Knowledge base 상세 페이지로 이동
+2. **"Data sources"** 탭 클릭
+3. 생성된 data source 선택 (`finance-documents-source`)
+4. **"Sync"** 버튼 클릭
+5. 동기화 상태 확인:
+   - **In Progress**: 동기화 진행 중
+   - **Completed**: 동기화 완료
+   - **Failed**: 동기화 실패 (오류 메시지 확인)
+
+**동기화 과정**
+- S3 버킷의 문서들이 자동으로 청킹(chunking)됨
+- 각 청크가 Titan Embeddings 모델로 벡터화됨
+- 벡터들이 OpenSearch Serverless에 저장됨
+- 첫 동기화: 5-15분 소요 (문서 수에 따라 차이)
+
+**동기화 완료 확인**
+- Data source 상태가 **"Ready"**로 변경됨
+- **"Ingestion job history"**에서 성공 로그 확인 가능
+- 벡터 수와 처리된 문서 수 표시됨
+
+### Step 5: Bedrock Knowledge Base 연결 테스트
 ```python
 # test_bedrock_knowledge_base.py
 import boto3
@@ -416,7 +794,7 @@ def test_bedrock_knowledge_base():
     # Bedrock Agent Runtime 클라이언트 생성
     bedrock_agent = boto3.client(
         service_name='bedrock-agent-runtime',
-        region_name='us-east-1'
+        region_name='ap-northeast-1'
     )
     
     # Knowledge Base ID (Console에서 확인)
@@ -449,7 +827,7 @@ def test_bedrock_knowledge_base():
                 'type': 'KNOWLEDGE_BASE',
                 'knowledgeBaseConfiguration': {
                     'knowledgeBaseId': knowledge_base_id,
-                    'modelArn': 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-haiku-20240307-v1:0'
+                    'modelArn': 'arn:aws:bedrock:ap-northeast-1::foundation-model/anthropic.claude-3-haiku-20240307-v1:0'
                 }
             }
         )
@@ -471,7 +849,7 @@ def test_bedrock_direct_model():
     """직접 모델 호출 테스트"""
     bedrock = boto3.client(
         service_name='bedrock-runtime',
-        region_name='us-east-1'
+        region_name='ap-northeast-1'
     )
     
     try:
@@ -518,7 +896,7 @@ if __name__ == "__main__":
     test_bedrock_knowledge_base()
 ```
 
-### Step 5: S3 문서 업로드 및 동기화 자동화
+### Step 6: S3 문서 업로드 및 동기화 자동화
 ```python
 # s3_knowledge_base_manager.py
 import boto3
@@ -527,8 +905,8 @@ from datetime import datetime
 
 class S3KnowledgeBaseManager:
     def __init__(self, bucket_name, knowledge_base_id):
-        self.s3_client = boto3.client('s3', region_name='us-east-1')
-        self.bedrock_agent = boto3.client('bedrock-agent', region_name='us-east-1')
+        self.s3_client = boto3.client('s3', region_name='ap-northeast-1')
+        self.bedrock_agent = boto3.client('bedrock-agent', region_name='ap-northeast-1')
         self.bucket_name = bucket_name
         self.knowledge_base_id = knowledge_base_id
         self.documents_prefix = "documents/"
@@ -595,7 +973,146 @@ if __name__ == "__main__":
 
 ---
 
-## 7. 로컬 환경 연결 테스트
+## 7. 설정 파일 업데이트 주의사항
+
+### 중요: Config 파일 필드명 변경
+AWS SDK(aioboto3) 호환성을 위해 다음 필드명을 사용해야 합니다:
+- ~~`aws_region`~~ → `region_name` (모든 AWS 서비스에서 통일)
+
+### OpenSearch 설정 예시
+```json
+"searchConfig": {
+  "search_type": "opensearch",
+  "hosts": ["https://search-finance-opensearch-v2-xxxxx.ap-northeast-2.es.amazonaws.com"],
+  "username": "",  // IAM 인증 사용시 비워둠
+  "password": "",  // IAM 인증 사용시 비워둠
+  "aws_access_key_id": "YOUR_ACCESS_KEY",
+  "aws_secret_access_key": "YOUR_SECRET_KEY",
+  "region_name": "ap-northeast-2",  // aws_region이 아닌 region_name 사용!
+  "use_ssl": true,
+  "verify_certs": true,
+  "timeout": 30,
+  "default_index": "finance_search",
+  "max_retries": 3,
+  "retry_on_timeout": true
+}
+```
+
+### Bedrock 설정 예시
+```json
+"vectordbConfig": {
+  "vectordb_type": "bedrock",
+  "aws_access_key_id": "YOUR_ACCESS_KEY",
+  "aws_secret_access_key": "YOUR_SECRET_KEY",
+  "region_name": "ap-northeast-2",  // aws_region이 아닌 region_name 사용!
+  "embedding_model": "amazon.titan-embed-text-v2:0",  // 버전 번호 포함 필수!
+  "text_model": "anthropic.claude-3-haiku-20240307-v1:0",
+  "knowledge_base_id": "YOUR_KNOWLEDGE_BASE_ID",
+  "timeout": 60,
+  "default_top_k": 10,
+  "max_retries": 3
+}
+```
+
+---
+
+## 8. 서비스 초기화 로직과 AWS 연동
+
+### base_server main.py 초기화 순서
+base_server의 main.py에서는 다음 순서로 AWS 서비스들이 초기화됩니다:
+
+```python
+# 1. Storage Service (S3) 초기화
+if StorageService.init(app_config.storageConfig):
+    # S3 연결 테스트 자동 실행
+    test_result = await StorageService.list_files("test-bucket", "", max_keys=1)
+    
+# 2. Search Service (OpenSearch) 초기화
+if SearchService.init(app_config.searchConfig):
+    # OpenSearch 연결 테스트 자동 실행
+    test_result = await SearchService.index_exists("test-index")
+    
+# 3. VectorDB Service (Bedrock) 초기화
+if VectorDbService.init(app_config.vectordbConfig):
+    # Bedrock 연결 테스트 자동 실행
+    test_result = await VectorDbService.embed_text("test connection")
+```
+
+### S3 연동 세부 동작
+- **연결 관리**: aioboto3을 사용한 비동기 S3 클라이언트
+- **재시도 로직**: 최대 3회 재시도, 지수 백오프 적용
+- **메트릭 수집**: 업로드/다운로드 시간, 성공률, 바이트 수 추적
+- **에러 처리**: NoCredentialsError, EndpointConnectionError 등 세분화된 에러 처리
+
+### OpenSearch 연동 세부 동작
+- **AWS 인증**: IAM 역할 기반 AWS4Auth 사용
+- **SSL/TLS**: 기본적으로 SSL 연결 및 인증서 검증
+- **인덱스 관리**: 동적 인덱스 생성 및 매핑 설정
+- **검색 최적화**: 벡터 검색과 키워드 검색 하이브리드 지원
+
+### Bedrock 연동 세부 동작
+- **3개 클라이언트**: bedrock, bedrock-runtime, bedrock-agent-runtime
+- **지원 기능**:
+  - 텍스트 임베딩 (Titan Embeddings)
+  - 텍스트 생성 (Claude 3)
+  - Knowledge Base 검색 (S3 연동)
+- **리전 설정**: 도쿄 리전(ap-northeast-1) 사용 (서울 리전 미지원)
+- **에러 처리**: 모델별 세분화된 에러 처리 및 재시도
+- **메트릭**: 임베딩/생성/검색 시간, 처리량, 오류율 추적
+
+### 실제 서비스에서 활용 예시
+
+1. **Chat API에서 Bedrock 사용**:
+```python
+# /api/chat/message/send 엔드포인트
+# 1. 사용자 메시지를 Bedrock Knowledge Base에서 검색
+search_result = await VectorDbService.similarity_search(user_message)
+
+# 2. 검색 결과와 함께 Claude에게 질문
+response = await VectorDbService.generate_text(
+    f"Context: {search_result}\nQuestion: {user_message}"
+)
+```
+
+2. **Portfolio API에서 S3 사용**:
+```python
+# /api/portfolio/export 엔드포인트
+# 1. 포트폴리오 리포트 생성
+report_content = generate_portfolio_report(portfolio_data)
+
+# 2. S3에 업로드
+upload_result = await StorageService.upload_file_obj(
+    bucket="finance-reports",
+    key=f"portfolio/{user_id}/{timestamp}.pdf",
+    file_obj=report_content
+)
+
+# 3. Presigned URL 생성
+download_url = await StorageService.generate_presigned_url(
+    bucket="finance-reports",
+    key=upload_result["key"],
+    expiration=3600
+)
+```
+
+3. **Market API에서 OpenSearch 사용**:
+```python
+# /api/market/news/search 엔드포인트
+# 1. 뉴스 키워드 검색
+search_result = await SearchService.search(
+    index="financial_news",
+    query={
+        "multi_match": {
+            "query": search_keyword,
+            "fields": ["title", "content", "tags"]
+        }
+    }
+)
+```
+
+---
+
+## 8. 로컬 환경 연결 테스트
 
 ### 통합 테스트 스크립트
 ```python
@@ -652,7 +1169,7 @@ class AWSServiceTester:
         try:
             bedrock = boto3.client(
                 service_name='bedrock-runtime',
-                region_name='us-east-1'
+                region_name='ap-northeast-1'
             )
             
             response = bedrock.invoke_model(
@@ -672,22 +1189,25 @@ if __name__ == "__main__":
     # 각 서비스 테스트
     s3_ok = tester.test_s3()
     
-    # OpenSearch 엔드포인트를 여기에 입력
-    opensearch_endpoint = "finance-search-domain-xxxxx.ap-northeast-2.es.amazonaws.com"
+    # OpenSearch 엔드포인트를 여기에 입력 (서울 리전)
+    opensearch_endpoint = "finance-opensearch-v2-xxxxx.ap-northeast-2.es.amazonaws.com"
     opensearch_ok = tester.test_opensearch(opensearch_endpoint)
     
     bedrock_ok = tester.test_bedrock()
     
     # 결과 요약
     print("\n=== 테스트 결과 요약 ===")
-    print(f"S3: {'✓ 성공' if s3_ok else '✗ 실패'}")
-    print(f"OpenSearch: {'✓ 성공' if opensearch_ok else '✗ 실패'}")
-    print(f"Bedrock: {'✓ 성공' if bedrock_ok else '✗ 실패'}")
+    print(f"S3 (서울): {'✓ 성공' if s3_ok else '✗ 실패'}")
+    print(f"OpenSearch (서울): {'✓ 성공' if opensearch_ok else '✗ 실패'}")
+    print(f"Bedrock (도쿄): {'✓ 성공' if bedrock_ok else '✗ 실패'}")
+    print("\n리전 정보:")
+    print("- S3, OpenSearch: ap-northeast-2 (서울)")
+    print("- Bedrock: ap-northeast-1 (도쿄) - 서울 리전 미지원")
 ```
 
 ---
 
-## 8. Config 파일 업데이트
+## 9. Config 파일 업데이트
 
 ### base_web_server-config_local.json 수정
 ```json
@@ -704,7 +1224,7 @@ if __name__ == "__main__":
   },
   "searchConfig": {
     "search_type": "opensearch",
-    "hosts": ["https://finance-search-domain-xxxxx.ap-northeast-2.es.amazonaws.com"],
+    "hosts": ["https://finance-opensearch-v2-xxxxx.ap-northeast-2.es.amazonaws.com"],
     "username": "",
     "password": "",
     "aws_access_key_id": "YOUR_ACCESS_KEY_ID",
@@ -721,7 +1241,7 @@ if __name__ == "__main__":
     "vectordb_type": "bedrock",
     "aws_access_key_id": "YOUR_ACCESS_KEY_ID",
     "aws_secret_access_key": "YOUR_SECRET_ACCESS_KEY",
-    "aws_region": "us-east-1",
+    "aws_region": "ap-northeast-1",
     "embedding_model": "amazon.titan-embed-text-v1",
     "text_model": "anthropic.claude-3-haiku-20240307-v1:0",
     "knowledge_base_id": "",
@@ -738,9 +1258,11 @@ if __name__ == "__main__":
 AWS_ACCESS_KEY_ID=your_access_key_id
 AWS_SECRET_ACCESS_KEY=your_secret_access_key
 AWS_DEFAULT_REGION=ap-northeast-2
+BEDROCK_REGION=ap-northeast-1
 
 S3_BUCKET_NAME=finance-app-bucket-xxxxx
-OPENSEARCH_ENDPOINT=finance-search-domain-xxxxx.ap-northeast-2.es.amazonaws.com
+OPENSEARCH_ENDPOINT=finance-opensearch-v2-xxxxx.ap-northeast-2.es.amazonaws.com
+BEDROCK_KNOWLEDGE_BASE_ID=your_knowledge_base_id
 ```
 
 ---
@@ -769,7 +1291,7 @@ OPENSEARCH_ENDPOINT=finance-search-domain-xxxxx.ap-northeast-2.es.amazonaws.com
 
 4. **Bedrock Model Not Found**
    - 모델 액세스가 승인되었는지 확인
-   - 올바른 리전(us-east-1)을 사용하는지 확인
+   - 올바른 리전(ap-northeast-1)을 사용하는지 확인
    - 모델 ID가 정확한지 확인
 
 5. **S3 Bucket Already Exists**
@@ -792,7 +1314,8 @@ OPENSEARCH_ENDPOINT=finance-search-domain-xxxxx.ap-northeast-2.es.amazonaws.com
 1. 개발/테스트 후 리소스 정리
 2. OpenSearch는 시간당 과금이므로 사용하지 않을 때는 삭제
 3. S3 라이프사이클 정책 설정으로 오래된 객체 자동 삭제
-4. CloudWatch로 비용 알림 설정
+4. **리전 간 데이터 전송비**: S3(서울) ↔ Bedrock(도쿄) 간 데이터 전송 비용 발생
+5. CloudWatch로 비용 알림 설정
 
 ---
 

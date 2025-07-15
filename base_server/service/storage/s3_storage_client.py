@@ -5,6 +5,7 @@ import random
 from typing import Dict, Any, Optional, BinaryIO
 from dataclasses import dataclass
 from botocore.exceptions import ClientError, NoCredentialsError, EndpointConnectionError
+from botocore.config import Config
 from service.core.logger import Logger
 from .storage_client import IStorageClient
 
@@ -26,6 +27,10 @@ class S3StorageClient(IStorageClient):
     
     def __init__(self, config):
         self.config = config
+        # 디버깅을 위한 로깅
+        from service.core.logger import Logger
+        Logger.debug(f"S3Client config type: {type(config)}")
+        Logger.debug(f"S3Client config: {config}")
         self._session = None
         self._s3_client = None
         self.metrics = S3Metrics()
@@ -39,20 +44,32 @@ class S3StorageClient(IStorageClient):
         for attempt in range(self._max_retries):
             try:
                 if self._s3_client is None:
+                    # config가 dict인 경우 처리
+                    if isinstance(self.config, dict):
+                        aws_access_key_id = self.config.get('aws_access_key_id')
+                        aws_secret_access_key = self.config.get('aws_secret_access_key')
+                        aws_session_token = self.config.get('aws_session_token')
+                        region_name = self.config.get('region_name')
+                    else:
+                        aws_access_key_id = self.config.aws_access_key_id
+                        aws_secret_access_key = self.config.aws_secret_access_key
+                        aws_session_token = getattr(self.config, 'aws_session_token', None)
+                        region_name = self.config.region_name
+                        
                     self._session = aioboto3.Session(
-                        aws_access_key_id=self.config.aws_access_key_id,
-                        aws_secret_access_key=self.config.aws_secret_access_key,
-                        aws_session_token=getattr(self.config, 'aws_session_token', None),
-                        region_name=self.config.aws_region
+                        aws_access_key_id=aws_access_key_id,
+                        aws_secret_access_key=aws_secret_access_key,
+                        aws_session_token=aws_session_token,
+                        region_name=region_name
                     )
                     self._s3_client = self._session.client(
                         's3',
-                        config={
-                            'retries': {'max_attempts': 3, 'mode': 'adaptive'},
-                            'max_pool_connections': 50
-                        }
+                        config=Config(
+                            retries={'max_attempts': 3, 'mode': 'adaptive'},
+                            max_pool_connections=50
+                        )
                     )
-                    Logger.info(f"S3 client initialized for region: {self.config.aws_region}")
+                    Logger.info(f"S3 client initialized for region: {self.config.region_name}")
                 
                 return self._s3_client
                 
@@ -349,7 +366,7 @@ class S3StorageClient(IStorageClient):
                 "healthy": True,
                 "response_time": response_time,
                 "connection_healthy": self._connection_healthy,
-                "region": self.config.aws_region,
+                "region": self.config.region_name,
                 "metrics": self.get_metrics()
             }
             

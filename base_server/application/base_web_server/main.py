@@ -153,7 +153,7 @@ async def lifespan(app: FastAPI):
                 
                 # AWS 연결 테스트
                 try:
-                    test_result = await StorageService.list_files("test-bucket", "", max_keys=1)
+                    test_result = await StorageService.list_files("finance-app-bucket-1", "", max_keys=1)
                     if test_result["success"]:
                         Logger.info("Storage 서비스 AWS 연결 성공")
                     else:
@@ -173,7 +173,7 @@ async def lifespan(app: FastAPI):
                 
                 # OpenSearch 연결 테스트
                 try:
-                    test_result = await SearchService.index_exists("test-index")
+                    test_result = await SearchService.index_exists("finance_search_local")
                     if test_result["success"]:
                         Logger.info("Search 서비스 OpenSearch 연결 성공")
                     else:
@@ -424,13 +424,19 @@ async def lifespan(app: FastAPI):
                         MessagePriority.HIGH
                     )
                     
-                    # 짧은 대기 후 수신 확인
-                    await asyncio.sleep(1)
+                    # 실 비즈니스 서버 방식: 충분한 대기 시간과 재시도
+                    max_retries = 5
+                    retry_delay = 2.0  # 폴링 간격의 2배
                     
-                    if message_received["count"] > 0:
-                        Logger.info("✅ 메시지큐 발행/수신 동작 정상")
-                    else:
-                        Logger.warn("⚠️ 메시지 발행됐지만 수신 안됨 (개발 중이므로 정상)")
+                    for retry in range(max_retries):
+                        await asyncio.sleep(retry_delay)
+                        if message_received["count"] > 0:
+                            Logger.info("✅ 메시지큐 발행/수신 동작 정상")
+                            break
+                        elif retry == max_retries - 1:
+                            Logger.warn("⚠️ 메시지 발행됐지만 수신 안됨 (개발 중이므로 정상)")
+                        else:
+                            Logger.debug(f"메시지 수신 대기 중... ({retry+1}/{max_retries})")
                         
                 except Exception as msg_e:
                     Logger.info(f"⚠️ 메시지큐 테스트 실패: {msg_e} (개발 중이므로 정상)")
@@ -449,13 +455,19 @@ async def lifespan(app: FastAPI):
                         {"test": "startup_health_check", "timestamp": datetime.now().isoformat()}
                     )
                     
-                    # 짧은 대기 후 수신 확인
-                    await asyncio.sleep(1)
+                    # 실 비즈니스 서버 방식: 충분한 대기 시간과 재시도
+                    max_retries = 5
+                    retry_delay = 2.0  # 폴링 간격의 2배
                     
-                    if event_received["count"] > 0:
-                        Logger.info("✅ 이벤트큐 발행/수신 동작 정상")
-                    else:
-                        Logger.warn("⚠️ 이벤트 발행됐지만 수신 안됨 (개발 중이므로 정상)")
+                    for retry in range(max_retries):
+                        await asyncio.sleep(retry_delay)
+                        if event_received["count"] > 0:
+                            Logger.info("✅ 이벤트큐 발행/수신 동작 정상")
+                            break
+                        elif retry == max_retries - 1:
+                            Logger.warn("⚠️ 이벤트 발행됐지만 수신 안됨 (개발 중이므로 정상)")
+                        else:
+                            Logger.debug(f"이벤트 수신 대기 중... ({retry+1}/{max_retries})")
                         
                 except Exception as event_e:
                     Logger.info(f"⚠️ 이벤트큐 테스트 실패: {event_e} (개발 중이므로 정상)")

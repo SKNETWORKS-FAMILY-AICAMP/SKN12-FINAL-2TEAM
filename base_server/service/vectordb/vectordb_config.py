@@ -8,11 +8,11 @@ class VectorDbConfig(BaseModel):
     # AWS Bedrock 설정
     aws_access_key_id: Optional[str] = None
     aws_secret_access_key: Optional[str] = None
-    aws_region: str = "us-east-1"  # Bedrock은 특정 리전에서만 사용 가능
+    region_name: str = "ap-northeast-2"  # 서울 리전 사용
     aws_session_token: Optional[str] = None
     
     # 모델 설정
-    embedding_model: str = "amazon.titan-embed-text-v1"
+    embedding_model: str = "amazon.titan-embed-text-v2:0"  # Titan v2 (1024 dimensions)
     text_model: str = "anthropic.claude-3-sonnet-20240229-v1:0"
     
     # Knowledge Base 설정

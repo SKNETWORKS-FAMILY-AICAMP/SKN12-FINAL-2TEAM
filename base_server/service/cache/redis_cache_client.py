@@ -311,6 +311,8 @@ class RedisCacheClient(AbstractCacheClient):
 
     async def hash_mset(self, key: str, pairs: List[Tuple[str, str]], expiry_second: int = 0) -> None:
         k = self._get_key(key)
+        if not pairs:  # 빈 리스트 체크 추가
+            return
         mapping = {f: v for f, v in pairs}
         await self._client.hset(k, mapping=mapping)
 
@@ -470,11 +472,14 @@ class RedisCacheClient(AbstractCacheClient):
                 else:
                     string_mapping[str(field)] = str(value)
             
-            # aioredis hset 호출 - mapping 형태로 실행
+            # aioredis hset 호출 - 하나씩 설정하는 안전한 방식
             # mapping이 비어있지 않은 경우만 실행
             if string_mapping:
                 async def _hset_operation():
-                    return await self._client.hset(k, mapping=string_mapping)
+                    # Redis 호환성을 위해 하나씩 설정
+                    for field, value in string_mapping.items():
+                        await self._client.hset(k, field, value)
+                    return True
                 result = await self._execute_with_retry("set_hash_all", _hset_operation)
                 return result is not None
             return True

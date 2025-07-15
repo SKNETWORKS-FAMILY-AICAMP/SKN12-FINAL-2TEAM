@@ -7,6 +7,7 @@ from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
 from enum import Enum
 from botocore.exceptions import ClientError, NoCredentialsError, EndpointConnectionError
+from botocore.config import Config
 from service.core.logger import Logger
 from .vectordb_client import IVectorDbClient
 
@@ -37,6 +38,10 @@ class BedrockVectorDbClient(IVectorDbClient):
     
     def __init__(self, config):
         self.config = config
+        # 디버깅을 위한 로깅
+        from service.core.logger import Logger
+        Logger.debug(f"BedrockClient config type: {type(config)}")
+        Logger.debug(f"BedrockClient config: {config}")
         self._session = None
         self._bedrock_client = None
         self._bedrock_runtime_client = None
@@ -52,24 +57,35 @@ class BedrockVectorDbClient(IVectorDbClient):
         for attempt in range(self._max_retries):
             try:
                 if self._bedrock_client is None:
+                    # config가 dict인 경우 처리
+                    if isinstance(self.config, dict):
+                        aws_access_key_id = self.config.get('aws_access_key_id')
+                        aws_secret_access_key = self.config.get('aws_secret_access_key')
+                        aws_session_token = self.config.get('aws_session_token')
+                        region_name = self.config.get('region_name')
+                    else:
+                        aws_access_key_id = self.config.aws_access_key_id
+                        aws_secret_access_key = self.config.aws_secret_access_key
+                        aws_session_token = getattr(self.config, 'aws_session_token', None)
+                        region_name = self.config.region_name
+                        
                     self._session = aioboto3.Session(
-                        aws_access_key_id=self.config.aws_access_key_id,
-                        aws_secret_access_key=self.config.aws_secret_access_key,
-                        aws_session_token=getattr(self.config, 'aws_session_token', None),
-                        region_name=self.config.aws_region
+                        aws_access_key_id=aws_access_key_id,
+                        aws_secret_access_key=aws_secret_access_key,
+                        aws_session_token=aws_session_token,
+                        region_name=region_name
                     )
                     self._bedrock_client = self._session.client(
                         'bedrock',
-                        config={
-                            'retries': {'max_attempts': 3, 'mode': 'adaptive'},
-                            'max_pool_connections': 50
-                        }
+                        config=Config(
+                            retries={'max_attempts': 3, 'mode': 'adaptive'},
+                            max_pool_connections=50
+                        )
                     )
                     
-                    # 연결 테스트
-                    await self._test_connection()
+                    # 연결 테스트는 나중에 수행
                     self.connection_state = ConnectionState.HEALTHY
-                    Logger.info(f"Bedrock client connected to region: {self.config.aws_region}")
+                    Logger.info(f"Bedrock client connected to region: {self.config.region_name}")
                 
                 return self._bedrock_client
                 
@@ -104,15 +120,32 @@ class BedrockVectorDbClient(IVectorDbClient):
             try:
                 if self._bedrock_runtime_client is None:
                     if self._session is None:
-                        await self._get_bedrock_client()
+                        # session 직접 생성 (중복 호출 방지)
+                        if isinstance(self.config, dict):
+                            aws_access_key_id = self.config.get('aws_access_key_id')
+                            aws_secret_access_key = self.config.get('aws_secret_access_key')
+                            aws_session_token = self.config.get('aws_session_token')
+                            region_name = self.config.get('region_name')
+                        else:
+                            aws_access_key_id = self.config.aws_access_key_id
+                            aws_secret_access_key = self.config.aws_secret_access_key
+                            aws_session_token = getattr(self.config, 'aws_session_token', None)
+                            region_name = self.config.region_name
+                            
+                        self._session = aioboto3.Session(
+                            aws_access_key_id=aws_access_key_id,
+                            aws_secret_access_key=aws_secret_access_key,
+                            aws_session_token=aws_session_token,
+                            region_name=region_name
+                        )
                     self._bedrock_runtime_client = self._session.client(
                         'bedrock-runtime',
-                        config={
-                            'retries': {'max_attempts': 3, 'mode': 'adaptive'},
-                            'max_pool_connections': 50
-                        }
+                        config=Config(
+                            retries={'max_attempts': 3, 'mode': 'adaptive'},
+                            max_pool_connections=50
+                        )
                     )
-                    Logger.info(f"Bedrock Runtime client initialized for region: {self.config.aws_region}")
+                    Logger.info(f"Bedrock Runtime client initialized for region: {self.config.region_name}")
                 
                 return self._bedrock_runtime_client
                 
@@ -134,15 +167,32 @@ class BedrockVectorDbClient(IVectorDbClient):
             try:
                 if self._knowledge_base_client is None:
                     if self._session is None:
-                        await self._get_bedrock_client()
+                        # session 직접 생성 (중복 호출 방지)
+                        if isinstance(self.config, dict):
+                            aws_access_key_id = self.config.get('aws_access_key_id')
+                            aws_secret_access_key = self.config.get('aws_secret_access_key')
+                            aws_session_token = self.config.get('aws_session_token')
+                            region_name = self.config.get('region_name')
+                        else:
+                            aws_access_key_id = self.config.aws_access_key_id
+                            aws_secret_access_key = self.config.aws_secret_access_key
+                            aws_session_token = getattr(self.config, 'aws_session_token', None)
+                            region_name = self.config.region_name
+                            
+                        self._session = aioboto3.Session(
+                            aws_access_key_id=aws_access_key_id,
+                            aws_secret_access_key=aws_secret_access_key,
+                            aws_session_token=aws_session_token,
+                            region_name=region_name
+                        )
                     self._knowledge_base_client = self._session.client(
                         'bedrock-agent-runtime',
-                        config={
-                            'retries': {'max_attempts': 3, 'mode': 'adaptive'},
-                            'max_pool_connections': 50
-                        }
+                        config=Config(
+                            retries={'max_attempts': 3, 'mode': 'adaptive'},
+                            max_pool_connections=50
+                        )
                     )
-                    Logger.info(f"Bedrock Knowledge Base client initialized for region: {self.config.aws_region}")
+                    Logger.info(f"Bedrock Knowledge Base client initialized for region: {self.config.region_name}")
                 
                 return self._knowledge_base_client
                 
@@ -177,16 +227,30 @@ class BedrockVectorDbClient(IVectorDbClient):
                 
                 model_id = kwargs.get('model_id', self.config.embedding_model)
                 
-                body = {
-                    "inputText": text
-                }
+                # Titan v2 모델 요청 형식
+                if 'titan-embed-text-v2' in model_id:
+                    body = {
+                        "inputText": text,
+                        "dimensions": 1024,
+                        "normalize": True
+                    }
+                else:
+                    # Titan v1 모델 요청 형식
+                    body = {
+                        "inputText": text
+                    }
                 
                 async with client as bedrock:
-                    response = await bedrock.invoke_model(
-                        modelId=model_id,
-                        body=json.dumps(body),
-                        contentType='application/json',
-                        accept='application/json'
+                    # 타임아웃 설정
+                    timeout = kwargs.get('timeout', self.config.timeout)
+                    response = await asyncio.wait_for(
+                        bedrock.invoke_model(
+                            modelId=model_id,
+                            body=json.dumps(body),
+                            contentType='application/json',
+                            accept='application/json'
+                        ),
+                        timeout=timeout
                     )
                 
                 response_body = json.loads(await response['body'].read())
@@ -429,11 +493,16 @@ class BedrockVectorDbClient(IVectorDbClient):
                     }
                 
                 async with client as bedrock:
-                    response = await bedrock.invoke_model(
-                        modelId=model_id,
-                        body=json.dumps(body),
-                        contentType='application/json',
-                        accept='application/json'
+                    # 타임아웃 설정
+                    timeout = kwargs.get('timeout', self.config.timeout)
+                    response = await asyncio.wait_for(
+                        bedrock.invoke_model(
+                            modelId=model_id,
+                            body=json.dumps(body),
+                            contentType='application/json',
+                            accept='application/json'
+                        ),
+                        timeout=timeout
                     )
                 
                 response_body = json.loads(await response['body'].read())
@@ -566,7 +635,7 @@ class BedrockVectorDbClient(IVectorDbClient):
                 "healthy": True,
                 "response_time": response_time,
                 "connection_state": self.connection_state.value,
-                "region": self.config.aws_region,
+                "region": self.config.region_name,
                 "available_models": len(models_response.get('modelSummaries', [])),
                 "embedding_model": getattr(self.config, 'embedding_model', 'unknown'),
                 "text_model": getattr(self.config, 'text_model', 'unknown'),
