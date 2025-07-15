@@ -1,47 +1,61 @@
 from __future__ import annotations
 
 import time
-from typing import Dict, Any
+from typing import Dict, Any, List
 import numpy as np
 from numpy.typing import NDArray
 from pydantic import BaseModel, Field
 
+# --- 외부 툴 의존부 ---
 from AIChat.BaseFinanceTool import BaseFinanceTool
-from AIChat.BasicTools.MacroEconomicTool import MacroEconomicTool, MacroEconomicInput
-from AIChat.BasicTools.TechnicalAnalysisTool import TechnicalAnalysisTool, TechnicalAnalysisInput
+from AIChat.BasicTools.MacroEconomicTool import MacroEconomicTool
+from AIChat.BasicTools.TechnicalAnalysisTool import TechnicalAnalysisTool
 from AIChat.BasicTools.MarketDataTool import MarketDataTool, MarketDataInput
 
 __all__ = ["KalmanRegimeFilterTool"]
 
-# ------------------- 🔷 Input / Output Schema -------------------- #
+# ───────────────────────── Input / Output ───────────────────────── #
 
 class KalmanRegimeFilterInput(BaseModel):
-    tickers: list[str] = Field(..., description="분석할 ticker 리스트. 예: ['AAPL', 'MSFT']")
-    start_date: str = Field(..., description="조회 시작일 (yyyy-mm-dd). 예: '2024-01-01'")
-    end_date: str = Field(..., description="조회 종료일 (yyyy-mm-dd). 예: '2024-12-31(최대한 최근 날짜)'")
+    tickers: List[str] = Field(..., description="분석할 종목 리스트")
+    start_date: str    = Field(..., description="데이터 시작일(YYYY-MM-DD)")
+    end_date: str      = Field(..., description="데이터 종료일(YYYY-MM-DD)")
+
+    # ▶️ 실전 운용 파라미터
+    account_value: float = Field(100_000.0, description="계좌 가치(USD)")
+    risk_pct: float      = Field(0.02,      description="한 트레이드당 위험 비율(0~1)")
+    entry_price: float   = Field(100.0,     description="진입 가격(USD)")
+    max_leverage: float  = Field(10.0,      description="허용 최대 레버리지")
+
 
 class KalmanRegimeFilterActionOutput(BaseModel):
     summary: str
     recommendations: Dict[str, Any]
+    start_time: str
+    end_time: str
 
-# ------------------- 🔷 Kalman Filter Core (7차원 입력에 맞춰 수정) -------------------- #
+# ─────────────────────── Kalman Filter Core ─────────────────────── #
 
 class KalmanRegimeFilterCore:
+    """
+    상태벡터 x = [trend, macro drift, volatility]
+    F, H, Q, R는 예시 상수이며 EM 학습으로 교체 가능
+    """
     def __init__(self) -> None:
-        # x: 3차원 상태, z: 7차원 관측
-        self.F: NDArray = np.array([[0.9, 0.1, 0.0], [0.0, 0.8, 0.2], [0.1, 0.0, 0.9]])
-        # H: (7, 3)로 확장. 필요한 만큼 자유롭게 조정해도 됨
+        self.F: NDArray = np.array([[0.9, 0.1, 0.0],
+                                    [0.0, 0.8, 0.2],
+                                    [0.1, 0.0, 0.9]])
         self.H: NDArray = np.array([
-            [1.0, 0.0, 0.0],   # gdp
-            [0.0, 1.0, 0.0],   # cpi
-            [0.0, 0.0, 1.0],   # vix
-            [0.5, 0.5, 0.0],   # gdp+cpi
-            [0.0, 0.7, 0.3],   # cpi, vix
-            [0.2, 0.2, 0.6],   # rsi ("상태"와 rsi의 가상 연결)
-            [0.4, 0.3, 0.3],   # macd (동일)
+            [1,   0,   0],   # GDP
+            [0,   1,   0],   # CPI
+            [0,   0,   1],   # VIX
+            [0.5, 0.5, 0],   # GDP+CPI
+            [0,  0.7, 0.3],  # CPI&VIX
+            [0.2,0.2, 0.6],  # RSI
+            [0.4,0.3, 0.3]   # MACD
         ])
         self.Q: NDArray = np.eye(3) * 0.01
-        self.R: NDArray = np.eye(7) * 0.10   # 관측 잡음행렬 (7x7)
+        self.R: NDArray = np.eye(7) * 0.10
         self.x: NDArray = np.array([0.0, 1.0, 0.5])
         self.P: NDArray = np.eye(3)
 
@@ -53,132 +67,140 @@ class KalmanRegimeFilterCore:
         y = z - self.H @ self.x
         S = self.H @ self.P @ self.H.T + self.R
         K = self.P @ self.H.T @ np.linalg.inv(S)
-        self.x = self.x + K @ y
+        self.x += K @ y
         self.P = (np.eye(3) - K @ self.H) @ self.P
 
     def step(self, z: NDArray) -> None:
         self._predict()
         self._update(z)
 
-# ------------------- 🔷 BaseFinanceTool Wrapper -------------------- #
+# ─────────────────────────── Tool Wrapper ───────────────────────── #
 
 class KalmanRegimeFilterTool(BaseFinanceTool):
-    def __init__(self):
+    """
+    매 호출 시:
+      1) 거시·기술·가격 데이터 수집
+      2) 칼만 필터 업데이트
+      3) 트레이딩 신호·리스크·경고 생성
+    """
+    def __init__(self) -> None:
         super().__init__()
         self.filter = KalmanRegimeFilterCore()
-        self.max_latency = 1.0
+        self.max_latency = 5.0  # seconds
 
-    def find_value(data_list, series_id, default=0.0):
+    # ---------- 유틸 ----------
+    @staticmethod
+    def _find_value(data_list, series_id, default=0.0):
         for item in data_list:
-            if isinstance(item, dict):
-                if item.get('series_id') == series_id:
-                    return item.get('latest_value', default)
-            # 혹시 MacroEconomicSeries 객체일 경우
-            elif hasattr(item, 'series_id'):
-                if getattr(item, 'series_id', None) == series_id:
-                    return getattr(item, 'latest_value', default)
+            if isinstance(item, dict) and item.get('series_id') == series_id:
+                return item.get('latest_value', default)
+            if hasattr(item, 'series_id') and getattr(item, 'series_id') == series_id:
+                return getattr(item, 'latest_value', default)
         return default
-    
+
+    # ---------- main ----------
     def get_data(self, **kwargs) -> KalmanRegimeFilterActionOutput:
-        t0 = time.time()
-        input_data = KalmanRegimeFilterInput(**kwargs)
+        t_start = time.time()
+        start_ts = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(t_start))
+        inp = KalmanRegimeFilterInput(**kwargs)
 
-        # [1] 데이터 수집
-        macro_tool = MacroEconomicTool()
-        macro_output = macro_tool.get_data(series_ids=["GDP", "CPIAUCSL"])
-        gdp = KalmanRegimeFilterTool.find_value(macro_output.data, 'GDP', 0.0)
-        cpi = KalmanRegimeFilterTool.find_value(macro_output.data, 'CPIAUCSL', 0.0)
+        # 1️⃣ 데이터 수집
+        macro = MacroEconomicTool().get_data(series_ids=["GDP", "CPIAUCSL"])
+        gdp = self._find_value(macro.data, 'GDP')
+        cpi = self._find_value(macro.data, 'CPIAUCSL')
 
-        ta_tool = TechnicalAnalysisTool()
-        ta_output = ta_tool.get_data(tickers=input_data.tickers)  # 리스트 결과
-        ta_result = ta_output.results[0]  # 첫 번째 종목만 사용
-        rsi, macd = ta_result.rsi, ta_result.macd
+        ta_res = TechnicalAnalysisTool().get_data(tickers=inp.tickers).results[0]
+        rsi, macd = ta_res.rsi, ta_res.macd
 
-        market_data_tool = MarketDataTool()
-        market_input = MarketDataInput(tickers=input_data.tickers, start_date=input_data.start_date, end_date=input_data.end_date)
-        market_data = market_data_tool.get_data(market_input)
-        vix = market_data.get('vix', 0.0)
-        print(f"Data collected: GDP={gdp}, CPI={cpi}, VIX={vix}, RSI={rsi}, MACD={macd}")
-        # [2] 관측 벡터 (rsi, macd 추가)
-        obs_vector = np.array([
-            gdp, cpi, vix,
-            0.5 * (gdp + cpi),
-            0.7 * cpi + 0.3 * vix,
-            rsi,  # 추가
-            macd  # 추가
-        ])
+        md_inp = MarketDataInput(tickers=inp.tickers,
+                                 start_date=inp.start_date,
+                                 end_date=inp.end_date)
+        vix = MarketDataTool().get_data(**md_inp.dict()).vix
 
-        # [3] 칼만 필터 스텝
-        self.filter.step(obs_vector)
-        elapsed = time.time() - t0
-        print(f"KalmanRegimeFilterTool: Elapsed time: {elapsed:.3f} seconds")
-        if elapsed > self.max_latency:
-            raise RuntimeError(f"Latency {elapsed:.3f}s > {self.max_latency}s")
+        z = np.array([gdp, cpi, vix,
+                      0.5*(gdp+cpi),
+                      0.7*cpi + 0.3*vix,
+                      rsi, macd])
 
-        # [4] 결과
-        state = self.filter.x.copy()
-        cov = self.filter.P.copy()
+        # 2️⃣ 칼만 필터
+        self.filter.step(z)
+        state, cov = self.filter.x.copy(), self.filter.P.copy()
+        raw_vol = float(state[2])
 
-        # ------------------- 🔥 Action Recommendation Engine -------------------- #
+        # 3️⃣ 액션 엔진
+        rec: Dict[str, Any] = {}
+        warnings: List[str] = []
 
-        recommendations = {}
+        # ── 변동성 클리핑
+        vol = float(np.clip(raw_vol, 0.05, 2.0))
+        if vol != raw_vol:
+            warnings.append(f"Volatility clipped: {raw_vol:.4f}→{vol:.2f}")
 
-        # 1. Trading Signal
-        if state[0] > 0.5:
+        # ── 신호
+        trend = state[0]
+        if trend > 0.5:
             signal = "Long"
-        elif state[0] < -0.5:
+        elif trend < -0.5:
             signal = "Short"
         else:
             signal = "Neutral"
-        recommendations["trading_signal"] = signal
+        rec["trading_signal"] = signal
 
-        # 2. Position Sizing
-        base_size = 1000
-        position_size = base_size * abs(state[0]) / (state[1] + 1e-6)
-        recommendations["position_size"] = round(position_size, 2)
-        print(f"Position Size: {position_size:.2f}")
-        # 3. Leverage
-        target_volatility = 0.5
-        leverage = target_volatility / (state[1] + 1e-6)
-        recommendations["leverage"] = round(leverage, 2)
+        # ── 포지션 크기
+        risk_dollar = inp.account_value * inp.risk_pct
+        pos_size = risk_dollar / (vol * inp.entry_price)
+        rec["position_size"] = round(pos_size, 4)
 
-        # 4. Strategy Selection
-        if state[0] > 0.5:
-            strategy = "Trend Following"
-        elif state[0] < -0.5:
-            strategy = "Mean Reversion"
-        else:
-            strategy = "Market Neutral"
-        recommendations["strategy"] = strategy
+        # ── 레버리지
+        target_vol = 0.5
+        leverage = min(target_vol / vol, inp.max_leverage)
+        if leverage >= inp.max_leverage:
+            warnings.append(f"Leverage capped at {inp.max_leverage}×")
+        rec["leverage"] = round(leverage, 2)
 
-        # 5. Risk Management
-        entry_price = 100  # 예시
-        stop_multiplier = 2
-        tp_multiplier = 3
-        stop_loss = entry_price - state[1] * stop_multiplier
-        take_profit = entry_price + state[1] * tp_multiplier
-        recommendations["stop_loss"] = round(stop_loss, 2)
-        recommendations["take_profit"] = round(take_profit, 2)
+        # ── 전략
+        rec["strategy"] = ("Trend Following" if signal == "Long"
+                           else "Mean Reversion" if signal == "Short"
+                           else "Market Neutral")
 
-        # 6. Risk Score
-        risk_score = np.trace(cov)
-        recommendations["risk_score"] = round(risk_score, 3)
+        # ── SL / TP (ATR 기반)
+        atr = vol * inp.entry_price
+        stop_loss   = inp.entry_price - atr * 1.5
+        take_profit = inp.entry_price + atr * 3.0
+        rec["stop_loss"]   = round(stop_loss, 2)
+        rec["take_profit"] = round(take_profit, 2)
 
-        # 7. Latency Monitoring
-        recommendations["latency"] = round(elapsed, 3)
+        # ── 리스크 지표
+        rec["risk_score"] = round(float(np.trace(cov)), 3)
+        rec["market_stability"] = "Stable" if vol < 0.3 else "Unstable"
 
-        # 8. Market Stability
-        if state[1] < 0.2 and state[2] > 0.5:
-            stability = "Stable"
-        else:
-            stability = "Unstable"
-        recommendations["market_stability"] = stability
+        # ── 지연
+        latency = time.time() - t_start
+        if latency > self.max_latency:
+            warnings.append(f"Latency {latency:.3f}s > limit {self.max_latency}s")
+        rec["latency"] = round(latency, 3)
 
-        summary = (
-            f"📈 [Kalman Regime Filter Action Engine]\n"
-            f"Signal: {signal}, Strategy: {strategy}, PosSize: {position_size:.2f}, Leverage: {leverage:.2f}\n"
-            f"StopLoss: {stop_loss:.2f}, TakeProfit: {take_profit:.2f}, RiskScore: {risk_score:.3f}, Stability: {stability}\n"
-            f"Elapsed: {elapsed:.3f} sec"
+        if warnings:
+            rec["warnings"] = warnings
+
+        # 4️⃣ 요약 문자열
+        lines = [
+            "📈 [Kalman Regime Filter Action Engine]",
+            f"Signal:{signal}  Strategy:{rec['strategy']}",
+            f"PosSize:{pos_size:.4f}  Lev:{leverage:.2f}",
+            f"SL:{stop_loss:.2f}  TP:{take_profit:.2f}",
+            f"Risk:{rec['risk_score']:.3f}  Market:{rec['market_stability']}",
+            f"Elapsed:{latency:.3f}s"
+        ]
+        if warnings:
+            lines.append("⚠️ " + " | ".join(warnings))
+        summary = "\n".join(lines)
+
+        end_ts = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
+
+        return KalmanRegimeFilterActionOutput(
+            summary=summary,
+            recommendations=rec,
+            start_time=start_ts,
+            end_time=end_ts
         )
-
-        return KalmanRegimeFilterActionOutput(summary=summary, recommendations=recommendations)
