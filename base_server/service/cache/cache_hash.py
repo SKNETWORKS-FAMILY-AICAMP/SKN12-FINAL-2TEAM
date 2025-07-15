@@ -14,6 +14,8 @@ class CacheHash:
         """
         value_pairs: List of (field, value)
         """
+        if not value_pairs:  # 빈 리스트 체크 추가
+            return
         async with CacheService.get_client() as client:
             redis_key = f"{self._hash_key}:{user_guid}"
             await client.hash_mset(redis_key, value_pairs)

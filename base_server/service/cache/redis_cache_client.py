@@ -1,4 +1,4 @@
-import aioredis
+import redis.asyncio as redis
 import asyncio
 import time
 import random
@@ -42,7 +42,7 @@ class RedisCacheClient(AbstractCacheClient):
         self._password = password
         self.session_expire_time = session_expire_time
         self.cache_key = f"{app_id}:{env}"
-        self._client: Optional[aioredis.Redis] = None
+        self._client: Optional[redis.Redis] = None
         self.metrics = CacheMetrics()
         self.connection_state = ConnectionState.HEALTHY
         self._last_health_check = 0
@@ -63,15 +63,12 @@ class RedisCacheClient(AbstractCacheClient):
         for attempt in range(self._max_retries):
             try:
                 if self._client is None:
-                    # Redis URL 구성
-                    if self._password:
-                        url = f"redis://:{self._password}@{self._host}:{self._port}/{self._db}"
-                    else:
-                        url = f"redis://{self._host}:{self._port}/{self._db}"
-                    
-                    # 향상된 연결 설정
-                    self._client = await aioredis.from_url(
-                        url, 
+                    # Redis 연결 설정
+                    self._client = redis.Redis(
+                        host=self._host,
+                        port=self._port,
+                        db=self._db,
+                        password=self._password if self._password else None,
                         decode_responses=True,
                         socket_connect_timeout=self._connection_timeout,
                         socket_timeout=self._socket_timeout,
@@ -88,7 +85,7 @@ class RedisCacheClient(AbstractCacheClient):
                 
                 return
                 
-            except aioredis.ConnectionError as e:
+            except redis.ConnectionError as e:
                 self.metrics.connection_failures += 1
                 self.connection_state = ConnectionState.FAILED
                 Logger.warn(f"Redis connection failed (attempt {attempt + 1}/{self._max_retries}): {e}")
@@ -105,7 +102,7 @@ class RedisCacheClient(AbstractCacheClient):
         
         # 모든 재시도 실패
         self.connection_state = ConnectionState.FAILED
-        raise aioredis.ConnectionError(f"Failed to connect to Redis after {self._max_retries} attempts")
+        raise redis.ConnectionError(f"Failed to connect to Redis after {self._max_retries} attempts")
 
     def _get_key(self, key: str) -> str:
         return f"{self.cache_key}:{key}"
@@ -126,7 +123,7 @@ class RedisCacheClient(AbstractCacheClient):
                 if self._client is None:
                     await self.connect()
                     if self._client is None:
-                        raise aioredis.ConnectionError("Failed to establish Redis connection")
+                        raise redis.ConnectionError("Failed to establish Redis connection")
                 
                 result = await operation_func(*args, **kwargs)
                 
@@ -143,7 +140,7 @@ class RedisCacheClient(AbstractCacheClient):
                 
                 return result
                 
-            except aioredis.ConnectionError as e:
+            except redis.ConnectionError as e:
                 self.metrics.connection_failures += 1
                 self.connection_state = ConnectionState.FAILED
                 Logger.warn(f"Redis {operation_name} connection error (attempt {attempt + 1}/{self._max_retries}): {e}")
@@ -155,7 +152,7 @@ class RedisCacheClient(AbstractCacheClient):
                 self.metrics.timeout_errors += 1
                 Logger.warn(f"Redis {operation_name} timeout error (attempt {attempt + 1}/{self._max_retries}): {e}")
                 
-            except aioredis.RedisError as e:
+            except redis.RedisError as e:
                 self.metrics.redis_errors += 1
                 Logger.warn(f"Redis {operation_name} error (attempt {attempt + 1}/{self._max_retries}): {e}")
                 
@@ -171,7 +168,7 @@ class RedisCacheClient(AbstractCacheClient):
         self.metrics.failed_operations += 1
         total_time = time.time() - start_time
         Logger.error(f"Redis {operation_name} failed after {self._max_retries} attempts (total: {total_time:.3f}s)")
-        raise aioredis.ConnectionError(f"Redis {operation_name} failed after {self._max_retries} attempts")
+        raise redis.ConnectionError(f"Redis {operation_name} failed after {self._max_retries} attempts")
     
     async def close(self):
         if self._client:
@@ -311,6 +308,8 @@ class RedisCacheClient(AbstractCacheClient):
 
     async def hash_mset(self, key: str, pairs: List[Tuple[str, str]], expiry_second: int = 0) -> None:
         k = self._get_key(key)
+        if not pairs:  # 빈 리스트 체크 추가
+            return
         mapping = {f: v for f, v in pairs}
         await self._client.hset(k, mapping=mapping)
 
@@ -392,7 +391,7 @@ class RedisCacheClient(AbstractCacheClient):
                 "metrics": self.get_metrics()
             }
             
-        except aioredis.ConnectionError as e:
+        except redis.ConnectionError as e:
             self.connection_state = ConnectionState.FAILED
             return {
                 "healthy": False,
@@ -470,11 +469,14 @@ class RedisCacheClient(AbstractCacheClient):
                 else:
                     string_mapping[str(field)] = str(value)
             
-            # aioredis hset 호출 - mapping 형태로 실행
+            # aioredis hset 호출 - 하나씩 설정하는 안전한 방식
             # mapping이 비어있지 않은 경우만 실행
             if string_mapping:
                 async def _hset_operation():
-                    return await self._client.hset(k, mapping=string_mapping)
+                    # Redis 호환성을 위해 하나씩 설정
+                    for field, value in string_mapping.items():
+                        await self._client.hset(k, field, value)
+                    return True
                 result = await self._execute_with_retry("set_hash_all", _hset_operation)
                 return result is not None
             return True

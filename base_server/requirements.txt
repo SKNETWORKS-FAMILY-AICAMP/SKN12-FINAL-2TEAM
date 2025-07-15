@@ -1,31 +1,43 @@
-# Web Framework
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-python-multipart==0.0.6
-slowapi==0.1.9
+# base_server 필수 패키지 목록
+# Python 3.11 환경에서 테스트된 버전들
 
-# Database
-aiomysql==0.2.0
-aioredis==2.0.1
+# AWS 패키지 (호환성 확인된 버전)
+boto3==1.34.106
+botocore==1.34.106
+s3transfer==0.10.0
+aiobotocore==2.13.0
+aioboto3==13.0.0
 
-# AWS Services
-boto3==1.34.0
-aioboto3==12.3.0
-
-# Search Engine
-opensearch-py==2.4.0
-
-# HTTP Client
-aiohttp==3.9.1
-
-# Data Validation
+# 웹 프레임워크
+fastapi==0.104.0
+uvicorn==0.24.0
 pydantic==2.5.0
 
-# Security
-bcrypt==4.1.2
-cryptography
+# 데이터베이스
+sqlalchemy==2.0.25
+aiomysql==0.2.0
+pymysql==1.1.0
 
-# Utilities
-python-jose[cryptography]
-passlib[bcrypt]
-email-validator
+# OpenSearch 및 검색
+opensearch-py==2.6.0
+requests-aws4auth==1.3.0
+
+# 캐시 (Redis)
+redis==5.0.0
+
+# 유틸리티
+python-dotenv==1.0.0
+
+# 보안 (암호화)
+bcrypt==4.1.2
+
+# HTTP 클라이언트
+aiohttp>=3.9.2
+requests==2.31.0
+
+# 스케줄링
+APScheduler==3.10.4
+
+# 개발/테스트 도구 (선택사항)
+# pytest==7.4.3
+# pytest-asyncio==0.21.1

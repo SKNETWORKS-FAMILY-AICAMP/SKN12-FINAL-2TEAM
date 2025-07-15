@@ -6,14 +6,14 @@ class SearchConfig(BaseModel):
     search_type: str = "opensearch"  # opensearch, elasticsearch 등
     
     # OpenSearch/Elasticsearch 설정
-    hosts: List[str] = ["localhost:9200"]
+    hosts: List[str] = []
     username: Optional[str] = None
     password: Optional[str] = None
     
     # AWS OpenSearch 설정
     aws_access_key_id: Optional[str] = None
     aws_secret_access_key: Optional[str] = None
-    aws_region: str = "ap-northeast-2"
+    region_name: str = "ap-northeast-2"
     aws_session_token: Optional[str] = None
     
     # SSL/TLS 설정
