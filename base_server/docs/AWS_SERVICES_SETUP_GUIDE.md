@@ -1,16 +1,18 @@
 # AWS 서비스 설정 가이드 (S3, OpenSearch, Bedrock)
 
-이 문서는 Windows Conda 환경에서 AWS S3, OpenSearch, Bedrock 서비스를 처음부터 설정하는 방법을 단계별로 안내합니다.
+이 문서는 Windows Conda 환경에서 Python 3.11을 사용하여 AWS S3, OpenSearch, Bedrock 서비스를 처음부터 설정하는 방법을 단계별로 안내합니다.
 
 ## 목차
 1. [사전 준비사항](#1-사전-준비사항)
 2. [AWS 계정 및 IAM 설정](#2-aws-계정-및-iam-설정)
-3. [Windows Conda 환경 설정](#3-windows-conda-환경-설정)
+3. [Windows Conda 환경 설정 (Python 3.11)](#3-windows-conda-환경-설정-python-311)
 4. [AWS S3 설정](#4-aws-s3-설정)
 5. [AWS OpenSearch 설정](#5-aws-opensearch-설정)
 6. [AWS Bedrock 설정](#6-aws-bedrock-설정)
 7. [로컬 환경 연결 테스트](#7-로컬-환경-연결-테스트)
 8. [Config 파일 업데이트](#8-config-파일-업데이트)
+9. [base_server 실행 가이드](#9-base_server-실행-가이드)
+10. [서비스 구조 및 아키텍처](#10-서비스-구조-및-아키텍처)
 
 ---
 
@@ -63,7 +65,7 @@
 
 ---
 
-## 3. Windows Conda 환경 설정
+## 3. Windows Conda 환경 설정 (Python 3.11)
 
 ### Step 1: Anaconda Prompt 실행
 ```powershell
@@ -73,16 +75,18 @@
 
 ### Step 2: 가상환경 생성 및 활성화
 ```powershell
-# Python 3.9 가상환경 생성
-conda create -n aws-finance python=3.9 -y
+# Python 3.11 가상환경 생성
+conda create -n aws-finance python=3.11 -y
 
 # 가상환경 활성화
 conda activate aws-finance
 ```
 
-### Step 3: 필요한 패키지 설치
+### Step 3: 필요한 패키지 설치 (Python 3.11 호환)
 
-⚠️ **의존성 충돌 방지를 위해 순서대로 설치하세요**
+⚠️ **패키지 버전 호환성 중요!**
+- boto3, botocore, awscli 간 버전 호환성 필수
+- 의존성 충돌 방지를 위해 검증된 버전 조합 사용
 
 ```powershell
 # 1. 기존 AWS 관련 패키지 완전 제거 (만약 설치되어 있다면)
@@ -91,21 +95,29 @@ pip uninstall boto3 botocore awscli aiobotocore aioboto3 s3transfer -y
 # 2. pip 업그레이드 (Windows Conda 환경)
 python -m pip install --upgrade pip
 
-# 3. AWS 패키지를 호환되는 버전으로 설치
-pip install boto3==1.34.0 botocore==1.34.0 s3transfer==0.9.0
+# 3. AWS 기본 패키지 설치 (호환성 확인된 버전)
+pip install boto3==1.34.106 botocore==1.34.106 s3transfer==0.10.0
 
-# 4. AWS CLI 설치 (boto3와 호환되는 버전)
-pip install awscli==1.32.0
+# 4. 비동기 AWS 패키지 설치 (botocore 버전 호환성 확인)
+# aiobotocore 2.13.0은 botocore<1.34.107 을 요구하므로 버전 조정
+pip install aiobotocore==2.13.0 aioboto3==13.0.0
 
-# 5. 비동기 AWS 패키지 설치 (필요한 경우)
-pip install aiobotocore==2.11.2 aioboto3==12.3.0
+# 5. AWS CLI 설치 (선택사항 - 강력 추천: 설치하지 마세요!)
+# AWS CLI는 botocore 버전을 강제로 업그레이드하여 충돌을 일으킵니다
+# 필요한 경우 별도 가상환경에서 사용하세요
+# pip install awscli
 
 # 6. OpenSearch 클라이언트 설치
-pip install opensearch-py==2.4.0
+pip install opensearch-py==2.6.0
 pip install requests-aws4auth==1.3.0
 
 # 7. 기타 필요한 패키지
 pip install python-dotenv
+pip install pydantic==2.5.0
+pip install fastapi==0.104.0
+pip install uvicorn==0.24.0
+pip install sqlalchemy==2.0.25
+pip install asyncio-mysql==0.2.0
 ```
 
 ### Step 3-1: 의존성 충돌 해결 (이미 설치했다면)
@@ -122,36 +134,57 @@ pip cache purge
 # pip 업그레이드 (Windows Conda 환경)
 python -m pip install --upgrade pip
 
-# 호환되는 버전으로 재설치
-pip install boto3==1.34.0 botocore==1.34.0 s3transfer==0.9.0 awscli==1.32.0
-pip install aiobotocore==2.11.2 aioboto3==12.3.0
+# Python 3.11 호환 버전으로 재설치 (호환성 확인된 버전)
+pip install boto3==1.34.106 botocore==1.34.106 s3transfer==0.10.0
+pip install aiobotocore==2.13.0 aioboto3==13.0.0
+# AWS CLI는 botocore 버전을 강제 업그레이드하므로 설치하지 마세요!
+# 필요한 경우 별도 가상환경에서 사용
 ```
 
 ### Step 3-2: 설치 확인
 ```powershell
 # 설치된 패키지 버전 확인
-pip show boto3 botocore awscli
+pip show boto3 botocore aiobotocore
 
-# 의존성 충돌 확인
+# 의존성 충돌 확인 (중요!)
 pip check
+
+# 성공적인 설치 확인 예시:
+# boto3: 1.34.106
+# botocore: 1.34.106  
+# aiobotocore: 2.13.0 (botocore<1.34.107 요구)
+# 의존성 충돌 없음: "No broken requirements found."
+
+# AWS CLI 설치 여부 확인 (설치되어 있으면 안됨!)
+pip show awscli
+# 결과: "Package(s) not found: awscli" (정상)
 ```
 
-### Step 4: AWS CLI 설정
-```powershell
-# AWS 자격 증명 설정
-aws configure
+### Step 4: AWS 자격 증명 설정
 
-# 입력 프롬프트가 나타나면 다음 정보 입력:
-# AWS Access Key ID [None]: [IAM에서 받은 Access Key ID]
-# AWS Secret Access Key [None]: [IAM에서 받은 Secret Access Key]
-# Default region name [None]: ap-northeast-2
-# Default output format [None]: json
+#### ✅ Config 파일에 AWS 키 설정 (권장)
+base_server는 config 파일에서 AWS 키를 직접 설정할 수 있습니다:
+
+```json
+// base_web_server-config.json
+{
+  "storageConfig": {
+    "aws_access_key_id": "YOUR_ACCESS_KEY_ID",
+    "aws_secret_access_key": "YOUR_SECRET_ACCESS_KEY"
+  },
+  "vectordbConfig": {
+    "aws_access_key_id": "YOUR_ACCESS_KEY_ID", 
+    "aws_secret_access_key": "YOUR_SECRET_ACCESS_KEY"
+  }
+}
 ```
+
+**IAM에서 받은 실제 키를 config 파일에 입력하세요.**
 
 ### Step 5: 설정 확인
 ```powershell
-# 설정 확인
-aws sts get-caller-identity
+# Python 코드로 확인 (권장)
+python -c "import boto3; print(boto3.client('sts').get_caller_identity())"
 
 # 정상적으로 설정되면 계정 정보가 출력됨
 # {
@@ -429,7 +462,7 @@ if __name__ == "__main__":
 
 ---
 
-## ⚡ **base_server 실행 가이드**
+## 9. base_server 실행 가이드
 
 ### 🚀 **main.py 실행 방법**
 
@@ -1016,53 +1049,123 @@ AWS SDK(aioboto3) 호환성을 위해 다음 필드명을 사용해야 합니다
 
 ---
 
-## 8. 서비스 초기화 로직과 AWS 연동
+## 10. 서비스 구조 및 아키텍처
 
-### base_server main.py 초기화 순서
-base_server의 main.py에서는 다음 순서로 AWS 서비스들이 초기화됩니다:
+### base_server 전체 아키텍처 개요
+base_server는 **마이크로서비스 아키텍처**를 기반으로 하는 금융 서비스 플랫폼입니다.
+
+#### 주요 아키텍처 특징:
+1. **111 패턴**: 모든 서비스가 정적 클래스 싱글톤으로 구현
+2. **비동기 처리**: async/await 기반 비동기 프로그래밍
+3. **샤딩 지원**: 데이터베이스 분산 처리
+4. **모니터링**: 모든 서비스에 Health Check와 메트릭 수집
+5. **재시도 로직**: 장애 대응을 위한 자동 재시도
+6. **트랜잭션 일관성**: 아웃박스 패턴을 통한 분산 트랜잭션
+
+### main.py 서비스 초기화 순서
+base_server의 main.py에서는 다음 순서로 모든 서비스가 초기화됩니다:
 
 ```python
-# 1. Storage Service (S3) 초기화
+# 1. Database Service (MySQL 샤딩)
+database_service = DatabaseService(app_config.databaseConfig)
+await database_service.init_service()
+
+# 2. Cache Service (Redis)
+cache_client_pool = RedisCacheClientPool(...)
+CacheService.Init(cache_client_pool)
+
+# 3. External Service (외부 API)
+await ExternalService.init(app_config.externalConfig)
+
+# 4. Storage Service (S3)
 if StorageService.init(app_config.storageConfig):
     # S3 연결 테스트 자동 실행
     test_result = await StorageService.list_files("test-bucket", "", max_keys=1)
-    
-# 2. Search Service (OpenSearch) 초기화
+
+# 5. Search Service (OpenSearch)
 if SearchService.init(app_config.searchConfig):
     # OpenSearch 연결 테스트 자동 실행
     test_result = await SearchService.index_exists("test-index")
-    
-# 3. VectorDB Service (Bedrock) 초기화
+
+# 6. VectorDB Service (Bedrock)
 if VectorDbService.init(app_config.vectordbConfig):
     # Bedrock 연결 테스트 자동 실행
     test_result = await VectorDbService.embed_text("test connection")
+
+# 7. Lock Service (Redis 분산 락)
+if LockService.init(cache_service):
+    # 분산락 테스트 자동 실행
+    test_token = await LockService.acquire("test_lock", ttl=5, timeout=3)
+
+# 8. Scheduler Service (작업 스케줄러)
+if SchedulerService.init(lock_service):
+    # 스케줄러 시작
+    await SchedulerService.start()
+
+# 9. Queue Service (메시지/이벤트 큐)
+if await initialize_queue_service(database_service):
+    # 큐 시스템 초기화 완료
+    pass
+
+# 10. Template Service (비즈니스 로직)
+TemplateService.init(app_config)
 ```
 
-### S3 연동 세부 동작
-- **연결 관리**: aioboto3을 사용한 비동기 S3 클라이언트
-- **재시도 로직**: 최대 3회 재시도, 지수 백오프 적용
-- **메트릭 수집**: 업로드/다운로드 시간, 성공률, 바이트 수 추적
-- **에러 처리**: NoCredentialsError, EndpointConnectionError 등 세분화된 에러 처리
+### 10개 핵심 서비스 상세 설명
 
-### OpenSearch 연동 세부 동작
-- **AWS 인증**: IAM 역할 기반 AWS4Auth 사용
-- **SSL/TLS**: 기본적으로 SSL 연결 및 인증서 검증
-- **인덱스 관리**: 동적 인덱스 생성 및 매핑 설정
-- **검색 최적화**: 벡터 검색과 키워드 검색 하이브리드 지원
+#### 1. DatabaseService (MySQL 샤딩)
+- **기능**: 글로벌 DB와 샤드 DB 관리
+- **특징**: 자동 라우팅, 트랜잭션 지원, 아웃박스 패턴 지원
+- **연결**: SQLAlchemy 비동기 엔진 사용
 
-### Bedrock 연동 세부 동작
-- **3개 클라이언트**: bedrock, bedrock-runtime, bedrock-agent-runtime
-- **지원 기능**:
-  - 텍스트 임베딩 (Titan Embeddings)
-  - 텍스트 생성 (Claude 3)
-  - Knowledge Base 검색 (S3 연동)
-- **리전 설정**: 도쿄 리전(ap-northeast-1) 사용 (서울 리전 미지원)
-- **에러 처리**: 모델별 세분화된 에러 처리 및 재시도
-- **메트릭**: 임베딩/생성/검색 시간, 처리량, 오류율 추적
+#### 2. CacheService (Redis)
+- **기능**: 세션 관리, 캐시 추상화, 메트릭 수집
+- **특징**: UserHash, Ranking 객체 제공
+- **연결**: Redis 클라이언트 풀 사용
 
-### 실제 서비스에서 활용 예시
+#### 3. ExternalService (외부 API)
+- **기능**: 주식, 뉴스, 환율 API 통합 관리
+- **특징**: 재시도 로직, 메트릭 수집, Health Check
+- **연결**: aiohttp 클라이언트 사용
 
-1. **Chat API에서 Bedrock 사용**:
+#### 4. StorageService (S3)
+- **기능**: 파일 업로드/다운로드, 사전 서명된 URL
+- **특징**: 배치 처리, 멀티파트 업로드
+- **연결**: aioboto3을 사용한 비동기 S3 클라이언트
+
+#### 5. SearchService (OpenSearch)
+- **기능**: 전문검색, 인덱스 관리, 벌크 처리
+- **특징**: 벡터 검색과 키워드 검색 하이브리드 지원
+- **연결**: AWS4Auth 또는 마스터 사용자 인증
+
+#### 6. VectorDbService (Bedrock)
+- **기능**: 텍스트 임베딩, 유사도 검색, RAG 생성
+- **특징**: Knowledge Base 연동, 3개 클라이언트 사용
+- **연결**: boto3 bedrock 클라이언트
+
+#### 7. LockService (Redis 분산 락)
+- **기능**: 분산 락 관리, 데드락 방지
+- **특징**: 락 자동 연장, 컨텍스트 매니저 지원
+- **연결**: CacheService 기반
+
+#### 8. SchedulerService (작업 스케줄러)
+- **기능**: 주기적 작업 실행, 분산 실행
+- **특징**: 크론 표현식 지원, 작업 상태 관리
+- **연결**: LockService 연동
+
+#### 9. QueueService (메시지/이벤트 큐)
+- **기능**: 비동기 메시지 처리, 이벤트 발행/구독
+- **특징**: 아웃박스 패턴, 지연 처리
+- **연결**: DatabaseService, CacheService 연동
+
+#### 10. TemplateService (비즈니스 로직)
+- **기능**: 10개 도메인 템플릿 관리
+- **특징**: Account, Portfolio, Chat, Market 등 통합
+- **연결**: 모든 서비스 통합 사용
+
+### 실제 서비스 활용 예시
+
+#### 1. Chat API에서 Bedrock 사용
 ```python
 # /api/chat/message/send 엔드포인트
 # 1. 사용자 메시지를 Bedrock Knowledge Base에서 검색
@@ -1074,7 +1177,7 @@ response = await VectorDbService.generate_text(
 )
 ```
 
-2. **Portfolio API에서 S3 사용**:
+#### 2. Portfolio API에서 S3 사용
 ```python
 # /api/portfolio/export 엔드포인트
 # 1. 포트폴리오 리포트 생성
@@ -1095,7 +1198,7 @@ download_url = await StorageService.generate_presigned_url(
 )
 ```
 
-3. **Market API에서 OpenSearch 사용**:
+#### 3. Market API에서 OpenSearch 사용
 ```python
 # /api/market/news/search 엔드포인트
 # 1. 뉴스 키워드 검색
@@ -1108,6 +1211,23 @@ search_result = await SearchService.search(
         }
     }
 )
+```
+
+### Config 파일 구조
+모든 서비스는 JSON 설정 파일을 통해 구성됩니다:
+
+```json
+{
+  "templateConfig": { "appId": "base_server", "env": "production" },
+  "databaseConfig": { "type": "mysql", "host": "localhost", "port": 3306 },
+  "cacheConfig": { "type": "redis", "host": "localhost", "port": 6379 },
+  "externalConfig": { "timeout": 30, "apis": {...} },
+  "storageConfig": { "storage_type": "s3", "region_name": "ap-northeast-2" },
+  "searchConfig": { "search_type": "opensearch", "region_name": "ap-northeast-2" },
+  "vectordbConfig": { "vectordb_type": "bedrock", "region_name": "ap-northeast-2" },
+  "llmConfig": { "default_provider": "openai" },
+  "netConfig": { "host": "0.0.0.0", "port": 8000 }
+}
 ```
 
 ---
@@ -1271,18 +1391,24 @@ BEDROCK_KNOWLEDGE_BASE_ID=your_knowledge_base_id
 
 ### 일반적인 문제와 해결 방법
 
-1. **패키지 의존성 충돌 (boto3, botocore, awscli)**
+1. **패키지 의존성 충돌 (boto3, botocore, awscli, aiobotocore) - Python 3.11**
    ```powershell
-   # 증상: ImportError, 버전 호환성 오류
+   # 증상 1: awscli 1.34.0 requires botocore==1.35.0, but you have botocore 1.34.106
+   # 증상 2: aiobotocore 2.13.0 requires botocore<1.34.107, but you have botocore 1.34.118
+   
    # 해결: 호환되는 버전으로 재설치
-   pip uninstall boto3 botocore awscli aiobotocore s3transfer -y
-   pip install boto3==1.34.0 botocore==1.34.0 s3transfer==0.9.0 awscli==1.32.0
+   pip uninstall boto3 botocore awscli aiobotocore aioboto3 s3transfer -y
+   pip install boto3==1.34.106 botocore==1.34.106 s3transfer==0.10.0
+   pip install aiobotocore==2.13.0 aioboto3==13.0.0
+   
+   # AWS CLI는 설치하지 마세요! (botocore 버전을 강제로 업그레이드함)
+   # 필요한 경우 별도 가상환경에서 사용
    ```
 
 2. **Access Denied 오류**
    - IAM 사용자 권한 확인
    - 정책이 올바르게 연결되었는지 확인
-   - AWS CLI 자격 증명이 올바른지 확인
+   - AWS 자격 증명이 올바른지 확인 (환경변수 또는 AWS CLI)
 
 3. **Connection Timeout**
    - 보안 그룹 설정 확인 (OpenSearch)

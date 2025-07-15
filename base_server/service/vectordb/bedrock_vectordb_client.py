@@ -2,11 +2,11 @@ import asyncio
 import json
 import time
 import random
-import aioboto3
+import boto3
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
 from enum import Enum
-from botocore.exceptions import ClientError, NoCredentialsError, EndpointConnectionError
+from botocore.exceptions import ClientError, NoCredentialsError, EndpointConnectionError, ConnectionError
 from botocore.config import Config
 from service.core.logger import Logger
 from .vectordb_client import IVectorDbClient
@@ -42,7 +42,6 @@ class BedrockVectorDbClient(IVectorDbClient):
         from service.core.logger import Logger
         Logger.debug(f"BedrockClient config type: {type(config)}")
         Logger.debug(f"BedrockClient config: {config}")
-        self._session = None
         self._bedrock_client = None
         self._bedrock_runtime_client = None
         self._knowledge_base_client = None
@@ -79,7 +78,11 @@ class BedrockVectorDbClient(IVectorDbClient):
                         'bedrock',
                         config=Config(
                             retries={'max_attempts': 3, 'mode': 'adaptive'},
-                            max_pool_connections=50
+                            max_pool_connections=50,
+                            region_name=region_name,
+                            connect_timeout=60,
+                            read_timeout=60,
+                            tcp_keepalive=True
                         )
                     )
                     
@@ -114,99 +117,95 @@ class BedrockVectorDbClient(IVectorDbClient):
         self.connection_state = ConnectionState.FAILED
         raise ConnectionError(f"Failed to connect to Bedrock after {self._max_retries} attempts")
     
-    async def _get_bedrock_runtime_client(self):
-        """Bedrock Runtime 클라이언트 가져오기 (Enhanced connection management)"""
-        for attempt in range(self._max_retries):
-            try:
-                if self._bedrock_runtime_client is None:
-                    if self._session is None:
-                        # session 직접 생성 (중복 호출 방지)
-                        if isinstance(self.config, dict):
-                            aws_access_key_id = self.config.get('aws_access_key_id')
-                            aws_secret_access_key = self.config.get('aws_secret_access_key')
-                            aws_session_token = self.config.get('aws_session_token')
-                            region_name = self.config.get('region_name')
-                        else:
-                            aws_access_key_id = self.config.aws_access_key_id
-                            aws_secret_access_key = self.config.aws_secret_access_key
-                            aws_session_token = getattr(self.config, 'aws_session_token', None)
-                            region_name = self.config.region_name
-                            
-                        self._session = aioboto3.Session(
-                            aws_access_key_id=aws_access_key_id,
-                            aws_secret_access_key=aws_secret_access_key,
-                            aws_session_token=aws_session_token,
-                            region_name=region_name
-                        )
-                    self._bedrock_runtime_client = self._session.client(
-                        'bedrock-runtime',
-                        config=Config(
-                            retries={'max_attempts': 3, 'mode': 'adaptive'},
-                            max_pool_connections=50
-                        )
-                    )
-                    Logger.info(f"Bedrock Runtime client initialized for region: {self.config.region_name}")
-                
+    def _get_bedrock_runtime_client(self):
+        """Bedrock Runtime 클라이언트 가져오기 - 동기 boto3 사용"""
+        try:
+            # 기존 클라이언트가 있으면 재사용
+            if self._bedrock_runtime_client is not None:
                 return self._bedrock_runtime_client
-                
-            except Exception as e:
-                self.metrics.connection_failures += 1
-                Logger.warn(f"Bedrock Runtime client initialization failed (attempt {attempt + 1}/{self._max_retries}): {e}")
-                
-                if attempt < self._max_retries - 1:
-                    delay = self._retry_delay_base * (2 ** attempt) + random.uniform(0, 1)
-                    await asyncio.sleep(delay)
-                else:
-                    raise
-        
-        raise ConnectionError(f"Failed to initialize Bedrock Runtime client after {self._max_retries} attempts")
+            
+            # region_name을 먼저 추출
+            if isinstance(self.config, dict):
+                aws_access_key_id = self.config.get('aws_access_key_id')
+                aws_secret_access_key = self.config.get('aws_secret_access_key')
+                aws_session_token = self.config.get('aws_session_token')
+                region_name = self.config.get('region_name')
+            else:
+                aws_access_key_id = self.config.aws_access_key_id
+                aws_secret_access_key = self.config.aws_secret_access_key
+                aws_session_token = getattr(self.config, 'aws_session_token', None)
+                region_name = self.config.region_name
+            
+            Logger.info(f"Bedrock session created for region: {region_name}")
+            
+            # 동기 boto3 클라이언트 생성
+            self._bedrock_runtime_client = boto3.client(
+                'bedrock-runtime',
+                aws_access_key_id=aws_access_key_id,
+                aws_secret_access_key=aws_secret_access_key,
+                aws_session_token=aws_session_token,
+                region_name=region_name,
+                config=Config(
+                    retries={'max_attempts': 3, 'mode': 'adaptive'},
+                    max_pool_connections=50,
+                    connect_timeout=60,
+                    read_timeout=60
+                )
+            )
+            
+            return self._bedrock_runtime_client
+        except Exception as e:
+            self.metrics.connection_failures += 1
+            Logger.error(f"Bedrock Runtime client initialization failed: {e}")
+            raise
     
     async def _get_knowledge_base_client(self):
-        """Bedrock Knowledge Base 클라이언트 가져오기 (Enhanced connection management)"""
-        for attempt in range(self._max_retries):
-            try:
-                if self._knowledge_base_client is None:
-                    if self._session is None:
-                        # session 직접 생성 (중복 호출 방지)
-                        if isinstance(self.config, dict):
-                            aws_access_key_id = self.config.get('aws_access_key_id')
-                            aws_secret_access_key = self.config.get('aws_secret_access_key')
-                            aws_session_token = self.config.get('aws_session_token')
-                            region_name = self.config.get('region_name')
-                        else:
-                            aws_access_key_id = self.config.aws_access_key_id
-                            aws_secret_access_key = self.config.aws_secret_access_key
-                            aws_session_token = getattr(self.config, 'aws_session_token', None)
-                            region_name = self.config.region_name
-                            
-                        self._session = aioboto3.Session(
-                            aws_access_key_id=aws_access_key_id,
-                            aws_secret_access_key=aws_secret_access_key,
-                            aws_session_token=aws_session_token,
-                            region_name=region_name
-                        )
-                    self._knowledge_base_client = self._session.client(
-                        'bedrock-agent-runtime',
-                        config=Config(
-                            retries={'max_attempts': 3, 'mode': 'adaptive'},
-                            max_pool_connections=50
-                        )
-                    )
-                    Logger.info(f"Bedrock Knowledge Base client initialized for region: {self.config.region_name}")
-                
+        """Bedrock Knowledge Base 클라이언트 가져오기 - 연결 안정성 개선"""
+        try:
+            # 기존 클라이언트가 있으면 재사용
+            if self._knowledge_base_client is not None:
                 return self._knowledge_base_client
-                
-            except Exception as e:
-                self.metrics.connection_failures += 1
-                Logger.warn(f"Bedrock Knowledge Base client initialization failed (attempt {attempt + 1}/{self._max_retries}): {e}")
-                
-                if attempt < self._max_retries - 1:
-                    delay = self._retry_delay_base * (2 ** attempt) + random.uniform(0, 1)
-                    await asyncio.sleep(delay)
-                else:
-                    raise
-        
-        raise ConnectionError(f"Failed to initialize Bedrock Knowledge Base client after {self._max_retries} attempts")
+            
+            # region_name을 먼저 추출
+            if isinstance(self.config, dict):
+                aws_access_key_id = self.config.get('aws_access_key_id')
+                aws_secret_access_key = self.config.get('aws_secret_access_key')
+                aws_session_token = self.config.get('aws_session_token')
+                region_name = self.config.get('region_name')
+            else:
+                aws_access_key_id = self.config.aws_access_key_id
+                aws_secret_access_key = self.config.aws_secret_access_key
+                aws_session_token = getattr(self.config, 'aws_session_token', None)
+                region_name = self.config.region_name
+            
+            # session이 없으면 생성
+            if self._session is None:
+                self._session = aioboto3.Session(
+                    aws_access_key_id=aws_access_key_id,
+                    aws_secret_access_key=aws_secret_access_key,
+                    aws_session_token=aws_session_token,
+                    region_name=region_name
+                )
+                Logger.info(f"Bedrock session created for region: {region_name}")
+            
+            # 연결 안정성을 위한 향상된 설정
+            self._knowledge_base_client = self._session.client(
+                'bedrock-agent-runtime',
+                config=Config(
+                    retries={'max_attempts': 3, 'mode': 'adaptive'},
+                    max_pool_connections=50,
+                    region_name=region_name,
+                    connect_timeout=60,
+                    read_timeout=60,
+                    tcp_keepalive=True
+                )
+            )
+            
+            return self._knowledge_base_client
+        except Exception as e:
+            self.metrics.connection_failures += 1
+            Logger.error(f"Bedrock Knowledge Base client initialization failed: {e}")
+            raise
     
     async def _test_connection(self):
         """Bedrock 연결 테스트"""
@@ -216,14 +215,15 @@ class BedrockVectorDbClient(IVectorDbClient):
             Logger.debug("Bedrock connection test successful")
     
     async def embed_text(self, text: str, **kwargs) -> Dict[str, Any]:
-        """텍스트를 벡터로 임베딩 (향상된 에러 처리 및 메트릭)"""
+        """텍스트를 벡터로 임베딩 (동기 boto3 사용)"""
         start_time = time.time()
         self.metrics.total_operations += 1
         self.metrics.last_operation_time = start_time
         
         for attempt in range(self._max_retries):
             try:
-                client = await self._get_bedrock_runtime_client()
+                # 동기 클라이언트 가져오기
+                bedrock_client = self._get_bedrock_runtime_client()
                 
                 model_id = kwargs.get('model_id', self.config.embedding_model)
                 
@@ -240,20 +240,19 @@ class BedrockVectorDbClient(IVectorDbClient):
                         "inputText": text
                     }
                 
-                async with client as bedrock:
-                    # 타임아웃 설정
-                    timeout = kwargs.get('timeout', self.config.timeout)
-                    response = await asyncio.wait_for(
-                        bedrock.invoke_model(
-                            modelId=model_id,
-                            body=json.dumps(body),
-                            contentType='application/json',
-                            accept='application/json'
-                        ),
-                        timeout=timeout
+                # 동기 방식으로 호출 (별도 스레드에서)
+                loop = asyncio.get_event_loop()
+                response = await loop.run_in_executor(
+                    None,
+                    lambda: bedrock_client.invoke_model(
+                        modelId=model_id,
+                        body=json.dumps(body),
+                        contentType='application/json',
+                        accept='application/json'
                     )
+                )
                 
-                response_body = json.loads(await response['body'].read())
+                response_body = json.loads(response['body'].read())
                 embedding = response_body.get('embedding', [])
                 
                 # 성공 메트릭
@@ -285,8 +284,24 @@ class BedrockVectorDbClient(IVectorDbClient):
                 self.metrics.connection_failures += 1
                 Logger.warn(f"Bedrock connection error (attempt {attempt + 1}/{self._max_retries}): {e}")
                 
+            except asyncio.TimeoutError as e:
+                self.metrics.timeout_errors += 1
+                Logger.warn(f"Bedrock embed_text timeout (attempt {attempt + 1}/{self._max_retries}): {e}")
+                # 타임아웃 시 클라이언트 재생성 시도
+                self._bedrock_runtime_client = None
+                
+            except ConnectionError as e:
+                self.metrics.connection_failures += 1
+                Logger.warn(f"Bedrock embed_text connection error (attempt {attempt + 1}/{self._max_retries}): {e}")
+                # 연결 오류 시 클라이언트 재생성
+                self._bedrock_runtime_client = None
+                
             except Exception as e:
                 Logger.warn(f"Bedrock embed_text error (attempt {attempt + 1}/{self._max_retries}): {e}")
+                # 연결 오류 시 클라이언트 재생성 시도
+                if "closed" in str(e).lower() or "connection" in str(e).lower():
+                    self._bedrock_runtime_client = None
+                    self.metrics.connection_failures += 1
             
             # 재시도 대기
             if attempt < self._max_retries - 1:
@@ -340,10 +355,10 @@ class BedrockVectorDbClient(IVectorDbClient):
                 if not self.config.knowledge_base_id:
                     raise ValueError("Knowledge Base ID not configured")
                 
-                client = await self._get_knowledge_base_client()
+                kb_client = await self._get_knowledge_base_client()
                 
-                async with client as kb_client:
-                    response = await kb_client.retrieve(
+                async with kb_client as client:
+                    response = await client.retrieve(
                         knowledgeBaseId=self.config.knowledge_base_id,
                         retrievalQuery={
                             'text': query
@@ -393,8 +408,18 @@ class BedrockVectorDbClient(IVectorDbClient):
                 self.metrics.connection_failures += 1
                 Logger.warn(f"Bedrock connection error (attempt {attempt + 1}/{self._max_retries}): {e}")
                 
+            except asyncio.TimeoutError as e:
+                self.metrics.timeout_errors += 1
+                Logger.warn(f"Bedrock similarity_search timeout (attempt {attempt + 1}/{self._max_retries}): {e}")
+                # 타임아웃 시 클라이언트 재생성 시도
+                self._knowledge_base_client = None
+                
             except Exception as e:
                 Logger.warn(f"Bedrock similarity_search error (attempt {attempt + 1}/{self._max_retries}): {e}")
+                # 연결 오류 시 클라이언트 재생성 시도
+                if "closed" in str(e).lower() or "connection" in str(e).lower():
+                    self._knowledge_base_client = None
+                    self.metrics.connection_failures += 1
             
             # 재시도 대기
             if attempt < self._max_retries - 1:
@@ -463,7 +488,7 @@ class BedrockVectorDbClient(IVectorDbClient):
         
         for attempt in range(self._max_retries):
             try:
-                client = await self._get_bedrock_runtime_client()
+                bedrock_client = await self._get_bedrock_runtime_client()
                 
                 model_id = kwargs.get('model_id', self.config.text_model)
                 max_tokens = kwargs.get('max_tokens', 1000)
@@ -492,9 +517,10 @@ class BedrockVectorDbClient(IVectorDbClient):
                         }
                     }
                 
-                async with client as bedrock:
-                    # 타임아웃 설정
-                    timeout = kwargs.get('timeout', self.config.timeout)
+                # 타임아웃 설정
+                timeout = kwargs.get('timeout', self.config.timeout)
+                
+                async with bedrock_client as bedrock:
                     response = await asyncio.wait_for(
                         bedrock.invoke_model(
                             modelId=model_id,
@@ -543,8 +569,18 @@ class BedrockVectorDbClient(IVectorDbClient):
                 self.metrics.connection_failures += 1
                 Logger.warn(f"Bedrock connection error (attempt {attempt + 1}/{self._max_retries}): {e}")
                 
+            except asyncio.TimeoutError as e:
+                self.metrics.timeout_errors += 1
+                Logger.warn(f"Bedrock generate_text timeout (attempt {attempt + 1}/{self._max_retries}): {e}")
+                # 타임아웃 시 클라이언트 재생성 시도
+                self._bedrock_runtime_client = None
+                
             except Exception as e:
                 Logger.warn(f"Bedrock generate_text error (attempt {attempt + 1}/{self._max_retries}): {e}")
+                # 연결 오류 시 클라이언트 재생성 시도
+                if "closed" in str(e).lower() or "connection" in str(e).lower():
+                    self._bedrock_runtime_client = None
+                    self.metrics.connection_failures += 1
             
             # 재시도 대기
             if attempt < self._max_retries - 1:
@@ -565,7 +601,7 @@ class BedrockVectorDbClient(IVectorDbClient):
     async def chat_completion(self, messages: List[Dict[str, Any]], **kwargs) -> Dict[str, Any]:
         """채팅 완성"""
         try:
-            client = await self._get_bedrock_runtime_client()
+            bedrock_client = await self._get_bedrock_runtime_client()
             
             model_id = kwargs.get('model_id', self.config.text_model)
             max_tokens = kwargs.get('max_tokens', 1000)
@@ -584,7 +620,7 @@ class BedrockVectorDbClient(IVectorDbClient):
                 prompt = "\n".join([f"{msg['role']}: {msg['content']}" for msg in messages])
                 return await self.generate_text(prompt, **kwargs)
             
-            async with client as bedrock:
+            async with bedrock_client as bedrock:
                 response = await bedrock.invoke_model(
                     modelId=model_id,
                     body=json.dumps(body),
@@ -715,37 +751,15 @@ class BedrockVectorDbClient(IVectorDbClient):
         Logger.info("Bedrock VectorDB client metrics reset")
     
     async def close(self):
-        """클라이언트 종료"""
+        """클라이언트 종료 - 동기 boto3 클라이언트는 명시적 close 불필요"""
         if self._bedrock_client:
-            try:
-                async with self._bedrock_client as client:
-                    pass
-            except:
-                pass
             self._bedrock_client = None
         
         if self._bedrock_runtime_client:
-            try:
-                async with self._bedrock_runtime_client as client:
-                    pass
-            except:
-                pass
             self._bedrock_runtime_client = None
         
         if self._knowledge_base_client:
-            try:
-                async with self._knowledge_base_client as client:
-                    pass
-            except:
-                pass
             self._knowledge_base_client = None
-        
-        if self._session:
-            try:
-                await self._session.close()
-            except:
-                pass
-            self._session = None
         
         Logger.info("Bedrock VectorDB client closed")
         
