@@ -199,8 +199,10 @@ class AccountTemplateImpl(AccountTemplate):
                     account_db_key = signup_result.get('account_db_key', 0)
                     
                     response.errorCode = 0
-                    response.message = "회원가입 성공"
-                    Logger.info(f"Signup successful: account_db_key={account_db_key}")
+                    response.user_id = str(account_db_key)
+                    response.message = "회원가입 완료"
+                    response.next_step = "LOGIN"  # 개발용: 이메일 인증 건너뛰고 바로 로그인 가능
+                    Logger.info(f"Signup successful: account_db_key={account_db_key} (ready for login)")
                     
                 elif signup_status == 'DUPLICATE_ID':
                     response.errorCode = 3001  # 중복 ID

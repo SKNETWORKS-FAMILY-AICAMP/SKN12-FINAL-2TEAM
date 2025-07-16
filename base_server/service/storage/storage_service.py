@@ -50,7 +50,10 @@ class StorageService:
     @classmethod
     async def upload_file(cls, bucket: str, key: str, file_path: str, **kwargs) -> Dict[str, Any]:
         """파일 업로드"""
-        client = cls.get_client()
+        if hasattr(cls._client_pool, 'get_client'):
+            client = await cls._client_pool.get_client()
+        else:
+            client = cls.get_client()
         return await client.upload_file(bucket, key, file_path, **kwargs)
     
     @classmethod
@@ -82,7 +85,10 @@ class StorageService:
     @classmethod
     async def list_files(cls, bucket: str, prefix: str = "", **kwargs) -> Dict[str, Any]:
         """파일 목록 조회"""
-        client = cls.get_client()
+        if hasattr(cls._client_pool, 'get_client'):
+            client = await cls._client_pool.get_client()
+        else:
+            client = cls.get_client()
         return await client.list_files(bucket, prefix, **kwargs)
     
     @classmethod

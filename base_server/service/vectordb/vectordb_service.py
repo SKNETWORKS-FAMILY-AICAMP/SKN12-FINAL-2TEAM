@@ -50,7 +50,10 @@ class VectorDbService:
     @classmethod
     async def embed_text(cls, text: str, **kwargs) -> Dict[str, Any]:
         """텍스트를 벡터로 임베딩"""
-        client = cls.get_client()
+        if hasattr(cls._client_pool, 'get_client'):
+            client = await cls._client_pool.get_client()
+        else:
+            client = cls.get_client()
         return await client.embed_text(text, **kwargs)
     
     @classmethod

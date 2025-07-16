@@ -5,6 +5,10 @@
 from typing import Optional
 from service.db.database_service import DatabaseService
 from service.cache.cache_service import CacheService
+from service.external.external_service import ExternalService
+from service.storage.storage_service import StorageService
+from service.search.search_service import SearchService
+from service.vectordb.vectordb_service import VectorDbService
 
 class ServiceContainer:
     """전역 서비스 인스턴스를 관리하는 컨테이너"""
@@ -12,6 +16,10 @@ class ServiceContainer:
     _instance: Optional['ServiceContainer'] = None
     _database_service: Optional[DatabaseService] = None
     _cache_service: Optional[CacheService] = None
+    _external_service: Optional[ExternalService] = None
+    _storage_service: Optional[StorageService] = None
+    _search_service: Optional[SearchService] = None
+    _vectordb_service: Optional[VectorDbService] = None
     _lock_service_initialized: bool = False
     _scheduler_service_initialized: bool = False
     _queue_service_initialized: bool = False
@@ -60,16 +68,99 @@ class ServiceContainer:
         container._queue_service_initialized = initialized
     
     @classmethod
+    def set_cache_service_initialized(cls, initialized: bool):
+        """CacheService 초기화 상태 설정"""
+        container = cls()
+        container._cache_service = CacheService if initialized else None
+    
+    @classmethod
+    def set_external_service(cls, service: Optional[ExternalService]):
+        """ExternalService 설정"""
+        container = cls()
+        container._external_service = service
+    
+    @classmethod
+    def get_external_service(cls) -> Optional[ExternalService]:
+        """ExternalService 반환"""
+        container = cls()
+        return container._external_service
+    
+    @classmethod
+    def set_storage_service(cls, service: Optional[StorageService]):
+        """StorageService 설정"""
+        container = cls()
+        container._storage_service = service
+    
+    @classmethod
+    def get_storage_service(cls) -> Optional[StorageService]:
+        """StorageService 반환"""
+        container = cls()
+        return container._storage_service
+    
+    @classmethod
+    def set_search_service(cls, service: Optional[SearchService]):
+        """SearchService 설정"""
+        container = cls()
+        container._search_service = service
+    
+    @classmethod
+    def get_search_service(cls) -> Optional[SearchService]:
+        """SearchService 반환"""
+        container = cls()
+        return container._search_service
+    
+    @classmethod
+    def set_vectordb_service(cls, service: Optional[VectorDbService]):
+        """VectorDbService 설정"""
+        container = cls()
+        container._vectordb_service = service
+    
+    @classmethod
+    def get_vectordb_service(cls) -> Optional[VectorDbService]:
+        """VectorDbService 반환"""
+        container = cls()
+        return container._vectordb_service
+    
+    @classmethod
     def get_service_status(cls) -> dict:
         """모든 서비스 상태 반환"""
         container = cls()
-        return {
+        
+        # 기존 ServiceContainer 관리 서비스들
+        status = {
             "database": container._database_service is not None,
             "cache": container._cache_service is not None,
             "lock": container._lock_service_initialized,
             "scheduler": container._scheduler_service_initialized,
             "queue": container._queue_service_initialized
         }
+        
+        # Singleton 패턴 서비스들 (동적 import로 순환 import 방지)
+        try:
+            from service.external.external_service import ExternalService
+            status["external"] = ExternalService.is_initialized()
+        except ImportError:
+            status["external"] = False
+            
+        try:
+            from service.storage.storage_service import StorageService
+            status["storage"] = StorageService.is_initialized()
+        except ImportError:
+            status["storage"] = False
+            
+        try:
+            from service.search.search_service import SearchService
+            status["search"] = SearchService.is_initialized()
+        except ImportError:
+            status["search"] = False
+            
+        try:
+            from service.vectordb.vectordb_service import VectorDbService
+            status["vectordb"] = VectorDbService.is_initialized()
+        except ImportError:
+            status["vectordb"] = False
+            
+        return status
     
     @classmethod
     def is_initialized(cls) -> bool:

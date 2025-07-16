@@ -13,7 +13,7 @@ from service.core.logger import Logger, ConsoleLogger
 from service.core.argparse_util import parse_log_level, parse_app_env
 from template.base.template_context import TemplateContext, TemplateType
 from template.account.account_template_impl import AccountTemplateImpl
-from template.admin.admin_template_impl_simple import AdminTemplateImpl
+from template.admin.admin_template_impl import AdminTemplateImpl
 from template.tutorial.tutorial_template_impl import TutorialTemplateImpl
 from template.dashboard.dashboard_template_impl import DashboardTemplateImpl
 from template.portfolio.portfolio_template_impl import PortfolioTemplateImpl
@@ -127,8 +127,10 @@ async def lifespan(app: FastAPI):
         
         if not redis_connected:
             Logger.error("Redis 연결 실패 - 서비스가 불안정할 수 있습니다")
+            ServiceContainer.set_cache_service_initialized(False)
         else:
             Logger.info("캐시 서비스 초기화 완료")
+            ServiceContainer.set_cache_service_initialized(True)
         
         # External 서비스 초기화
         try:
@@ -524,6 +526,31 @@ async def lifespan(app: FastAPI):
     # 서비스 정리 - 예외 처리와 함께
     Logger.info("서비스 종료 시작...")
     
+    # Protocol 콜백 정리
+    try:
+        Logger.info("Protocol 콜백 정리 중...")
+        # 각 라우터의 콜백들이 정리될 수 있도록 대기
+        await asyncio.sleep(0.1)
+    except Exception as e:
+        Logger.error(f"Protocol 콜백 정리 오류: {e}")
+    
+    # TemplateService 종료
+    try:
+        Logger.info("TemplateService 종료 중...")
+        # TemplateService와 TemplateContext 정리
+        TemplateContext._templates.clear()
+        Logger.info("TemplateService 및 TemplateContext 정리 완료")
+    except Exception as e:
+        Logger.error(f"TemplateService 종료 오류: {e}")
+    
+    # DataTableManager 정리
+    try:
+        Logger.info("DataTableManager 정리 중...")
+        DataTableManager.clear()
+        Logger.info("DataTableManager 테이블 정리 완료")
+    except Exception as e:
+        Logger.error(f"DataTableManager 정리 오류: {e}")
+    
     # QueueService 종료 (큐 처리 완료 후)
     try:
         if QueueService._initialized:
@@ -587,6 +614,7 @@ async def lifespan(app: FastAPI):
     try:
         if CacheService.is_initialized():
             await CacheService.shutdown()
+            ServiceContainer.set_cache_service_initialized(False)
             Logger.info("캐시 서비스 종료")
     except Exception as e:
         Logger.error(f"캐시 서비스 종료 오류: {e}")
@@ -622,6 +650,12 @@ async def lifespan(app: FastAPI):
     try:
         Logger.info("전역 리소스 정리 완료")
         Logger.info("Application lifespan ended")
+        
+        # Logger 정리 - 마지막에 수행
+        Logger.info("Logger 종료 중...")
+        # Logger가 ConsoleLogger인 경우 특별한 정리 불필요하지만
+        # 향후 파일 로거 등으로 변경될 경우를 대비
+        await asyncio.sleep(0.1)  # 마지막 로그 출력 대기
     except Exception as e:
         Logger.error(f"전역 리소스 정리 오류: {e}")
 
@@ -766,15 +800,8 @@ app.include_router(notification.router, prefix="/api/notification", tags=["notif
 def root():
     Logger.info("base_web_server 동작 중")
     
-    # 서비스 상태 체크
-    container_status = ServiceContainer.get_service_status()
-    service_status = {
-        **container_status,
-        "external": ExternalService.is_initialized(),
-        "storage": StorageService.is_initialized(),
-        "search": SearchService.is_initialized(),
-        "vectordb": VectorDbService.is_initialized()
-    }
+    # 서비스 상태 체크 (모든 서비스 통합)
+    service_status = ServiceContainer.get_service_status()
     
     return {
         "message": "base_web_server 동작 중",

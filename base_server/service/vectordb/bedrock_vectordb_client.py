@@ -3,6 +3,7 @@ import json
 import time
 import random
 import boto3
+import aioboto3
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
 from enum import Enum

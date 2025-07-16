@@ -23,16 +23,17 @@ class S3Metrics:
     credential_errors: int = 0
 
 class S3StorageClient(IStorageClient):
-    """AWS S3 Storage 클라이언트 - 연결 관리, 재시도, 메트릭 포함"""
+    """AWS S3 Storage 클라이언트 - Session 재사용 패턴"""
     
-    def __init__(self, config):
+    def __init__(self, config, session=None, s3_client=None):
         self.config = config
         # 디버깅을 위한 로깅
         from service.core.logger import Logger
         Logger.debug(f"S3Client config type: {type(config)}")
         Logger.debug(f"S3Client config: {config}")
-        self._session = None
-        self._s3_client = None
+        # Pool에서 전달받은 session과 client 사용
+        self._session = session
+        self._s3_client = s3_client
         self.metrics = S3Metrics()
         self._connection_healthy = True
         self._last_health_check = 0
@@ -40,52 +41,10 @@ class S3StorageClient(IStorageClient):
         self._retry_delay_base = 1.0
     
     async def _get_client(self):
-        """S3 클라이언트 가져오기 (lazy loading with retry)"""
-        for attempt in range(self._max_retries):
-            try:
-                if self._s3_client is None:
-                    # config가 dict인 경우 처리
-                    if isinstance(self.config, dict):
-                        aws_access_key_id = self.config.get('aws_access_key_id')
-                        aws_secret_access_key = self.config.get('aws_secret_access_key')
-                        aws_session_token = self.config.get('aws_session_token')
-                        region_name = self.config.get('region_name')
-                    else:
-                        aws_access_key_id = self.config.aws_access_key_id
-                        aws_secret_access_key = self.config.aws_secret_access_key
-                        aws_session_token = getattr(self.config, 'aws_session_token', None)
-                        region_name = self.config.region_name
-                        
-                    self._session = aioboto3.Session(
-                        aws_access_key_id=aws_access_key_id,
-                        aws_secret_access_key=aws_secret_access_key,
-                        aws_session_token=aws_session_token,
-                        region_name=region_name
-                    )
-                    self._s3_client = self._session.client(
-                        's3',
-                        config=Config(
-                            retries={'max_attempts': 3, 'mode': 'adaptive'},
-                            max_pool_connections=50
-                        )
-                    )
-                    Logger.info(f"S3 client initialized for region: {self.config.region_name}")
-                
-                return self._s3_client
-                
-            except NoCredentialsError as e:
-                self.metrics.credential_errors += 1
-                Logger.error(f"S3 credentials error: {e}")
-                raise
-            except Exception as e:
-                self.metrics.connection_failures += 1
-                Logger.warn(f"S3 client initialization failed (attempt {attempt + 1}/{self._max_retries}): {e}")
-                
-                if attempt < self._max_retries - 1:
-                    delay = self._retry_delay_base * (2 ** attempt) + random.uniform(0, 1)
-                    await asyncio.sleep(delay)
-                else:
-                    raise
+        """S3 클라이언트 가져오기 (Pool에서 전달받은 client 사용)"""
+        if self._s3_client is None:
+            raise RuntimeError("S3 client not initialized by pool")
+        return self._s3_client
     
     async def upload_file(self, bucket: str, key: str, file_path: str, **kwargs) -> Dict[str, Any]:
         """파일 업로드 (향상된 에러 처리 및 메트릭)"""
@@ -437,20 +396,6 @@ class S3StorageClient(IStorageClient):
         self.metrics = S3Metrics()
         Logger.info("S3 client metrics reset")
     
-    async def close(self):
-        """클라이언트 정리"""
-        if self._s3_client:
-            try:
-                # S3 클라이언트는 자동으로 정리됨
-                self._s3_client = None
-                self._session = None
-                Logger.info("S3 client closed")
-                
-                # 최종 메트릭 로깅
-                final_metrics = self.get_metrics()
-                Logger.info(f"Final S3 metrics: {final_metrics}")
-            except Exception as e:
-                Logger.error(f"Error closing S3 client: {e}")
     
     async def generate_presigned_url(self, bucket: str, key: str, expiration: int = 3600, **kwargs) -> Dict[str, Any]:
         """사전 서명된 URL 생성"""
@@ -545,20 +490,6 @@ class S3StorageClient(IStorageClient):
             }
     
     async def close(self):
-        """클라이언트 종료"""
-        if self._s3_client:
-            try:
-                async with self._s3_client as s3:
-                    pass  # context manager will handle cleanup
-            except:
-                pass
-            self._s3_client = None
-        
-        if self._session:
-            try:
-                await self._session.close()
-            except:
-                pass
-            self._session = None
-        
-        Logger.info("S3 Storage client closed")
+        """클라이언트 종료 - Pool에서 관리하므로 개별 클라이언트는 정리하지 않음"""
+        # Pool에서 session과 client를 관리하므로 개별 클라이언트에서는 정리하지 않음
+        Logger.debug("S3 Storage client close called (managed by pool)")
