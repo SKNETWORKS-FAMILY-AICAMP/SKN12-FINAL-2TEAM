@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from datetime import datetime
 from typing import Dict, Any, List
 import numpy as np
 from numpy.typing import NDArray
@@ -22,9 +23,9 @@ class KalmanRegimeFilterInput(BaseModel):
     end_date: str      = Field(..., description="데이터 종료일(YYYY-MM-DD)")
 
     # ▶️ 실전 운용 파라미터
-    account_value: float = Field(100_000.0, description="계좌 가치(USD)")
+    account_value: float = Field(... ,description="계좌 가치")
+    exchange_rate: str = Field("KWR", description="화폐 단위(예시: KWR, USD)" )
     risk_pct: float      = Field(0.02,      description="한 트레이드당 위험 비율(0~1)")
-    entry_price: float   = Field(100.0,     description="진입 가격(USD)")
     max_leverage: float  = Field(10.0,      description="허용 최대 레버리지")
 
 
@@ -102,20 +103,30 @@ class KalmanRegimeFilterTool(BaseFinanceTool):
     def get_data(self, **kwargs) -> KalmanRegimeFilterActionOutput:
         t_start = time.time()
         start_ts = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(t_start))
+        today_str = datetime.today().strftime("%Y-%m-%d")
+        kwargs['end_date'] = today_str  
         inp = KalmanRegimeFilterInput(**kwargs)
 
         # 1️⃣ 데이터 수집
-        macro = MacroEconomicTool().get_data(series_ids=["GDP", "CPIAUCSL"])
+        macro = MacroEconomicTool().get_data(series_ids=["GDP", "CPIAUCSL", "DEXKOUS"])
         gdp = self._find_value(macro.data, 'GDP')
         cpi = self._find_value(macro.data, 'CPIAUCSL')
-
+        exchange_rate = self._find_value(macro.data, 'DEXKOUS', default=0.00072)
+        if inp.exchange_rate.upper() == "KWR":
+            inp.account_value *= exchange_rate 
+             
         ta_res = TechnicalAnalysisTool().get_data(tickers=inp.tickers).results[0]
         rsi, macd = ta_res.rsi, ta_res.macd
 
         md_inp = MarketDataInput(tickers=inp.tickers,
                                  start_date=inp.start_date,
                                  end_date=inp.end_date)
-        vix = MarketDataTool().get_data(**md_inp.dict()).vix
+        md_out = MarketDataTool().get_data(**md_inp.dict())
+        vix = md_out.vix
+        df = md_out.price_data.get(inp.tickers[0])
+        if df is None or df.empty:
+            raise RuntimeError(f"{inp.tickers[0]}의 가격 데이터를 찾을 수 없습니다.")
+        entry_price = float(df["Adj Close"].iloc[-1])
 
         z = np.array([gdp, cpi, vix,
                       0.5*(gdp+cpi),
@@ -148,7 +159,7 @@ class KalmanRegimeFilterTool(BaseFinanceTool):
 
         # ── 포지션 크기
         risk_dollar = inp.account_value * inp.risk_pct
-        pos_size = risk_dollar / (vol * inp.entry_price)
+        pos_size = risk_dollar / (vol * entry_price)
         rec["position_size"] = round(pos_size, 4)
 
         # ── 레버리지
@@ -164,9 +175,9 @@ class KalmanRegimeFilterTool(BaseFinanceTool):
                            else "Market Neutral")
 
         # ── SL / TP (ATR 기반)
-        atr = vol * inp.entry_price
-        stop_loss   = inp.entry_price - atr * 1.5
-        take_profit = inp.entry_price + atr * 3.0
+        atr = vol * entry_price
+        stop_loss   = entry_price - atr * 1.5
+        take_profit = entry_price + atr * 3.0
         rec["stop_loss"]   = round(stop_loss, 2)
         rec["take_profit"] = round(take_profit, 2)
 

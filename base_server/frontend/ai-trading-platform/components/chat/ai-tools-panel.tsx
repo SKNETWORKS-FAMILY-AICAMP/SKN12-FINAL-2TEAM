@@ -60,7 +60,7 @@ export function AIToolsPanel({ selectedTool, onToolSelect }: AIToolsPanelProps) 
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="font-medium text-sm">{tool.name}</h3>
-                    <Switch checked={tool.isActive} size="sm" />
+                    <Switch checked={tool.isActive} />
                   </div>
 
                   <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">{tool.description}</p>

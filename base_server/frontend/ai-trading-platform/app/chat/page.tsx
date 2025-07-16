@@ -1,32 +1,69 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Plus, MessageCircle, FolderOpen, Zap, Search, Settings, ArrowUp, Menu, ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-const chatHistoryItems = [
-  "Old conversation"
-];
+const MAX_CHATS = 10;
 
 export default function ChatPage() {
   const [message, setMessage] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [chatHistoryItems, setChatHistoryItems] = useState<string[]>(["Old conversation"]);
   const [activeChat, setActiveChat] = useState<number>(0); // index of selected chat
+  const [chatMessages, setChatMessages] = useState<Array<Array<{ from: "user" | "bot"; text: string }>>>([
+    [
+      { from: "bot", text: "안녕하세요! 무엇을 도와드릴까요?" }
+    ]
+  ]);
   const router = useRouter();
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  // Scroll to bottom when messages change or chat changes
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [chatMessages, activeChat]);
 
   const handleSubmit = (e: React.FormEvent | React.KeyboardEvent) => {
     e.preventDefault();
     if (message.trim()) {
-      // 실제 메시지 전송 로직 연결
+      // Add user message
+      setChatMessages((prev) => {
+        const updated = [...prev];
+        updated[activeChat] = [...updated[activeChat], { from: "user", text: message }];
+        return updated;
+      });
       setMessage("");
+      // Add bot reply after short delay
+      setTimeout(() => {
+        setChatMessages((prev) => {
+          const updated = [...prev];
+          const botReplies = [
+            "좋은 질문입니다! 더 도와드릴까요?",
+            "AI 챗봇이 답변 중입니다.",
+            "자세한 정보를 원하시면 말씀해 주세요.",
+            "트레이딩 관련 추가 질문이 있으신가요?"
+          ];
+          const reply = botReplies[Math.floor(Math.random() * botReplies.length)];
+          updated[activeChat] = [...updated[activeChat], { from: "bot", text: reply }];
+          return updated;
+        });
+      }, 700);
     }
   };
 
   const handleNewChat = () => {
+    if (chatHistoryItems.length >= MAX_CHATS) return;
     const newTitle = `새 채팅 ${chatHistoryItems.filter(t => t.startsWith('새 채팅')).length + 1}`;
     setChatHistoryItems([newTitle, ...chatHistoryItems]);
+    setChatMessages([[{ from: "bot", text: "안녕하세요! 무엇을 도와드릴까요?" }], ...chatMessages]);
     setActiveChat(0);
+  };
+
+  const handleSelectChat = (index: number) => {
+    setActiveChat(index);
   };
 
   return (
@@ -43,8 +80,9 @@ export default function ChatPage() {
             <span>뒤로가기</span>
           </button>
           <button
-            className="flex items-center gap-2 text-blue-400 hover:text-blue-300 transition-colors font-semibold"
+            className={`flex items-center gap-2 font-semibold transition-colors ${chatHistoryItems.length >= MAX_CHATS ? 'opacity-50 cursor-not-allowed' : 'text-blue-400 hover:text-blue-300'}`}
             onClick={handleNewChat}
+            disabled={chatHistoryItems.length >= MAX_CHATS}
           >
             <Plus size={16} />
             <span>새 채팅</span>
@@ -78,7 +116,7 @@ export default function ChatPage() {
                       ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow'
                       : 'text-gray-300 hover:bg-[#23243a]'
                   }`}
-                  onClick={() => setActiveChat(index)}
+                  onClick={() => handleSelectChat(index)}
                 >
                   {item}
                 </div>
@@ -113,12 +151,22 @@ export default function ChatPage() {
           </div>
         </div>
         {/* Chat Content */}
-        <div className="flex-1 flex flex-col items-center justify-center p-8">
+        <div className="flex-1 flex flex-col items-center justify-center p-8 w-full">
           <div className="w-full max-w-2xl">
             <div className="mb-8 text-center">
-              <div className="text-6xl mb-4"></div>
-              <h1 className="text-4xl font-light mb-2 bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">환영합니다</h1>
-              <p className="text-gray-400">AI 트레이딩 챗에 오신 것을 환영합니다. 무엇을 도와드릴까요?</p>
+              <h1 className="text-4xl font-light mb-2 bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
+                {chatHistoryItems[activeChat]}
+              </h1>
+            </div>
+            <div className="flex flex-col gap-3 mb-8 max-h-[400px] min-h-[200px] overflow-y-auto bg-transparent p-2 rounded-lg scrollbar-hide">
+              {chatMessages[activeChat]?.map((msg, idx) => (
+                <div key={idx} className={`flex ${msg.from === "user" ? "justify-end" : "justify-start"}`}>
+                  <div className={`px-4 py-2 rounded-xl max-w-xs break-words text-sm shadow ${msg.from === "user" ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-100"}`}>
+                    {msg.text}
+                  </div>
+                </div>
+              ))}
+              <div ref={messagesEndRef} />
             </div>
           </div>
         </div>
