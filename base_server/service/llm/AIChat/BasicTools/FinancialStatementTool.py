@@ -1,5 +1,5 @@
 import requests
-from AIChat.BaseFinanceTool import BaseFinanceTool
+from service.llm.AIChat.BaseFinanceTool import BaseFinanceTool
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 
