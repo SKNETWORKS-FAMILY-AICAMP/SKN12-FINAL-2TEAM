@@ -12,3 +12,4 @@ class TemplateType(Enum):
     MARKET = auto()
     SETTINGS = auto()
     NOTIFICATION = auto()
+    CRAWLER = auto()

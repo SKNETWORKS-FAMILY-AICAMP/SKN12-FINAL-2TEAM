@@ -22,6 +22,7 @@ from template.autotrade.autotrade_template_impl import AutoTradeTemplateImpl
 from template.market.market_template_impl import MarketTemplateImpl
 from template.settings.settings_template_impl import SettingsTemplateImpl
 from template.notification.notification_template_impl import NotificationTemplateImpl
+from template.crawler.crawler_template_impl import CrawlerTemplateImpl
 from template.base.template_config import AppConfig
 from template.base.template_service import TemplateService
 from service.db.database_service import DatabaseService
@@ -70,7 +71,7 @@ database_service = None
 async def lifespan(app: FastAPI):
     global database_service
     
-    Logger.init(ConsoleLogger(log_level))
+    Logger.init(ConsoleLogger(log_level)) #파일로 수정
     Logger.info(f"base_web_server 시작 (로그레벨: {log_level.name}, 환경: {app_env}, config: {config_file})")
     
     try:
@@ -317,6 +318,7 @@ async def lifespan(app: FastAPI):
     TemplateContext.add_template(TemplateType.MARKET, MarketTemplateImpl())
     TemplateContext.add_template(TemplateType.SETTINGS, SettingsTemplateImpl())
     TemplateContext.add_template(TemplateType.NOTIFICATION, NotificationTemplateImpl())
+    TemplateContext.add_template(TemplateType.CRAWLER, CrawlerTemplateImpl())
     Logger.info("템플릿 등록 완료")
     
     # 템플릿 서비스 초기화 (데이터 로드 및 템플릿 초기화 포함)
@@ -372,6 +374,11 @@ async def lifespan(app: FastAPI):
     from .routers.notification import setup_notification_protocol_callbacks
     setup_notification_protocol_callbacks()
     Logger.info("Notification protocol 콜백 설정 완료")
+    
+    # Crawler protocol 콜백 설정
+    from .routers.crawler import setup_crawler_protocol_callbacks
+    setup_crawler_protocol_callbacks()
+    Logger.info("Crawler protocol 콜백 설정 완료")
     
     # 초기화 완료 후 서비스 테스트 실행
     Logger.info("=== 서비스 초기화 완료 - 기본 테스트 실행 ===")
@@ -784,7 +791,7 @@ async def test_queue_systems():
 app = FastAPI(lifespan=lifespan)
 
 # 라우터 등록
-from .routers import account, admin, tutorial, dashboard, portfolio, chat, autotrade, market, settings, notification
+from .routers import account, admin, tutorial, dashboard, portfolio, chat, autotrade, market, settings, notification, crawler
 app.include_router(account.router, prefix="/api/account", tags=["account"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 app.include_router(tutorial.router, prefix="/api/tutorial", tags=["tutorial"])
@@ -795,6 +802,7 @@ app.include_router(autotrade.router, prefix="/api/autotrade", tags=["autotrade"]
 app.include_router(market.router, prefix="/api/market", tags=["market"])
 app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(notification.router, prefix="/api/notification", tags=["notification"])
+app.include_router(crawler.router, prefix="/api/crawler", tags=["crawler"])
 
 @app.get("/")
 def root():
