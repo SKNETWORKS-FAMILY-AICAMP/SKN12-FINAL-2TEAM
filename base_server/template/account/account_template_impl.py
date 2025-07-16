@@ -463,7 +463,7 @@ class AccountTemplateImpl(AccountTemplate):
                 return response
             
             account_db_key = getattr(client_session.session, 'account_db_key', 0)
-            
+            db_service = ServiceContainer.get_database_service()
             # 프로필 정보 저장
             profile = UserProfile(
                 account_db_key=account_db_key,
@@ -473,6 +473,15 @@ class AccountTemplateImpl(AccountTemplate):
                 monthly_budget=request.monthly_budget,
                 profile_completed=True
             )
+            # login_count += 1
+            try:
+                await db_service.call_global_procedure_update(
+                    "UPDATE table_accountid SET login_count = login_count + 1 WHERE account_db_key = %s",
+                    (account_db_key,)
+                )
+                Logger.info(f"login_count incremented for account_db_key={account_db_key}")
+            except Exception as e:
+                Logger.error(f"login_count increment failed: {e}")
             
             response.errorCode = 0
             response.profile = profile
