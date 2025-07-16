@@ -224,7 +224,7 @@ Answer:"""
             return {
                 "service_initialized": cls._initialized,
                 "config": {
-                    "aws_region": cls._config.aws_region if cls._config else 'unknown',
+                    "aws_region": cls._config.region_name if cls._config else 'unknown',
                     "embedding_model": getattr(cls._config, 'embedding_model', 'unknown'),
                     "text_model": getattr(cls._config, 'text_model', 'unknown'),
                     "knowledge_base_id": getattr(cls._config, 'knowledge_base_id', None)
@@ -260,7 +260,7 @@ Answer:"""
             
             return {
                 "service_status": "initialized",
-                "aws_region": cls._config.aws_region if cls._config else 'unknown',
+                "aws_region": cls._config.region_name if cls._config else 'unknown',
                 "embedding_model": getattr(cls._config, 'embedding_model', 'unknown'),
                 "text_model": getattr(cls._config, 'text_model', 'unknown'),
                 "knowledge_base_id": getattr(cls._config, 'knowledge_base_id', None),

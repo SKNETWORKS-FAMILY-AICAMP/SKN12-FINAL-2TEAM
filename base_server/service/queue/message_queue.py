@@ -119,7 +119,8 @@ class RedisCacheMessageQueue(IMessageQueue):
             }
             
             message_key = self.message_key_pattern.format(message_id=msg.id)
-            await client.set_hash_all(message_key, message_data)
+            if message_data:  # 빈 딕셔너리가 아닌지 확인
+                await client.set_hash_all(message_key, message_data)
             
             # 지연 실행 메시지인 경우
             if msg.scheduled_at and msg.scheduled_at > datetime.now():
@@ -166,12 +167,13 @@ class RedisCacheMessageQueue(IMessageQueue):
                     # 처리 중 상태로 이동
                     processing_key = self.processing_key_pattern.format(queue_name=q_name)
                     processing_info = {
-                        "message_id": message_id,
-                        "consumer_id": c_id,
+                        "message_id": str(message_id),
+                        "consumer_id": str(c_id),
                         "started_at": datetime.now().isoformat(),
                         "visibility_timeout": str(timeout)
                     }
-                    await client.set_hash_all(f"{processing_key}:{message_id}", processing_info)
+                    if processing_info:  # 빈 딕셔너리가 아닌지 확인
+                        await client.set_hash_all(f"{processing_key}:{message_id}", processing_info)
                     
                     # QueueMessage 객체로 변환
                     return QueueMessage(
@@ -358,7 +360,8 @@ class MessageQueueManager:
             
             # 큐 설정 저장
             config_key = f"mq:config:{queue_name}"
-            await self.redis_client.set_hash_all(config_key, default_config)
+            async with self.cache_service.get_client() as client:
+                await client.set_hash_all(config_key, default_config)
             
             Logger.info(f"메시지큐 생성: {queue_name}")
             

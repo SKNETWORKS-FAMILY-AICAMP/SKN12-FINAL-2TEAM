@@ -61,11 +61,7 @@ class OpenSearchClient(ISearchClient):
                         'pool_block': True
                     }
                     
-                    # 인증 설정
-                    if self.config.username and self.config.password:
-                        client_kwargs['http_auth'] = (self.config.username, self.config.password)
-                    
-                    # AWS 설정
+                    # AWS 설정 (우선)
                     if self.config.aws_access_key_id and self.config.aws_secret_access_key:
                         from opensearchpy import RequestsHttpConnection
                         from requests_aws4auth import AWS4Auth
@@ -73,11 +69,15 @@ class OpenSearchClient(ISearchClient):
                         auth = AWS4Auth(
                             self.config.aws_access_key_id,
                             self.config.aws_secret_access_key,
-                            self.config.aws_region,
+                            self.config.region_name,
                             'es'
                         )
                         client_kwargs['http_auth'] = auth
                         client_kwargs['connection_class'] = RequestsHttpConnection
+                    
+                    # 기본 인증 설정 (AWS 인증이 없는 경우만)
+                    elif self.config.username and self.config.password:
+                        client_kwargs['http_auth'] = (self.config.username, self.config.password)
                     
                     # CA 인증서
                     if self.config.ca_certs:

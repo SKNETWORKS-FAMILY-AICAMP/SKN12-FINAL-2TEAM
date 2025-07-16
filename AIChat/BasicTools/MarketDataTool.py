@@ -1,212 +1,236 @@
+# market_data_tool.py
+# ────────────────────────────────────────────────────────────────
+#  📈  MarketDataTool  —  다중 자산 가격‧리스크‧VIX 한‑방 조회
+#     · 선택일 종가 / 최근 종가 / 기대수익률 / 변동성 / 공분산 / VIX
+#     · 단일‑날짜 조회·휴장일 대응, 타임존 오프셋 및 NaN 문제 해결
+# ────────────────────────────────────────────────────────────────
+
+from __future__ import annotations
+
 import yfinance as yf
 import pandas as pd
-from typing import List, Dict, Optional, Any, Union, Type
+from typing import List, Dict, Optional, Any, Type
 from pydantic import BaseModel, Field
 from datetime import date, timedelta, datetime
-from AIChat.BaseFinanceTool import BaseFinanceTool
-# ────────────────────────────────────────────────────────────────
+
+from AIChat.BaseFinanceTool import BaseFinanceTool  # 👈 프로젝트 내부 베이스 툴
+
+# ────────────────────────────────
 # 1. 헬퍼
-# ────────────────────────────────────────────────────────────────
-def _pick_price_col(df: pd.DataFrame) -> str:          # ⬅️
-    """auto_adjust=True면 Close, 아니면 Adj Close가 있을 수 있음"""
+# ────────────────────────────────
+def _pick_price_col(df: pd.DataFrame) -> str:
+    """auto_adjust=True 일 때는 Close, 아닐 때는 Adj Close 유무가 달라진다."""
     return "Close" if "Close" in df.columns else "Adj Close"
 
-def today_str() -> str:
-    return date.today().isoformat()
+def today_str() -> str:       return date.today().isoformat()
+def yesterday_str() -> str:   return (date.today() - timedelta(days=1)).isoformat()
 
-def yesterday_str() -> str:
-    return (date.today() - timedelta(days=1)).isoformat()
+def _find_nearest_row(df: pd.DataFrame, target: str) -> Optional[pd.Series]:
+    """target(YYYY‑MM‑DD) 과 일치 ↘ 없으면 직전 영업일 row"""
+    if df.empty:
+        return None
+    target_date = pd.to_datetime(target).date()
+
+    # Date 열에서 순수 date 만 캐싱
+    if "_only_date" not in df.columns:
+        df["_only_date"] = pd.to_datetime(df["Date"]).dt.date
+
+    exact = df[df["_only_date"] == target_date]
+    if not exact.empty:
+        return exact.iloc[-1]
+
+    before = df[df["_only_date"] < target_date]
+    return None if before.empty else before.iloc[-1]
 
 def extract_latest_values(price_data: Dict[str, pd.DataFrame]):
     latest_prices, latest_returns, latest_date = {}, {}, None
-    for ticker, df in price_data.items():
+    for t, df in price_data.items():
         if df.empty:
             continue
-        # 1️⃣ 컬럼 존재 여부 확인
-        price_col = _pick_price_col(df)  
-        latest_prices[ticker]  = float(df[price_col].dropna().iloc[-1])
-
-        ret_col = "Daily Return" if "Daily Return" in df.columns else None
-        if ret_col:
-            latest_returns[ticker] = float(df[ret_col].dropna().iloc[-1])
-
-        if latest_date is None and "Date" in df.columns:
-            val = df["Date"].iloc[-1]
-            latest_date = val.strftime("%Y-%m-%d") if hasattr(val, "strftime") else str(val)
-
+        price_col = _pick_price_col(df)
+        latest_prices[t]  = float(df[price_col].iloc[-1])
+        latest_returns[t] = float(df["Daily Return"].iloc[-1])
+        if latest_date is None:
+            latest_date = df["Date"].iloc[-1].strftime("%Y-%m-%d")
     return latest_prices, latest_returns, latest_date
 
-# ────────────────────────────────────────────────────────────────
+# ────────────────────────────────
 # 2. 입력/출력 모델
-# ────────────────────────────────────────────────────────────────
-
-
+# ────────────────────────────────
 class MarketDataInput(BaseModel):
-    """시장 데이터 조회용 입력."""
-    tickers: List[str] = Field(..., description="예: ['TSLA', 'AAPL']")
+    tickers: List[str] = Field(..., description="예: ['TSLA','AAPL']")
     start_date: str    = Field(default_factory=yesterday_str)
-    end_date: str      = Field(default_factory=today_str)
-    as_dict: bool      = Field(False, description="DataFrame → dict 변환 여부")
+    end_date:   str    = Field(default_factory=today_str)
+    select_data: str   = Field(default_factory=today_str,
+                               description="선택일 (YYYY‑MM‑DD)")
 
 class MarketDataOutput(BaseModel):
     price_data: Dict[str, List[Dict[str, Any]]]
     latest_prices: Dict[str, float]
     latest_returns: Dict[str, float]
     latest_date: Optional[str]
+
+    selected_prices:  Dict[str, float]
+    selected_returns: Dict[str, float]
+    selected_date:    Optional[str]
+
     expected_returns: Dict[str, float]
-    volatility: Dict[str, float]
+    volatility:       Dict[str, float]
     covariance_matrix: Dict[str, Any] | None = None
     vix: Optional[float] = None
     summary: str
 
-    # 래퍼가 호출할 요약 함수
-    def _build_summary(self) -> str:
-        return self.summary
-
-# ────────────────────────────────────────────────────────────────
+# ────────────────────────────────
 # 3. 메인 툴
-# ────────────────────────────────────────────────────────────────
+# ────────────────────────────────
 class MarketDataTool(BaseFinanceTool):
-    """📈 전 세계 자산 가격·리스크 지표 한방 조회"""
-    name: str = "market_data"
-    description: str = (
-        "미국/글로벌 주식·ETF·채권·원자재 등의 OHLC, 수익률, 공분산, 변동성, VIX를 반환한다."
-    )
+    """다중 자산 가격·리스크·VIX 조회"""
+    name        = "market_data"
+    description = "주식·ETF·채권·원자재·VIX 시계열과 리스크 지표를 반환"
     args_schema: Type[BaseModel] = MarketDataInput
 
-    # 3-1. 툴 진입점 (LangChain/Function-Calling 호환)
-    def _run(self, **kwargs) -> str:            # JSON 문자열!
+    # LangChain function‑calling entry
+    def _run(self, **kwargs) -> str:
         return self.get_data(**kwargs).model_dump_json()
-    # 3-2. 실질 로직
+
+    # ── 핵심 로직 ──────────────────────────────────────────
     def get_data(self, **params) -> MarketDataOutput:
         inp = MarketDataInput(**params)
-        today = date.today().isoformat()
-        if inp.end_date < today:
-            inp.start_date = (date.today() - timedelta(days=14)).isoformat()
-            inp.end_date   = today
-            
-        if inp.start_date == inp.end_date:
-            inp.end_date = (datetime.strptime(inp.end_date, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+
+        # 날짜 sanity (end < start → 교정, 동일날짜 → 그대로 두어 “하루” 조회 허용)
+        if inp.end_date < inp.start_date:
+            inp.end_date = inp.start_date
 
         raw = yf.download(
             inp.tickers,
             start=inp.start_date,
-            end=inp.end_date,
+            end=(datetime.strptime(inp.end_date, "%Y-%m-%d") +
+                 timedelta(days=1)).strftime("%Y-%m-%d"),  # yfinance end 는 exclusive
             group_by="ticker",
-            auto_adjust=True,         # ← 여기
+            auto_adjust=True,
             progress=False,
         )
 
-        price_data = {}
+        price_data: Dict[str, pd.DataFrame] = {}
         for t in inp.tickers:
             df = raw[t].copy() if isinstance(raw.columns, pd.MultiIndex) else raw.copy()
             if df.empty:
                 continue
             close_col = _pick_price_col(df)
-            df = df.reset_index()
+            df = df.reset_index()                       # Date 인덱스를 컬럼으로
             df["Daily Return"] = df[close_col].pct_change()
             if close_col != "Adj Close":
                 df = df.rename(columns={close_col: "Adj Close"})
-            df = df[["Date", "Adj Close", "Daily Return"]].dropna()
+
+            # 🔑 NaN 처리 개선: 첫 행 Daily Return 0.0, 종가 NaN 행만 제거
+            df = df[["Date", "Adj Close", "Daily Return"]]
+            df["Daily Return"] = df["Daily Return"].fillna(0.0)
+            df = df.dropna(subset=["Adj Close"])
+
             if not df.empty:
                 price_data[t] = df
 
-        # 데이터 없으면 바로 빈 껍데기 리턴
+        # 데이터가 하나도 없으면 즉시 반환
         if not price_data:
             return MarketDataOutput(
-                price_data={},
-                latest_prices={},
-                latest_returns={},
-                latest_date=None,
-                expected_returns={},
-                volatility={},
-                covariance_matrix=None,
-                vix=None,
-                summary="요청하신 종목은 최근 2주간 거래 데이터가 없습니다.",
+                price_data={}, latest_prices={}, latest_returns={}, latest_date=None,
+                selected_prices={}, selected_returns={}, selected_date=None,
+                expected_returns={}, volatility={}, covariance_matrix=None, vix=None,
+                summary="요청 종목의 데이터가 조회 구간에 존재하지 않습니다."
             )
 
-        # 추가 지표 계산
+        # 최신 시점·통계
+        latest_prices, latest_returns, latest_date = extract_latest_values(price_data)
         cov = self._covariance_matrix(inp.tickers, inp.start_date, inp.end_date)
         exp = self._expected_returns(inp.tickers, inp.start_date, inp.end_date)
         vol = self._volatility(inp.tickers, inp.start_date, inp.end_date)
         vix = self._latest_vix()
 
-        # 종가·수익률·기준일
-        latest_prices, latest_returns, latest_date = extract_latest_values(price_data)
+        # 선택일 값
+        selected_prices, selected_returns = {}, {}
+        selected_date_global: Optional[str] = None
+        for t, df in price_data.items():
+            row = _find_nearest_row(df, inp.select_data)
+            if row is not None:
+                selected_prices[t]  = float(row["Adj Close"])
+                selected_returns[t] = float(row["Daily Return"])
+                if selected_date_global is None:
+                    selected_date_global = row["Date"].strftime("%Y-%m-%d")
 
-        # 요약
+        # ── 요약 문자열 ──────────────────────────────────
         summary_lines = [
             "📊 [시장 데이터 요약]",
-            f"📅 기준일: {latest_date}",
+            f"📅 최신 기준일: {latest_date}",
+            f"📌 선택일 ({inp.select_data}) 기준: {selected_date_global or '해당 없음'}",
             f"티커: {', '.join(price_data.keys())}",
         ]
         for t in exp:
+            lp = latest_prices[t]; lr = latest_returns[t]
+            sp = selected_prices.get(t); sr = selected_returns.get(t)
+            part_sel = (f"선택종가 ${sp:.2f}, 선택수익률 {sr:.2%} | "
+                        if sp is not None else "")
             summary_lines.append(
-                f"  - {t}: 종가 ${latest_prices[t]:.2f}, "
-                f"일간 수익률 {latest_returns[t]:.2%}, "
-                f"기대수익률 {exp[t]:.4f}, 변동성 {vol[t]:.4f}"
+                f"  - {t}: 최신종가 ${lp:.2f}, 일수익률 {lr:.2%} | "
+                f"{part_sel}기대수익률 {exp[t]:.4f}, 변동성 {vol[t]:.4f}"
             )
         if vix is not None:
-            summary_lines.append(f"VIX(변동성): {vix:.2f}")
+            summary_lines.append(f"VIX: {vix:.2f}")
         if cov is not None:
             summary_lines.append(f"공분산 평균: {pd.DataFrame(cov).values.mean():.6f}")
+
         summary = "\n".join(summary_lines)
 
-        # 직렬화 준비
-# ── 직렬화 준비 ──
+        # 직렬화
         price_serial = {k: v.to_dict("records") for k, v in price_data.items()}
         cov_serial   = None if cov is None else cov.to_dict()
 
         return MarketDataOutput(
-            price_data=price_serial,
-            latest_prices=latest_prices,
-            latest_returns=latest_returns,
-            latest_date=latest_date,
-            expected_returns=exp,
-            volatility=vol,
-            covariance_matrix=cov_serial,
-            vix=vix,
-            summary=summary,
+            price_data        = price_serial,
+            latest_prices     = latest_prices,
+            latest_returns    = latest_returns,
+            latest_date       = latest_date,
+            selected_prices   = selected_prices,
+            selected_returns  = selected_returns,
+            selected_date     = selected_date_global,
+            expected_returns  = exp,
+            volatility        = vol,
+            covariance_matrix = cov_serial,
+            vix               = vix,
+            summary           = summary,
         )
 
-    # ─── 내부 계산용 메서드들 ───
+    # ── 내부 통계 메서드들 ───────────────────────────────
     def _covariance_matrix(self, tickers, start, end):
-        data = yf.download(tickers, start=start, end=end, group_by="ticker", progress=False, auto_adjust=True)
-        returns = pd.DataFrame({
-            t: (
-                data[t][_pick_price_col(data[t])].pct_change()
-                if isinstance(data.columns, pd.MultiIndex)
-                else data[_pick_price_col(data)].pct_change()
-            ).dropna()
-            for t in tickers
-        })
-        return returns.cov()
-
-    def _expected_returns(self, tickers, start, end, freq="daily"):
         data = yf.download(tickers, start=start, end=end,
-                        group_by="ticker", progress=False,
-                        auto_adjust=True)                     # ← 명시
-        scale = {"daily": 1, "monthly": 21, "annual": 252}[freq]
-        mean_dict = {}
+                           group_by="ticker", progress=False, auto_adjust=True)
+        returns = {}
         for t in tickers:
             df = data[t] if isinstance(data.columns, pd.MultiIndex) else data
             price_col = _pick_price_col(df)
-            series = df[price_col].pct_change().dropna()
-            mean_dict[t] = series.mean() * scale
-        return mean_dict
+            returns[t] = df[price_col].pct_change().dropna()
+        return pd.DataFrame(returns).cov()
+
+    def _expected_returns(self, tickers, start, end, freq="daily"):
+        data = yf.download(tickers, start=start, end=end,
+                           group_by="ticker", progress=False, auto_adjust=True)
+        scale = {"daily": 1, "monthly": 21, "annual": 252}[freq]
+        exp = {}
+        for t in tickers:
+            df = data[t] if isinstance(data.columns, pd.MultiIndex) else data
+            price_col = _pick_price_col(df)
+            exp[t] = df[price_col].pct_change().dropna().mean() * scale
+        return exp
 
     def _volatility(self, tickers, start, end, freq="daily"):
         data = yf.download(tickers, start=start, end=end,
-                        group_by="ticker", progress=False,
-                        auto_adjust=True)           # ← 추가
+                           group_by="ticker", progress=False, auto_adjust=True)
         scale = {"daily": 1, "monthly": 21 ** 0.5, "annual": 252 ** 0.5}[freq]
-        std_dict = {}
+        vol = {}
         for t in tickers:
             df = data[t] if isinstance(data.columns, pd.MultiIndex) else data
-            price_col = _pick_price_col(df)            # ← 교체
-            series = df[price_col].pct_change().dropna()
-            std_dict[t] = series.std() * scale
-        return std_dict
+            price_col = _pick_price_col(df)
+            vol[t] = df[price_col].pct_change().dropna().std() * scale
+        return vol
 
     def _latest_vix(self) -> Optional[float]:
         vix = yf.Ticker("^VIX").history(period="1d")
