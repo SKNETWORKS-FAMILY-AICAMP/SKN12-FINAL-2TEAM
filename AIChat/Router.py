@@ -151,14 +151,15 @@ TOOLS = [
 ]
 
 # ──────────────────────────── 2. LLM + 툴 바인딩
-router_prompt = ChatPromptTemplate.from_messages([
-    ("system",
-     "너는 사용자의 질문을 보고 카테고리를 분류하는 라우터다.\n"
-     "가능한 목적지: {destinations}\n"
-     "오늘은 2025‑07‑15(Asia/Seoul).\n"
-     "반드시 JSON 으로 {\"destination\":\"...\",\"reason\":\"...\"} 형식만 반환한다."),
-    ("user", "{user_input}")
-])
+SYSTEM_PROMPT = {
+    "role": "system",
+    "content": (
+        "너는 금융 데이터를 분석하고 요약하는 AI 전문가야."
+        "사용자의 질문을 분석해서 필요한 데이터를 툴을 통해 수집하고, "
+        "최대한 근거를 세워서 대답 할 수 있도록 필요한 툴을 호출해."
+        f"참고로 오늘 날짜는 {today}이야"
+    )
+}
 llm = ChatOpenAI(
     model="gpt-4o-mini",
     api_key=OPENAI_API_KEY,
@@ -188,7 +189,11 @@ def should_continue(state: MessagesState):
 
 def call_model(state: MessagesState):
     print("🔄 call_model: ", state["messages"])
-    resp = llm_with_tools.invoke(state["messages"])
+    # system 프롬프트가 이미 포함돼 있는지 확인
+    has_system = any(getattr(m, "role", None) == "system" for m in state["messages"])
+    # system 메시지를 앞에 추가
+    messages = ([SYSTEM_PROMPT] if not has_system else []) + state["messages"]
+    resp = llm_with_tools.invoke(messages)
     return {"messages": state["messages"] + [resp]}
 
 # ──────────────────────────── 4. 그래프 구축 함수
@@ -207,7 +212,11 @@ def build_workflow():
 # ──────────────────────────── 5. 외부 실행 함수
 def run_question(question: str) -> str:
     graph = build_workflow()
-    result = graph.invoke({"messages": [{"role": "user", "content": question}]})
+    initial_messages = [
+        SYSTEM_PROMPT,
+        {"role": "user", "content": question}
+    ]
+    result = graph.invoke({"messages": initial_messages})
     return "\n".join(getattr(m, "content", str(m)) for m in result["messages"])
 
 
