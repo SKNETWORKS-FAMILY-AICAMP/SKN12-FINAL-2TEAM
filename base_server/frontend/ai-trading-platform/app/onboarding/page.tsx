@@ -76,7 +76,7 @@ const steps = [
 export default function OnboardingPage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
-  const [answers, setAnswers] = useState({
+  const [answers, setAnswers] = useState<Record<string, string>>({
     knowledge: "",
     style: "",
     goal: "",

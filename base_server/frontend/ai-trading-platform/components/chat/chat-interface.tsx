@@ -30,7 +30,7 @@ export function ChatInterface({ selectedTool }: ChatInterfaceProps) {
   const handleSend = async () => {
     if (!message.trim()) return
 
-    await sendMessage(message, selectedTool)
+    await sendMessage(message, selectedTool ?? undefined)
     setMessage("")
   }
 
