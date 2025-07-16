@@ -47,6 +47,7 @@ datasets*/
 *.csv
 *.tsv
 *.json
+!base_server/docs/*.json
 *.parquet
 *.h5
 *.hdf5
