@@ -64,7 +64,7 @@ class TemplateService:
             
             # 응답에 account_info가 있으면 세션 생성 (로그인 성공 시)
             j_obj = json.loads(res_json)
-            if 'account_info' in j_obj:
+            if 'account_info' in j_obj and j_obj['account_info'] is not None:
                 account_info = j_obj['account_info']
                 # accessToken 생성 (없으면 새로 생성)
                 access_token = account_info.get('accessToken', str(uuid.uuid4()))

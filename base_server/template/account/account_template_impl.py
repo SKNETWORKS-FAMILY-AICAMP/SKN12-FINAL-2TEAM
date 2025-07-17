@@ -98,45 +98,77 @@ class AccountTemplateImpl(AccountTemplate):
             # 데이터베이스 서비스 가져오기
             db_service = ServiceContainer.get_database_service()
             
-            # 1. 글로벌 DB에서 계정 인증 (finance DB 구조)
-            hashed_password = self._hash_password(request.password)
-            result = await db_service.call_global_procedure(
-                "fp_user_login",
-                (request.platform_type, request.account_id, hashed_password)
-            )
+            # 1. 먼저 DB에서 저장된 해시값 조회
+            user_query = """
+            SELECT account_db_key, password_hash, nickname, account_level, account_status
+            FROM table_accountid 
+            WHERE platform_type = %s AND account_id = %s
+            """
+            user_result = await db_service.execute_global_query(user_query, (request.platform_type, request.account_id))
             
-            if result and len(result) > 0:
-                user_data = result[0]
-                login_result = user_data.get('result')
-                
-                if login_result == 'SUCCESS':
-                    account_db_key = user_data.get('account_db_key')
-                    shard_id = user_data.get('shard_id', 1)
-                    
-                    # 응답 설정
-                    response.errorCode = 0
-                    response.nickname = user_data.get('nickname', '')
-                    
-                    # account_info 설정 (내부 세션 생성용, 클라이언트 응답에서는 제거됨)
-                    response.account_info = {
-                        "account_db_key": account_db_key,
-                        "platform_type": request.platform_type,
-                        "account_id": request.account_id,
-                        "account_level": user_data.get('account_level', 1),
-                        "shard_id": shard_id
-                    }
-                    
-                    Logger.info(f"Login successful: account_db_key={account_db_key}, shard_id={shard_id}")
-                    
-                elif login_result == 'BLOCKED':
-                    response.errorCode = 1003  # 계정 블록
-                    Logger.info(f"Login failed: account blocked {request.account_id}")
-                else:
-                    response.errorCode = 1001  # 로그인 실패
-                    Logger.info(f"Login failed: invalid credentials for {request.account_id}")
-            else:
+            if not user_result:
                 response.errorCode = 1002  # 사용자 없음
                 Logger.info(f"Login failed: user not found {request.account_id}")
+                return response
+                
+            user_data = user_result[0]
+            stored_hash = user_data.get('password_hash', '')
+            
+            # 2. 비밀번호 검증
+            if not self._verify_password(request.password, stored_hash):
+                response.errorCode = 1001  # 로그인 실패
+                Logger.info(f"Login failed: invalid credentials for {request.account_id}")
+                return response
+                
+            # 3. 계정 상태 확인
+            if user_data.get('account_status') != 'Normal':
+                response.errorCode = 1003  # 계정 블록
+                Logger.info(f"Login failed: account blocked {request.account_id}")
+                return response
+                
+            # 4. 로그인 성공 처리
+            account_db_key = user_data.get('account_db_key')
+            
+            # 5. 샤드 정보 조회
+            shard_query = """
+            SELECT shard_id FROM table_user_shard_mapping 
+            WHERE account_db_key = %s
+            """
+            shard_result = await db_service.execute_global_query(shard_query, (account_db_key,))
+            
+            shard_id = 1  # 기본값
+            if shard_result:
+                shard_id = shard_result[0].get('shard_id', 1)
+            else:
+                # 샤드가 없으면 자동 할당
+                shard_id = (account_db_key % 2) + 1
+                insert_shard = """
+                INSERT INTO table_user_shard_mapping (account_db_key, shard_id)
+                VALUES (%s, %s)
+                """
+                await db_service.execute_global_query(insert_shard, (account_db_key, shard_id))
+            
+            # 6. 로그인 시간 업데이트
+            update_login = """
+            UPDATE table_accountid SET login_time = NOW() 
+            WHERE account_db_key = %s
+            """
+            await db_service.execute_global_query(update_login, (account_db_key,))
+            
+            # 7. 성공 응답 설정
+            response.errorCode = 0
+            response.nickname = user_data.get('nickname', '')
+            
+            # account_info 설정 (내부 세션 생성용, 클라이언트 응답에서는 제거됨)
+            response.account_info = {
+                "account_db_key": account_db_key,
+                "platform_type": request.platform_type,
+                "account_id": request.account_id,
+                "account_level": user_data.get('account_level', 1),
+                "shard_id": shard_id
+            }
+            
+            Logger.info(f"Login successful: account_db_key={account_db_key}, shard_id={shard_id}")
                 
         except Exception as e:
             response.errorCode = 1000  # 서버 오류
