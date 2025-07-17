@@ -15,6 +15,7 @@ from service.service_container import ServiceContainer
 import json
 import uuid
 from datetime import datetime
+from typing import Dict, Any
 
 class ChatTemplateImpl(BaseTemplate):
     def __init__(self):
@@ -52,14 +53,17 @@ class ChatTemplateImpl(BaseTemplate):
             
             response.rooms = []
             for room in rooms_data:
-                response.rooms.append({
-                    "room_id": room.get('room_id'),
-                    "title": room.get('title'),
-                    "persona_type": room.get('ai_persona'),
-                    "last_message": "최근 메시지",  # 실제로는 마지막 메시지 조회 필요
-                    "last_message_time": str(room.get('last_message_at', datetime.now())),
-                    "unread_count": 0  # 실제로는 안읽은 메시지 수 계산 필요
-                })
+                if isinstance(room, dict):
+                    chat_room = ChatRoom(
+                        room_id=str(room.get('room_id') or ""),
+                        title=str(room.get('title') or ""),
+                        ai_persona=str(room.get('ai_persona') or ""),
+                        # ChatRoom 클래스에 맞는 필드만 전달
+                        created_at=str(room.get('created_at', datetime.now())),
+                        last_message_at=str(room.get('last_message_at', datetime.now())),
+                        message_count=room.get('message_count', 0)
+                    )
+                    response.rooms.append(chat_room)
             
             response.total_count = total_count_data.get('total_count', len(response.rooms))
             response.errorCode = 0
@@ -113,14 +117,12 @@ class ChatTemplateImpl(BaseTemplate):
             
             # DB 결과를 바탕으로 응답 생성
             chat_room = ChatRoom(
-                room_id=room_id,
-                title=request.title,
-                persona_type=request.ai_persona,
-                purpose=request.purpose or "일반 상담",
+                room_id=str(room_id or ""),
+                title=str(request.title or ""),
+                ai_persona=str(request.ai_persona or ""),
                 created_at=str(datetime.now()),
-                last_message_time=str(datetime.now()),
-                message_count=1,  # 초기 AI 인사말 포함
-                is_active=True
+                last_message_at=str(datetime.now()),
+                message_count=1
             )
             
             response.room = chat_room
@@ -203,20 +205,22 @@ class ChatTemplateImpl(BaseTemplate):
             # 분석 요청이 있었던 경우 결과 추가
             if request.analysis_symbols:
                 for symbol in request.analysis_symbols:
-                    response.analysis_results.append({
-                        "type": "SENTIMENT",
-                        "result": "POSITIVE",
-                        "confidence": 0.85,
-                        "explanation": f"{symbol} 종목에 대한 긍정적 시각을 보여줍니다."
-                    })
+                    response.analysis_results.append(
+                        AnalysisResult(
+                            analysis_type="SENTIMENT",
+                            score=0.85,
+                            summary=f"{symbol} 종목에 대한 긍정적 시각을 보여줍니다."
+                        )
+                    )
                     
-                    response.recommendations.append({
-                        "type": "STOCK_RECOMMENDATION",
-                        "priority": "MEDIUM",
-                        "symbol": symbol,
-                        "action": "BUY",
-                        "reason": f"{symbol} 기술적 분석 결과 상승 신호"
-                    })
+                    response.recommendations.append(
+                        InvestmentRecommendation(
+                            symbol=symbol,
+                            action="BUY",
+                            reasoning=f"{symbol} 기술적 분석 결과 상승 신호",
+                            risk_level="MEDIUM"
+                        )
+                    )
             response.errorCode = 0
             
             Logger.info(f"Chat message processed: {message_id}")
@@ -258,13 +262,17 @@ class ChatTemplateImpl(BaseTemplate):
             response.messages = []
             for msg in messages_result:
                 if isinstance(msg, dict):  # 에러 체크
-                    response.messages.append({
-                        "message_id": msg.get('message_id'),
-                        "sender_type": msg.get('sender_type'),
-                        "message": msg.get('content'),
-                        "timestamp": str(msg.get('timestamp', datetime.now())),
-                        "is_analysis": msg.get('sender_type') == 'AI' and msg.get('metadata') is not None
-                    })
+                    response.messages.append(
+                        ChatMessage(
+                            message_id=str(msg.get('message_id') or ""),
+                            room_id=str(msg.get('room_id') or ""),
+                            sender_type=str(msg.get('sender_type') or ""),
+                            content=str(msg.get('content') or ""),
+                            metadata=msg.get('metadata'),  # 분석 정보가 있으면 여기에!
+                            timestamp=str(msg.get('timestamp', datetime.now())),
+                            is_streaming=False  # 필요시 True/False
+                        )
+                    )
             
             response.has_more = len(response.messages) >= request.limit
             response.errorCode = 0
@@ -323,17 +331,26 @@ class ChatTemplateImpl(BaseTemplate):
             
             # 가데이터로 응답 생성
             response.analyses = [
-                {
-                    "symbol": "AAPL",
-                    "analysis_type": "TECHNICAL",
-                    "score": 75.5,
-                    "recommendation": "BUY",
-                    "key_points": ["RSI 과매도", "이동평균선 상향돌파"]
-                }
+                AnalysisResult(
+                    symbol="AAPL",
+                    analysis_type="TECHNICAL",
+                    score=75.5,
+                    confidence=0.85,
+                    summary="RSI 과매도, 이동평균선 상향돌파",
+                    details={"key_points": ["RSI 과매도", "이동평균선 상향돌파"]},
+                    generated_at=str(datetime.now())
+                )
             ]
             response.market_sentiment = {"overall": "BULLISH", "tech_sector": "POSITIVE"}
             response.recommendations = [
-                {"symbol": "AAPL", "action": "BUY", "target_price": 180.0, "confidence": 0.85}
+                InvestmentRecommendation(
+                    symbol="AAPL",
+                    action="BUY",
+                    target_price=180.0,
+                    reasoning="기술적 분석 결과 상승 신호",
+                    risk_level="MEDIUM",
+                    time_horizon="MEDIUM"
+                )
             ]
             response.errorCode = 0
             
@@ -360,9 +377,24 @@ class ChatTemplateImpl(BaseTemplate):
             
             # 가데이터로 응답 생성
             response.personas = [
-                {"persona_id": "ANALYST", "name": "투자 분석가", "description": "기술적 분석 전문", "specialty": "차트 분석"},
-                {"persona_id": "ADVISOR", "name": "투자 상담사", "description": "포트폴리오 조언", "specialty": "자산 배분"},
-                {"persona_id": "RESEARCHER", "name": "리서치 전문가", "description": "기업 분석", "specialty": "펀더멘털 분석"}
+                AIPersona(
+                    persona_id="ANALYST",
+                    name="투자 분석가",
+                    description="기술적 분석 전문",
+                    specialty="차트 분석"
+                ),
+                AIPersona(
+                    persona_id="ADVISOR",
+                    name="투자 상담사",
+                    description="포트폴리오 조언",
+                    specialty="자산 배분"
+                ),
+                AIPersona(
+                    persona_id="RESEARCHER",
+                    name="리서치 전문가",
+                    description="기업 분석",
+                    specialty="펀더멘털 분석"
+                )
             ]
             response.recommended_persona = "ANALYST"
             response.errorCode = 0

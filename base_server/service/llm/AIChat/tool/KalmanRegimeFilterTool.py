@@ -8,10 +8,11 @@ from numpy.typing import NDArray
 from pydantic import BaseModel, Field
 
 # --- 외부 툴 의존부 ---
-from AIChat.BaseFinanceTool import BaseFinanceTool
-from AIChat.BasicTools.MacroEconomicTool import MacroEconomicTool
-from AIChat.BasicTools.TechnicalAnalysisTool import TechnicalAnalysisTool
-from AIChat.BasicTools.MarketDataTool import MarketDataTool, MarketDataInput
+from service.llm.AIChat.BaseFinanceTool import BaseFinanceTool
+from service.llm.AIChat.BasicTools.MacroEconomicTool import MacroEconomicTool
+from service.llm.AIChat.BasicTools.TechnicalAnalysisTool import TechnicalAnalysisTool
+from service.llm.AIChat.BasicTools.MarketDataTool import MarketDataTool, MarketDataInput
+from service.llm.AIChat_service import AIChatService
 
 __all__ = ["KalmanRegimeFilterTool"]
 
@@ -84,8 +85,8 @@ class KalmanRegimeFilterTool(BaseFinanceTool):
       2) 칼만 필터 업데이트
       3) 트레이딩 신호·리스크·경고 생성
     """
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, ai_chat_service: AIChatService):
+        self.ai_chat_service = ai_chat_service
         self.filter = KalmanRegimeFilterCore()
         self.max_latency = 5.0  # seconds
 
@@ -108,30 +109,44 @@ class KalmanRegimeFilterTool(BaseFinanceTool):
         inp = KalmanRegimeFilterInput(**kwargs)
 
         # 1️⃣ 데이터 수집
-        macro = MacroEconomicTool().get_data(series_ids=["GDP", "CPIAUCSL", "DEXKOUS"])
+        macro = MacroEconomicTool(self.ai_chat_service).get_data(series_ids=["GDP", "CPIAUCSL", "DEXKOUS"])
         gdp = self._find_value(macro.data, 'GDP')
         cpi = self._find_value(macro.data, 'CPIAUCSL')
         exchange_rate = self._find_value(macro.data, 'DEXKOUS', default=0.00072)
         if inp.exchange_rate.upper() == "KWR":
             inp.account_value *= exchange_rate 
              
-        ta_res = TechnicalAnalysisTool().get_data(tickers=inp.tickers).results[0]
+        results = TechnicalAnalysisTool(self.ai_chat_service).get_data(tickers=inp.tickers).results
+        if isinstance(results, list):
+            ta_res = results[0]
+        elif isinstance(results, dict):
+            ta_res = next(iter(results.values()))
+        else:
+            raise RuntimeError("results 타입이 예상과 다릅니다.")
         rsi, macd = ta_res.rsi, ta_res.macd
 
         md_inp = MarketDataInput(tickers=inp.tickers,
                                  start_date=inp.start_date,
                                  end_date=inp.end_date)
-        md_out = MarketDataTool().get_data(**md_inp.dict())
+        md_out = MarketDataTool(self.ai_chat_service).get_data(**md_inp.dict())
         vix = md_out.vix
         df = md_out.price_data.get(inp.tickers[0])
-        if df is None or df.empty:
+        if not df:
             raise RuntimeError(f"{inp.tickers[0]}의 가격 데이터를 찾을 수 없습니다.")
-        entry_price = float(df["Adj Close"].iloc[-1])
+        entry_price = float(df[-1].get("Adj Close", 0))
 
-        z = np.array([gdp, cpi, vix,
-                      0.5*(gdp+cpi),
-                      0.7*cpi + 0.3*vix,
-                      rsi, macd])
+        gdp = gdp if gdp is not None else 0.0
+        cpi = cpi if cpi is not None else 0.0
+        vix = vix if vix is not None else 0.0
+        rsi = rsi if rsi is not None else 0.0
+        macd = macd if macd is not None else 0.0
+
+        z = np.array([
+            gdp, cpi, vix,
+            0.5 * (gdp + cpi),
+            0.7 * cpi + 0.3 * vix,
+            rsi, macd
+        ])
 
         # 2️⃣ 칼만 필터
         self.filter.step(z)

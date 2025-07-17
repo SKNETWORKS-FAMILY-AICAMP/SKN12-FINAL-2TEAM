@@ -29,7 +29,7 @@ async def chat_room_list(request: ChatRoomListRequest, req: Request):
     """채팅방 목록 조회"""
     ip = req.headers.get("X-Forwarded-For")
     if not ip:
-        ip = req.client.host
+        ip = req.client.host if req.client else "unknown"
     else:
         ip = ip.split(", ")[0]
     return await TemplateService.run_user(
@@ -45,7 +45,7 @@ async def chat_room_create(request: ChatRoomCreateRequest, req: Request):
     """새 채팅방 생성"""
     ip = req.headers.get("X-Forwarded-For")
     if not ip:
-        ip = req.client.host
+        ip = req.client.host if req.client else "unknown"
     else:
         ip = ip.split(", ")[0]
     return await TemplateService.run_user(
@@ -61,7 +61,7 @@ async def chat_message_send(request: ChatMessageSendRequest, req: Request):
     """메시지 전송"""
     ip = req.headers.get("X-Forwarded-For")
     if not ip:
-        ip = req.client.host
+        ip = req.client.host if req.client else "unknown"
     else:
         ip = ip.split(", ")[0]
     return await TemplateService.run_user(
@@ -77,7 +77,7 @@ async def chat_message_list(request: ChatMessageListRequest, req: Request):
     """채팅 메시지 목록"""
     ip = req.headers.get("X-Forwarded-For")
     if not ip:
-        ip = req.client.host
+        ip = req.client.host if req.client else "unknown"
     else:
         ip = ip.split(", ")[0]
     return await TemplateService.run_user(
@@ -93,7 +93,7 @@ async def chat_summary(request: ChatSummaryRequest, req: Request):
     """채팅 요약"""
     ip = req.headers.get("X-Forwarded-For")
     if not ip:
-        ip = req.client.host
+        ip = req.client.host if req.client else "unknown"
     else:
         ip = ip.split(", ")[0]
     return await TemplateService.run_user(
@@ -109,7 +109,7 @@ async def chat_analysis(request: ChatAnalysisRequest, req: Request):
     """종목 분석"""
     ip = req.headers.get("X-Forwarded-For")
     if not ip:
-        ip = req.client.host
+        ip = req.client.host if req.client else "unknown"
     else:
         ip = ip.split(", ")[0]
     return await TemplateService.run_user(
@@ -125,7 +125,7 @@ async def chat_persona_list(request: ChatPersonaListRequest, req: Request):
     """AI 페르소나 목록"""
     ip = req.headers.get("X-Forwarded-For")
     if not ip:
-        ip = req.client.host
+        ip = req.client.host if req.client else "unknown"
     else:
         ip = ip.split(", ")[0]
     return await TemplateService.run_user(
@@ -141,7 +141,7 @@ async def chat_room_delete(request: ChatRoomDeleteRequest, req: Request):
     """채팅방 삭제"""
     ip = req.headers.get("X-Forwarded-For")
     if not ip:
-        ip = req.client.host
+        ip = req.client.host if req.client else "unknown"
     else:
         ip = ip.split(", ")[0]
     return await TemplateService.run_user(

@@ -1,5 +1,5 @@
 from typing import Dict, Optional, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 
 class LlmProviderConfig(BaseModel):
     provider: str            # openai, anthropic, etc.

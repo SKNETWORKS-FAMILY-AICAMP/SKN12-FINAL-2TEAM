@@ -23,6 +23,8 @@ class ServiceContainer:
     _lock_service_initialized: bool = False
     _scheduler_service_initialized: bool = False
     _queue_service_initialized: bool = False
+    _llm_instance = None
+    _llm_stream_instance = None
     
     def __new__(cls):
         if cls._instance is None:
@@ -44,10 +46,72 @@ class ServiceContainer:
         return container._database_service
     
     @classmethod
-    def get_cache_service(cls) -> CacheService:
+    def get_cache_service(cls):
         """CacheService 인스턴스 반환"""
         # CacheService는 이미 싱글톤으로 구현되어 있음
         return CacheService
+    
+    @classmethod
+    def get_llm(cls):
+        """LLM 인스턴스 반환"""
+        container = cls()
+        if container._llm_instance is None:
+            # LLM 인스턴스가 없으면 기본값 반환 (실제로는 설정에서 가져와야 함)
+            try:
+                from langchain_openai import ChatOpenAI
+                import os
+                api_key = os.getenv("OPENAI_API_KEY")
+                if api_key:
+                    container._llm_instance = ChatOpenAI(model="gpt-4", temperature=0)
+                else:
+                    raise RuntimeError("OPENAI_API_KEY not found")
+            except ImportError:
+                raise RuntimeError("langchain_openai not available")
+        return container._llm_instance
+    
+    @classmethod
+    def get_llm_stream(cls):
+        """스트리밍용 LLM 인스턴스 반환"""
+        container = cls()
+        if container._llm_stream_instance is None:
+            try:
+                from langchain_openai import ChatOpenAI
+                import os
+                api_key = os.getenv("OPENAI_API_KEY")
+                if api_key:
+                    container._llm_stream_instance = ChatOpenAI(model="gpt-4o", temperature=0, streaming=True)
+                else:
+                    raise RuntimeError("OPENAI_API_KEY not found")
+            except ImportError:
+                raise RuntimeError("langchain_openai not available")
+        return container._llm_stream_instance
+    
+    @classmethod
+    def set_llm(cls, llm_instance):
+        """LLM 인스턴스 설정"""
+        container = cls()
+        container._llm_instance = llm_instance
+    
+    @classmethod
+    def set_llm_stream(cls, llm_stream_instance):
+        """스트리밍용 LLM 인스턴스 설정"""
+        container = cls()
+        container._llm_stream_instance = llm_stream_instance
+    
+    @classmethod
+    def get_lock_service(cls):
+        """LockService 인스턴스 반환"""
+        try:
+            from service.lock.lock_service import LockService
+            return LockService
+        except ImportError:
+            raise RuntimeError("LockService not available")
+    
+    @classmethod
+    def get_redis_url(cls) -> str:
+        """URL 반환"""
+        import os
+        return os.getenv("REDIS_URL", "redis://localhost:6379")
     
     @classmethod
     def set_lock_service_initialized(cls, initialized: bool):
@@ -71,7 +135,10 @@ class ServiceContainer:
     def set_cache_service_initialized(cls, initialized: bool):
         """CacheService 초기화 상태 설정"""
         container = cls()
-        container._cache_service = CacheService if initialized else None
+        if initialized:
+            container._cache_service = CacheService()  # 생성자 사용
+        else:
+            container._cache_service = None
     
     @classmethod
     def set_external_service(cls, service: Optional[ExternalService]):
@@ -132,7 +199,9 @@ class ServiceContainer:
             "cache": container._cache_service is not None,
             "lock": container._lock_service_initialized,
             "scheduler": container._scheduler_service_initialized,
-            "queue": container._queue_service_initialized
+            "queue": container._queue_service_initialized,
+            "llm": container._llm_instance is not None,
+            "llm_stream": container._llm_stream_instance is not None
         }
         
         # Singleton 패턴 서비스들 (동적 import로 순환 import 방지)

@@ -1,8 +1,9 @@
 import os
 import requests
 from typing import Optional, List, Dict, Any
-from AIChat.BaseFinanceTool import BaseFinanceTool
+from service.llm.AIChat.BaseFinanceTool import BaseFinanceTool
 from pydantic import BaseModel, Field
+from service.llm.AIChat_service import AIChatService
 
 class NewsInput(BaseModel):
     query: str = Field(..., description="검색할 뉴스 키워드 또는 종목 코드 (예: 'TSLA', '금리 인상')")
@@ -31,11 +32,8 @@ class NewsOutput(BaseModel):
 class NewsTool(BaseFinanceTool):
     BASE_URL = "https://gnews.io/api/v4/search"
 
-    def __init__(self, api_key: Optional[str] = os.getenv("NEWSAPI_KEY")):
-        super().__init__("NEWSAPI_KEY" if api_key is None else None)
-        self.api_key = api_key or os.getenv("NEWSAPI_KEY")
-        if not self.api_key:
-            raise ValueError("❌ NEWSAPI_KEY 설정돼 있지 않습니다.")
+    def __init__(self, ai_chat_service: AIChatService):
+        self.ai_chat_service = ai_chat_service
 
     # **params로 받도록 변경!
     def get_data(self, **kwargs) -> NewsOutput:
@@ -44,10 +42,11 @@ class NewsTool(BaseFinanceTool):
         except Exception as e:
             return NewsOutput(agent="error", summary=f"❌ 매개변수 오류: {e}")
 
+        api_key = self.ai_chat_service.llm_config.API_Key.NEWSAPI_KEY
         params = {
             "q": input.query,
             "lang": "en",
-            "token": self.api_key,
+            "token": api_key,
             "max": input.k
         }
 

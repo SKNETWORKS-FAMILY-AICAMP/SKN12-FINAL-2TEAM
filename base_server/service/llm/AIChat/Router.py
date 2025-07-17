@@ -13,15 +13,15 @@ from langgraph.graph import StateGraph, MessagesState, END
 from langgraph.prebuilt import ToolNode
 from langchain_core.prompts import ChatPromptTemplate
 # ──────────────────────────── -1. 기본 모듈 임포트
-from AIChat.BasicTools.FinancialStatementTool import FinancialStatementTool, FinancialStatementParams
-from AIChat.BasicTools.MacroEconomicTool import MacroEconomicTool, MacroEconomicInput
-from AIChat.BasicTools.SectorAnalysisTool import SectorAnalysisTool, SectorAnalysisInput
-from AIChat.BasicTools.TechnicalAnalysisTool import TechnicalAnalysisTool, TechnicalAnalysisInput
-from AIChat.BasicTools.MarketDataTool import MarketDataTool, MarketDataInput
-from AIChat.BasicTools.NewsTool import NewsTool, NewsInput
-from AIChat.BasicTools.IndustryAnalysisTool import IndustryAnalysisTool, IndustryAnalysisInput
-from AIChat.tool.MarketRegimeDetectorTool import MarketRegimeDetector, MarketRegimeDetectorInput
-from AIChat.tool.KalmanRegimeFilterTool import KalmanRegimeFilterTool, KalmanRegimeFilterInput
+from service.llm.AIChat.BasicTools.FinancialStatementTool import FinancialStatementTool, FinancialStatementParams
+from service.llm.AIChat.BasicTools.MacroEconomicTool import MacroEconomicTool, MacroEconomicInput
+from service.llm.AIChat.BasicTools.SectorAnalysisTool import SectorAnalysisTool, SectorAnalysisInput
+from service.llm.AIChat.BasicTools.TechnicalAnalysisTool import TechnicalAnalysisTool, TechnicalAnalysisInput
+from service.llm.AIChat.BasicTools.MarketDataTool import MarketDataTool, MarketDataInput
+from service.llm.AIChat.BasicTools.NewsTool import NewsTool, NewsInput
+from service.llm.AIChat.BasicTools.IndustryAnalysisTool import IndustryAnalysisTool, IndustryAnalysisInput
+from service.llm.AIChat.tool.MarketRegimeDetectorTool import MarketRegimeDetector, MarketRegimeDetectorInput
+from service.llm.AIChat.tool.KalmanRegimeFilterTool import KalmanRegimeFilterTool, KalmanRegimeFilterInput
 
 # ──────────────────────────── 0. 환경 변수
 load_dotenv()
@@ -87,7 +87,7 @@ def technical_analysis(**params):
     """종목들의 기술적 지표 (RSI, MACD, EMA)를 분석합니다."""
     agent = TechnicalAnalysisTool()
     results = agent.get_data(**params)
-    return "\n".join([r.summary for r in results.results])
+    return "\n".join([r if isinstance(r, str) else r.summary for r in results.results])
 
 @tool(args_schema=MarketDataInput)
 def market_data(**params):
