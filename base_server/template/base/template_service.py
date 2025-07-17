@@ -97,7 +97,7 @@ class TemplateService:
                 if 'account_info' in j_obj:
                     del j_obj['account_info']
                 
-                res_json = json.dumps(j_obj)
+                res_json = json.dumps(j_obj, ensure_ascii=False)
                 
                 account_db_key = getattr(client_session.session, 'account_db_key', 0) if client_session else 0
                 Logger.info(f"RES[{method}:{path}, IP:{ip_address} - ACCOUNT_KEY: {account_db_key}]: {res_json}")
@@ -256,7 +256,7 @@ class TemplateService:
                     "shard_id": session_info.shard_id
                 }
                 session_key = f"sessionInfo:{access_token}"
-                await client.set_string(session_key, json.dumps(session_dict), expire=client.session_expire_time)
+                await client.set_string(session_key, json.dumps(session_dict, ensure_ascii=False), expire=client.session_expire_time)
                 
                 Logger.info(f"Session created: account_db_key={session_info.account_db_key}, shard_id={session_info.shard_id}")
                 return ClientSession(access_token, session_info)
@@ -427,9 +427,9 @@ class TemplateService:
         if hasattr(res, 'model_dump_json'):
             return res.model_dump_json()
         elif hasattr(res, '__dict__'):
-            return json.dumps(res.__dict__)
+            return json.dumps(res.__dict__, ensure_ascii=False)
         else:
-            return json.dumps(str(res))
+            return json.dumps(str(res), ensure_ascii=False)
     
     @classmethod
     async def _handle_session_creation(cls, res_json: str, method: str, path: str, ip_address: str) -> None:
@@ -470,7 +470,7 @@ class TemplateService:
         else:
             response = BaseResponse()
             response.errorCode = ex.error_code
-            res_json = json.dumps(response.__dict__)
+            res_json = json.dumps(response.__dict__, ensure_ascii=False)
         
         Logger.info(f"RES[{method}:{path}, IP:{ip_address}]: {res_json}")
         return res_json
@@ -483,7 +483,7 @@ class TemplateService:
         
         response = BaseResponse()
         response.errorCode = getattr(ENetErrorCode, 'FATAL', -1)
-        res_json = json.dumps(response.__dict__)
+        res_json = json.dumps(response.__dict__, ensure_ascii=False)
         
         Logger.info(f"RES[{method}:{path}, IP:{ip_address}]: {res_json}")
         return res_json
@@ -503,7 +503,7 @@ class TemplateService:
             account_id = getattr(client_session.session, 'account_id', '')
             
             # 로그인 카운트 기반 첫 로그인 체크
-            is_first_login = await cls._check_is_first_login_by_count(db_service, account_db_key, account_id)
+            is_first_login = await TemplateService._check_is_first_login_by_count(db_service, account_db_key, account_id)
             
             if is_first_login:
                 Logger.info(f"첫 로그인 감지 - 템플릿 CreateClient 호출: account_db_key={account_db_key}")
@@ -522,23 +522,25 @@ class TemplateService:
             # 1. 계정 복구 체크
             if '_restore' in account_id:
                 Logger.info(f"계정 복구 감지: {account_id}")
-                await cls._process_account_restore(db_service, account_db_key, account_id)
+                await TemplateService._process_account_restore(db_service, account_db_key, account_id)
                 return True
             
-            # 2. 현재 로그인 카운트 조회
-            query = "SELECT login_count FROM table_accountid WHERE account_db_key = %s"
-            result = await db_service.call_global_read_query(query, (account_db_key,))
+            # 2. 로그인 카운트로 첫 로그인 체크 (가장 정확한 방법)
+            count_query = "SELECT login_count FROM table_accountid WHERE account_db_key = %s"
+            count_result = await db_service.execute_global_query(count_query, (account_db_key,))
             
-            if result and len(result) > 0:
-                login_count = result[0].get('login_count', 0)
+            if count_result and len(count_result) > 0:
+                login_count = count_result[0].get('login_count', 0)
                 
                 # 로그인 카운트 증가
-                await cls._increment_login_count(db_service, account_db_key)
+                await TemplateService._increment_login_count(db_service, account_db_key)
                 
-                # 첫 로그인 판정 (카운트가 0이면 첫 로그인)
+                # 로그인 카운트가 0이면 첫 로그인
                 if login_count == 0:
                     Logger.info(f"첫 로그인 감지: login_count={login_count}")
                     return True
+                else:
+                    Logger.info(f"재로그인 감지: login_count={login_count}")
             
             return False
             
@@ -556,8 +558,7 @@ class TemplateService:
                     login_time = NOW()
                 WHERE account_db_key = %s
             """
-            
-            await db_service.call_global_procedure_update(query, (account_db_key,))
+            await db_service.execute_global_query(query, (account_db_key,))
             
         except Exception as e:
             Logger.error(f"로그인 카운트 업데이트 실패: {e}")
@@ -571,12 +572,11 @@ class TemplateService:
             query = """
                 UPDATE table_accountid 
                 SET account_id = %s,
-                    login_count = 1,
                     login_time = NOW()
                 WHERE account_db_key = %s
             """
             
-            await db_service.call_global_procedure_update(query, (new_account_id, account_db_key))
+            await db_service.execute_global_query(query, (new_account_id, account_db_key))
             Logger.info(f"계정 복구 완료: {account_db_key} -> {new_account_id}")
             
         except Exception as e:

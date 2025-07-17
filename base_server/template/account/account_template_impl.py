@@ -50,7 +50,8 @@ class AccountTemplateImpl(AccountTemplate):
     def on_client_create(self, db_client, client_session):
         """신규 클라이언트 생성 시 호출"""
         try:
-            Logger.info(f"Account: 신규 클라이언트 생성 - User ID: {client_session.user_id}")
+            account_db_key = getattr(client_session.session, 'account_db_key', 0) if client_session.session else 0
+            Logger.info(f"Account: 신규 클라이언트 생성 - Account DB Key: {account_db_key}")
             
             # 예: 신규 유저 기본 아이템 지급
             items_table = DataTableManager.get_table("items")
@@ -69,7 +70,8 @@ class AccountTemplateImpl(AccountTemplate):
     def on_client_update(self, db_client, client_session):
         """클라이언트 업데이트 시 호출"""
         try:
-            Logger.info(f"Account: 클라이언트 업데이트 - User ID: {client_session.user_id}")
+            account_db_key = getattr(client_session.session, 'account_db_key', 0) if client_session.session else 0
+            Logger.info(f"Account: 클라이언트 업데이트 - Account DB Key: {account_db_key}")
             # 예: 로그인 시간 업데이트, 일일 보상 체크 등
         except Exception as e:
             Logger.error(f"Account 클라이언트 업데이트 처리 실패: {e}")
