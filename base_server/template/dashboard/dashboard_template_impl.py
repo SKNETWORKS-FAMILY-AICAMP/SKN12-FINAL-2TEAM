@@ -21,11 +21,7 @@ class DashboardTemplateImpl(BaseTemplate):
         Logger.info(f"Dashboard main request: period={request.chart_period}")
         
         try:
-            if not client_session or not client_session.session:
-                response.errorCode = 2001
-                Logger.info("Dashboard main failed: no session")
-                return response
-            
+            # 세션에서 사용자 정보 가져오기 (세션 검증은 template_service에서 이미 완료)
             account_db_key = getattr(client_session.session, 'account_db_key', 0)
             shard_id = getattr(client_session.session, 'shard_id', 1)
             

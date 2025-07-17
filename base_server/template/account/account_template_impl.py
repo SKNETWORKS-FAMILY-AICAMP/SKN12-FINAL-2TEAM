@@ -264,19 +264,9 @@ class AccountTemplateImpl(AccountTemplate):
         Logger.info(f"Account info request received")
         
         try:
-            if not client_session or not client_session.session:
-                response.errorCode = 2001  # 세션 없음
-                Logger.info("Account info failed: no session")
-                return response
-            
-            # 세션에서 사용자 정보 가져오기
+            # 세션에서 사용자 정보 가져오기 (세션 검증은 template_service에서 이미 완료)
             account_db_key = getattr(client_session.session, 'account_db_key', 0)
             shard_id = getattr(client_session.session, 'shard_id', 1)
-            
-            if account_db_key == 0:
-                response.errorCode = 2002  # 잘못된 세션
-                Logger.info("Account info failed: invalid session")
-                return response
             
             # 데이터베이스 서비스 가져오기
             db_service = ServiceContainer.get_database_service()
@@ -492,38 +482,95 @@ class AccountTemplateImpl(AccountTemplate):
         Logger.info("Profile setup request received")
         
         try:
-            if not client_session or not client_session.session:
-                response.errorCode = 2001
+            # 1. 세션에서 사용자 정보 가져오기 (세션 검증은 template_service에서 이미 완료)
+            account_db_key = getattr(client_session.session, 'account_db_key', 0)
+            
+            # 2. 입력값 검증
+            if not all([request.investment_experience, request.risk_tolerance, 
+                       request.investment_goal]) or request.monthly_budget < 0:
+                response.errorCode = 2004
+                response.message = "필수 입력값이 누락되었거나 잘못되었습니다"
+                Logger.error("Profile setup failed: Invalid input values")
                 return response
             
-            account_db_key = getattr(client_session.session, 'account_db_key', 0)
             db_service = ServiceContainer.get_database_service()
-            # 프로필 정보 저장
-            profile = UserProfile(
-                account_db_key=account_db_key,
-                investment_experience=request.investment_experience,
-                risk_tolerance=request.risk_tolerance,
-                investment_goal=request.investment_goal,
-                monthly_budget=request.monthly_budget,
-                profile_completed=True
-            )
-            # login_count += 1
-            try:
-                await db_service.call_global_procedure_update(
-                    "UPDATE table_accountid SET login_count = login_count + 1 WHERE account_db_key = %s",
-                    (account_db_key,)
-                )
-                Logger.info(f"login_count incremented for account_db_key={account_db_key}")
-            except Exception as e:
-                Logger.error(f"login_count increment failed: {e}")
             
+            # 3. DB에 프로필 정보 저장
+            profile_result = await db_service.call_global_procedure(
+                "fp_profile_setup",
+                (
+                    account_db_key,
+                    request.investment_experience,
+                    request.risk_tolerance,
+                    request.investment_goal,
+                    request.monthly_budget,
+                    request.birth_year,
+                    request.birth_month,
+                    request.birth_day,
+                    request.gender
+                )
+            )
+            
+            if not profile_result or profile_result[0].get('result') != 'SUCCESS':
+                response.errorCode = 2002
+                response.message = "프로필 저장 실패"
+                Logger.error(f"Profile setup failed for account_db_key={account_db_key}")
+                return response
+            
+            # 4. 저장된 프로필 정보 조회 (최신 데이터 반환)
+            profile_get_result = await db_service.call_global_procedure(
+                "fp_profile_get",
+                (account_db_key,)
+            )
+            
+            if profile_get_result and len(profile_get_result) > 0:
+                profile_data = profile_get_result[0]
+                profile = UserProfile(
+                    account_id=profile_data.get('account_id', ''),
+                    nickname=profile_data.get('nickname', ''),
+                    email=profile_data.get('email', ''),
+                    investment_experience=profile_data.get('investment_experience', request.investment_experience),
+                    risk_tolerance=profile_data.get('risk_tolerance', request.risk_tolerance),
+                    investment_goal=profile_data.get('investment_goal', request.investment_goal),
+                    monthly_budget=float(profile_data.get('monthly_budget', request.monthly_budget)),
+                    birth_year=profile_data.get('birth_year', request.birth_year),       # 설정된 출생년도
+                    birth_month=profile_data.get('birth_month', request.birth_month),   # 설정된 출생월
+                    birth_day=profile_data.get('birth_day', request.birth_day),         # 설정된 출생일
+                    gender=profile_data.get('gender', request.gender),                  # 설정된 성별
+                    profile_completed=True
+                )
+            else:
+                # 조회 실패 시 요청 데이터로 응답 생성
+                profile = UserProfile(
+                    account_id=getattr(client_session.session, 'account_id', ''),
+                    nickname='',
+                    email='',
+                    investment_experience=request.investment_experience,
+                    risk_tolerance=request.risk_tolerance,
+                    investment_goal=request.investment_goal,
+                    monthly_budget=request.monthly_budget,
+                    birth_year=request.birth_year,       # 요청에서 받은 출생년도
+                    birth_month=request.birth_month,     # 요청에서 받은 출생월
+                    birth_day=request.birth_day,         # 요청에서 받은 출생일
+                    gender=request.gender,               # 요청에서 받은 성별
+                    profile_completed=True
+                )
+            
+            # 5. 포트폴리오 초기화 (프로필 설정 완료 시)
+            shard_id = getattr(client_session.session, 'shard_id', 1)
+            await self._initialize_user_portfolio_in_shard(db_service, account_db_key, shard_id, request.monthly_budget)
+            
+            # 6. 성공 응답 설정
             response.errorCode = 0
             response.profile = profile
             response.message = "프로필 설정 완료"
             response.next_step = "TUTORIAL"
             
+            Logger.info(f"Profile setup completed successfully for account_db_key={account_db_key}")
+            
         except Exception as e:
             response.errorCode = 1000
+            response.message = "프로필 설정 중 오류가 발생했습니다"
             Logger.error(f"Profile setup error: {e}")
         
         return response
@@ -533,30 +580,93 @@ class AccountTemplateImpl(AccountTemplate):
         response = AccountProfileGetResponse()
         response.sequence = request.sequence
         
+        Logger.info("Profile get request received")
+        
         try:
-            if not client_session or not client_session.session:
-                response.errorCode = 2001
-                return response
-            
+            # 1. 세션에서 사용자 정보 가져오기 (세션 검증은 template_service에서 이미 완료)
             account_db_key = getattr(client_session.session, 'account_db_key', 0)
             
-            # 샘플 프로필 데이터
-            profile = UserProfile(
-                account_id="user@example.com",
-                nickname="투자왕",
-                email="user@example.com",
-                investment_experience="INTERMEDIATE",
-                risk_tolerance="MODERATE",
-                investment_goal="GROWTH",
-                monthly_budget=100000.0,
-                profile_completed=True
+            db_service = ServiceContainer.get_database_service()
+            
+            # 2. DB에서 프로필 조회
+            profile_result = await db_service.call_global_procedure(
+                "fp_profile_get",
+                (account_db_key,)
             )
             
+            if not profile_result or len(profile_result) == 0:
+                # 프로필이 없는 경우 기본 프로필 정보 반환
+                Logger.warn(f"Profile not found for account_db_key={account_db_key}, returning default profile")
+                
+                # 기본 계정 정보 조회
+                account_query = """
+                SELECT account_id, nickname, email 
+                FROM table_accountid 
+                WHERE account_db_key = %s
+                """
+                account_result = await db_service.execute_global_query(account_query, (account_db_key,))
+                
+                if account_result and len(account_result) > 0:
+                    account_data = account_result[0]
+                    profile = UserProfile(
+                        account_id=account_data.get('account_id', ''),
+                        nickname=account_data.get('nickname', ''),
+                        email=account_data.get('email', ''),
+                        investment_experience='BEGINNER',
+                        risk_tolerance='MODERATE',
+                        investment_goal='GROWTH',
+                        monthly_budget=0.0,
+                        birth_year=None,        # 프로필 미설정 시 None
+                        birth_month=None,       # 프로필 미설정 시 None
+                        birth_day=None,         # 프로필 미설정 시 None
+                        gender=None,            # 프로필 미설정 시 None
+                        profile_completed=False
+                    )
+                    
+                    response.errorCode = 0
+                    response.profile = profile
+                    response.message = "프로필이 설정되지 않았습니다. 프로필을 설정해주세요."
+                else:
+                    response.errorCode = 2003
+                    response.message = "계정 정보를 찾을 수 없습니다"
+                
+                return response
+            
+            # 3. 조회된 데이터로 프로필 객체 생성 (클라이언트용)
+            profile_data = profile_result[0]
+            
+            # 데이터 타입 안전성 보장
+            try:
+                monthly_budget = float(profile_data.get('monthly_budget', 0.0))
+            except (ValueError, TypeError):
+                monthly_budget = 0.0
+                Logger.warn(f"Invalid monthly_budget value for account_db_key={account_db_key}")
+            
+            profile = UserProfile(
+                account_id=profile_data.get('account_id', ''),
+                nickname=profile_data.get('nickname', ''),
+                email=profile_data.get('email', ''),
+                investment_experience=profile_data.get('investment_experience', 'BEGINNER'),
+                risk_tolerance=profile_data.get('risk_tolerance', 'MODERATE'),
+                investment_goal=profile_data.get('investment_goal', 'GROWTH'),
+                monthly_budget=monthly_budget,
+                birth_year=profile_data.get('birth_year'),          # DB에서 조회된 출생년도
+                birth_month=profile_data.get('birth_month'),        # DB에서 조회된 출생월
+                birth_day=profile_data.get('birth_day'),            # DB에서 조회된 출생일
+                gender=profile_data.get('gender'),                  # DB에서 조회된 성별
+                profile_completed=bool(profile_data.get('profile_completed', 0))
+            )
+            
+            # 4. 성공 응답 설정
             response.errorCode = 0
             response.profile = profile
+            response.message = "프로필 조회 성공" if profile.profile_completed else "프로필 설정을 완료해주세요"
+            
+            Logger.info(f"Profile retrieved successfully for account_db_key={account_db_key}, completed={profile.profile_completed}")
             
         except Exception as e:
             response.errorCode = 1000
+            response.message = "프로필 조회 중 오류가 발생했습니다"
             Logger.error(f"Profile get error: {e}")
         
         return response
@@ -566,20 +676,123 @@ class AccountTemplateImpl(AccountTemplate):
         response = AccountProfileUpdateResponse()
         response.sequence = request.sequence
         
+        Logger.info("Profile update request received")
+        
         try:
-            if not client_session or not client_session.session:
-                response.errorCode = 2001
+            # 세션에서 사용자 정보 가져오기 (세션 검증은 template_service에서 이미 완료)
+            account_db_key = getattr(client_session.session, 'account_db_key', 0)
+            
+            db_service = ServiceContainer.get_database_service()
+            
+            # 1. DB에 프로필 업데이트 (기존 fp_profile_setup 재사용)
+            profile_result = await db_service.call_global_procedure(
+                "fp_profile_setup",
+                (
+                    account_db_key,
+                    request.investment_experience,
+                    request.risk_tolerance,
+                    request.investment_goal,
+                    request.monthly_budget,
+                    request.birth_year,
+                    request.birth_month,
+                    request.birth_day,
+                    request.gender
+                )
+            )
+            
+            if not profile_result or profile_result[0].get('result') != 'SUCCESS':
+                response.errorCode = 2002
+                response.message = "프로필 업데이트 실패"
+                Logger.error(f"Profile update failed for account_db_key={account_db_key}")
                 return response
             
-            # 프로필 업데이트 로직
+            # 2. 업데이트된 프로필 조회
+            updated_result = await db_service.call_global_procedure(
+                "fp_profile_get",
+                (account_db_key,)
+            )
+            
+            if updated_result and len(updated_result) > 0:
+                profile_data = updated_result[0]
+                profile = UserProfile(
+                    account_id=profile_data.get('account_id', ''),
+                    nickname=profile_data.get('nickname', ''),
+                    email=profile_data.get('email', ''),
+                    investment_experience=profile_data.get('investment_experience', 'BEGINNER'),
+                    risk_tolerance=profile_data.get('risk_tolerance', 'MODERATE'),
+                    investment_goal=profile_data.get('investment_goal', 'GROWTH'),
+                    monthly_budget=float(profile_data.get('monthly_budget', 0.0)),
+                    birth_year=profile_data.get('birth_year'),          # 업데이트된 출생년도
+                    birth_month=profile_data.get('birth_month'),        # 업데이트된 출생월
+                    birth_day=profile_data.get('birth_day'),            # 업데이트된 출생일
+                    gender=profile_data.get('gender'),                  # 업데이트된 성별
+                    profile_completed=bool(profile_data.get('profile_completed', 0))
+                )
+                response.profile = profile
+            
             response.errorCode = 0
             response.message = "프로필이 업데이트되었습니다"
             
+            Logger.info(f"Profile updated successfully for account_db_key={account_db_key}")
+            
         except Exception as e:
             response.errorCode = 1000
+            response.message = "프로필 업데이트 중 오류가 발생했습니다"
             Logger.error(f"Profile update error: {e}")
         
         return response
+
+    async def _initialize_user_portfolio_in_shard(self, db_service, account_db_key: int, shard_id: int, monthly_budget: float):
+        """샤드 DB에 사용자 포트폴리오 초기화 (프로필 설정 완료 시)"""
+        try:
+            Logger.info(f"Initializing portfolio in shard {shard_id} for account_db_key={account_db_key}")
+            
+            # 1. 샤드 DB에 투자 계좌 생성 (fp_create_account 프로시저 사용)
+            account_result = await db_service.call_shard_procedure(
+                shard_id,
+                "fp_create_account",
+                (account_db_key, "investment")
+            )
+            
+            if account_result and len(account_result) > 0:
+                account_data = account_result[0]
+                if account_data.get('result') == 'SUCCESS':
+                    account_number = account_data.get('account_number', '')
+                    Logger.info(f"Investment account created: {account_number} for account_db_key={account_db_key}")
+                elif account_data.get('result') == 'EXISTS':
+                    Logger.info(f"Investment account already exists for account_db_key={account_db_key}")
+                else:
+                    Logger.warn(f"Account creation failed: {account_data}")
+                    return
+            
+            # 2. 포트폴리오 테이블에 초기 현금 설정
+            initial_cash = max(monthly_budget * 12, 1000000.0)  # 최소 100만원
+            
+            # 기존 포트폴리오 확인
+            portfolio_check = await db_service.execute_shard_query(
+                shard_id,
+                "SELECT COUNT(*) as portfolio_count FROM table_user_portfolios WHERE account_db_key = %s",
+                (account_db_key,)
+            )
+            
+            if portfolio_check and portfolio_check[0].get('portfolio_count', 0) == 0:
+                # 새 포트폴리오 생성 (현금 포지션으로 시작)
+                await db_service.execute_shard_query(
+                    shard_id,
+                    """
+                    INSERT INTO table_user_portfolios 
+                    (account_db_key, asset_code, asset_type, quantity, average_cost, current_value, last_updated) 
+                    VALUES (%s, 'KRW', 'CASH', %s, 1.0, %s, NOW())
+                    """,
+                    (account_db_key, initial_cash, initial_cash)
+                )
+                Logger.info(f"Portfolio initialized with {initial_cash:,.0f} KRW cash for account_db_key={account_db_key}")
+            else:
+                Logger.info(f"Portfolio already exists for account_db_key={account_db_key}")
+                
+        except Exception as e:
+            Logger.error(f"Portfolio initialization failed for account_db_key={account_db_key} in shard {shard_id}: {e}")
+            # 포트폴리오 초기화 실패는 프로필 설정을 중단시키지 않음
 
     async def on_account_token_refresh_req(self, client_session, request: AccountTokenRefreshRequest):
         """토큰 갱신"""
