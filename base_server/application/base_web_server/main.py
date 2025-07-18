@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 sys.path.insert(0, project_root)
 from contextlib import asynccontextmanager
-from service.core.logger import Logger, ConsoleLogger
+from service.core.logger import Logger, ConsoleLogger, FileLogger
 from service.core.argparse_util import parse_log_level, parse_app_env
 from template.base.template_context import TemplateContext, TemplateType
 from template.account.account_template_impl import AccountTemplateImpl
@@ -72,8 +72,19 @@ database_service = None
 async def lifespan(app: FastAPI):
     global database_service
     
-    Logger.init(ConsoleLogger(log_level)) #파일로 수정
+    # FileLogger로 변경 - 콘솔과 파일에 동시 출력
+    file_logger = FileLogger(
+        log_level=log_level,
+        use_console=True,  # 콘솔에도 출력
+        prefix="base_web_server",  # 로그 파일 접두사
+        folder="logs",  # 로그 디렉토리
+        crash_report_url=None,  # 크래시 리포트 URL (옵션)
+        timezone="KST",  # 한국 시간대 사용
+        max_file_size_kb=10240  # 10MB 제한
+    )
+    Logger.init(file_logger)
     Logger.info(f"base_web_server 시작 (로그레벨: {log_level.name}, 환경: {app_env}, config: {config_file})")
+    Logger.info(f"로그 파일 경로: {file_logger._log_file_path}")
     
     try:
         with open(config_file, "r", encoding="utf-8") as f:
@@ -394,7 +405,6 @@ async def lifespan(app: FastAPI):
         # 큐 시스템 초기화 상태 및 발행/수신 동작 확인
         if CacheService.is_initialized() and QueueService._initialized:
             try:
-                import asyncio
                 from datetime import datetime
                 from service.queue.message_queue import MessagePriority
                 from service.queue.event_queue import EventType
@@ -559,15 +569,6 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         Logger.error(f"DataTableManager 정리 오류: {e}")
     
-    # QueueService 종료 (큐 처리 완료 후)
-    try:
-        if QueueService._initialized:
-            await QueueService.shutdown()
-            ServiceContainer.set_queue_service_initialized(False)
-            Logger.info("QueueService 종료")
-    except Exception as e:
-        Logger.error(f"QueueService 종료 오류: {e}")
-    
     # SchedulerService 종료 (스케줄된 작업 완료 후)
     try:
         if SchedulerService.is_initialized():
@@ -576,6 +577,15 @@ async def lifespan(app: FastAPI):
             Logger.info("SchedulerService 종료")
     except Exception as e:
         Logger.error(f"SchedulerService 종료 오류: {e}")
+    
+    # QueueService 종료 (큐 처리 완료 후)
+    try:
+        if QueueService._initialized:
+            await QueueService.shutdown()
+            ServiceContainer.set_queue_service_initialized(False)
+            Logger.info("QueueService 종료")
+    except Exception as e:
+        Logger.error(f"QueueService 종료 오류: {e}")
     
     # LockService 종료 (분산락 해제)
     try:
@@ -618,7 +628,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         Logger.error(f"External 서비스 종료 오류: {e}")
         
-    # 캐시 서비스 종료 (Redis 연결)
+    # 캐시 서비스 종료 (Redis 연결) - CacheService 의존 서비스들 이후 종료
     try:
         if CacheService.is_initialized():
             await CacheService.shutdown()
@@ -661,9 +671,8 @@ async def lifespan(app: FastAPI):
         
         # Logger 정리 - 마지막에 수행
         Logger.info("Logger 종료 중...")
-        # Logger가 ConsoleLogger인 경우 특별한 정리 불필요하지만
-        # 향후 파일 로거 등으로 변경될 경우를 대비
         await asyncio.sleep(0.1)  # 마지막 로그 출력 대기
+        Logger.shutdown()  # 파일 로거의 경우 큐 비우고 스레드 종료
     except Exception as e:
         Logger.error(f"전역 리소스 정리 오류: {e}")
 
@@ -691,7 +700,6 @@ signal.signal(signal.SIGTERM, signal_handler)
 
 async def test_queue_systems():
     """큐 시스템 종합 테스트 - 메시지큐와 이벤트큐 발행/수신 확인"""
-    import asyncio
     from datetime import datetime
     from service.queue.queue_service import QueueService, get_queue_service
     from service.queue.message_queue import QueueMessage, MessagePriority

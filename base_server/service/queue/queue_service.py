@@ -114,8 +114,29 @@ class QueueService:
             if not cls._initialized:
                 return
             
-            # 각 컴포넌트 정리 로직 필요시 추가
+            # 초기화 플래그 먼저 False로 설정하여 백그라운드 작업 중지
             cls._initialized = False
+            
+            # 인스턴스가 있으면 소비자들 중지
+            if cls._instance:
+                try:
+                    # 모든 메시지 소비자 중지
+                    if hasattr(cls._instance, 'message_queue_manager') and cls._instance.message_queue_manager:
+                        await cls._instance.message_queue_manager.stop_all_consumers()
+                        Logger.info("모든 메시지 소비자 중지 완료")
+                    
+                    # 모든 이벤트 구독자 중지
+                    if hasattr(cls._instance, 'event_queue_manager') and cls._instance.event_queue_manager:
+                        await cls._instance.event_queue_manager.stop_all_subscribers()
+                        Logger.info("모든 이벤트 구독자 중지 완료")
+                        
+                except Exception as e:
+                    Logger.error(f"소비자/구독자 중지 중 오류: {e}")
+            
+            # 백그라운드 작업이 중지될 때까지 잠시 대기
+            await asyncio.sleep(1.0)  # 0.5초 -> 1초로 증가
+            
+            # 인스턴스 정리
             cls._instance = None
             
             Logger.info("QueueService 종료 완료")
@@ -126,19 +147,19 @@ class QueueService:
     async def _start_delayed_message_processor_with_check(self):
         """CacheService 연결 체크를 포함한 지연 메시지 처리기 시작"""
         async def process_delayed_with_cache_check():
-            while True:
+            while self.__class__._initialized:  # 서비스 초기화 상태 확인
                 try:
                     # CacheService 연결 상태 확인
                     cache_service = CacheService.get_instance()
                     if not cache_service.is_initialized():
-                        Logger.warn("CacheService가 초기화되지 않음. 지연 메시지 처리 건너뜀")
+                        Logger.debug("CacheService가 초기화되지 않음. 지연 메시지 처리 건너뜀")
                         await asyncio.sleep(30)
                         continue
                     
                     # 연결 상태 테스트
                     health_check = await cache_service.health_check()
                     if not health_check.get("healthy", False):
-                        Logger.warn(f"Redis 연결 불안정: {health_check.get('error', 'Unknown')}. 지연 메시지 처리 건너뜀")
+                        Logger.debug(f"Redis 연결 불안정: {health_check.get('error', 'Unknown')}. 지연 메시지 처리 건너뜀")
                         await asyncio.sleep(30)
                         continue
                     
@@ -149,6 +170,8 @@ class QueueService:
                 except Exception as e:
                     Logger.error(f"지연 메시지 처리기 오류: {e}")
                     await asyncio.sleep(30)
+            
+            Logger.debug("지연 메시지 처리기 종료")
         
         asyncio.create_task(process_delayed_with_cache_check())
     

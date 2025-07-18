@@ -106,6 +106,11 @@ class RedisCacheEventQueue(IEventQueue):
     async def _execute_redis_operation(self, operation_name: str, operation_func, *args, **kwargs):
         """Redis 작업을 CacheService를 통해 안전하게 실행"""
         try:
+            # CacheService 초기화 상태 확인
+            if not self.cache_service.is_initialized():
+                Logger.warn(f"Redis operation {operation_name} failed: CacheService is not initialized")
+                return None
+            
             async with self.cache_service.get_client() as client:
                 return await operation_func(client, *args, **kwargs)
         except Exception as e:
@@ -192,6 +197,26 @@ class RedisCacheEventQueue(IEventQueue):
         except Exception as e:
             Logger.error(f"이벤트 구독 해제 실패: {subscription_id} - {e}")
             return False
+    
+    async def unsubscribe_all(self):
+        """모든 구독 해제"""
+        try:
+            # 모든 구독을 비활성화
+            for subscription in self.subscriptions.values():
+                subscription.active = False
+            
+            # 구독 정보 모두 제거
+            subscription_ids = list(self.subscriptions.keys())
+            for subscription_id in subscription_ids:
+                await self.unsubscribe(subscription_id)
+            
+            # 활성 구독자 목록 초기화
+            self.active_subscribers.clear()
+            
+            Logger.info("모든 구독 해제 완료")
+            
+        except Exception as e:
+            Logger.error(f"모든 구독 해제 중 오류: {e}")
     
     async def _process_subscriber_events(self, subscription: Subscription):
         """구독자별 이벤트 처리"""
@@ -455,6 +480,23 @@ class RedisEventQueue(IEventQueue):
         except Exception as e:
             Logger.error(f"구독 해제 실패: {subscription_id} - {e}")
             return False
+    
+    async def unsubscribe_all(self):
+        """모든 구독 해제"""
+        try:
+            # 모든 구독을 비활성화
+            for subscription in self.subscriptions.values():
+                subscription.active = False
+            
+            # 구독 정보 모두 제거
+            subscription_ids = list(self.subscriptions.keys())
+            for subscription_id in subscription_ids:
+                await self.unsubscribe(subscription_id)
+            
+            Logger.info("모든 구독 해제 완료")
+            
+        except Exception as e:
+            Logger.error(f"모든 구독 해제 중 오류: {e}")
     
     async def _deliver_to_subscribers(self, event: Event):
         """구독자들에게 이벤트 전달"""
@@ -739,6 +781,16 @@ class EventQueueManager:
     async def get_stats(self) -> Dict[str, Any]:
         """통계 조회"""
         return await self.event_queue.get_subscription_stats()
+    
+    async def stop_all_subscribers(self):
+        """모든 구독자 중지"""
+        try:
+            # 모든 구독을 중지
+            await self.event_queue.unsubscribe_all()
+            Logger.info("모든 이벤트 구독자 중지 완료")
+            
+        except Exception as e:
+            Logger.error(f"이벤트 구독자 중지 중 오류: {e}")
 
 
 # 전역 이벤트큐 매니저 인스턴스

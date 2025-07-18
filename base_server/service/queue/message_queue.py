@@ -91,6 +91,11 @@ class RedisCacheMessageQueue(IMessageQueue):
     async def _execute_redis_operation(self, operation_name: str, operation_func, *args, **kwargs):
         """Redis 작업을 CacheService를 통해 안전하게 실행"""
         try:
+            # CacheService 초기화 상태 확인
+            if not self.cache_service.is_initialized():
+                Logger.warn(f"Redis operation {operation_name} failed: CacheService is not initialized")
+                return None
+            
             async with self.cache_service.get_client() as client:
                 return await operation_func(client, *args, **kwargs)
         except Exception as e:
@@ -382,6 +387,22 @@ class MessageQueueManager:
         Logger.info(f"메시지 소비자 등록: {queue_name}:{consumer_id}")
         
         return consumer
+    
+    async def stop_all_consumers(self):
+        """모든 소비자 중지"""
+        try:
+            for consumer_key, consumer in self.consumers.items():
+                try:
+                    await consumer.stop()
+                    Logger.info(f"소비자 중지 완료: {consumer_key}")
+                except Exception as e:
+                    Logger.error(f"소비자 중지 중 오류: {consumer_key} - {e}")
+            
+            self.consumers.clear()
+            Logger.info("모든 소비자 중지 완료")
+            
+        except Exception as e:
+            Logger.error(f"소비자 중지 중 오류: {e}")
     
     async def start_delayed_message_processor(self):
         """지연 메시지 처리기 시작"""
