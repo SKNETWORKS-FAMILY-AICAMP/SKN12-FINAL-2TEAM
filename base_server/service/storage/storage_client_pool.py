@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, Optional, Any
 import asyncio
 import aioboto3
+from contextlib import AsyncExitStack
 from botocore.config import Config
 from service.core.logger import Logger
 from .storage_client import IStorageClient
@@ -30,6 +31,7 @@ class StorageClientPool(IStorageClientPool):
         self._client_instance: Optional[IStorageClient] = None
         self._lock = asyncio.Lock()
         self._initialized = False
+        self._exit_stack: Optional[AsyncExitStack] = None
     
     async def _init_session(self):
         """Session 초기화 (한 번만)"""
@@ -42,6 +44,9 @@ class StorageClientPool(IStorageClientPool):
                 
             try:
                 if self.config.storage_type == "s3":
+                    # AsyncExitStack 생성 (적절한 리소스 관리)
+                    self._exit_stack = AsyncExitStack()
+                    
                     # aioboto3 Session 생성 (재사용)
                     if isinstance(self.config, dict):
                         aws_access_key_id = self.config.get('aws_access_key_id')
@@ -68,7 +73,10 @@ class StorageClientPool(IStorageClientPool):
                         region_name=region_name
                     )
                     
-                    self._s3_client = self._session.client('s3', config=boto_config)
+                    # AsyncExitStack을 사용하여 클라이언트 생성 및 관리
+                    self._s3_client = await self._exit_stack.enter_async_context(
+                        self._session.client('s3', config=boto_config)
+                    )
                     
                     # 단일 클라이언트 인스턴스 생성 (Session 공유)
                     self._client_instance = S3StorageClient(
@@ -78,12 +86,16 @@ class StorageClientPool(IStorageClientPool):
                     )
                     
                     self._initialized = True
-                    Logger.info(f"S3 Storage Pool initialized with session reuse for region: {region_name}")
+                    Logger.info(f"S3 Storage Pool initialized with AsyncExitStack for region: {region_name}")
                 else:
                     raise ValueError(f"Unsupported storage type: {self.config.storage_type}")
                     
             except Exception as e:
                 Logger.error(f"Failed to initialize Storage Pool: {e}")
+                # 오류 발생 시 exit_stack 정리
+                if self._exit_stack:
+                    await self._exit_stack.__aexit__(None, None, None)
+                    self._exit_stack = None
                 raise
     
     def new(self) -> IStorageClient:
@@ -121,13 +133,25 @@ class StorageClientPool(IStorageClientPool):
             await self._client_instance.close()
             self._client_instance = None
             
-        if self._s3_client:
-            await self._s3_client.close()
-            self._s3_client = None
+        # AsyncExitStack을 사용하여 모든 리소스 정리
+        if self._exit_stack:
+            try:
+                await self._exit_stack.__aexit__(None, None, None)
+            except Exception as e:
+                Logger.warn(f"AsyncExitStack close warning: {e}")
+            finally:
+                self._exit_stack = None
+                self._s3_client = None
             
         if self._session:
-            await self._session.close()
-            self._session = None
+            try:
+                # aioboto3 Session에는 close 메서드가 없음
+                # Session 객체는 자동으로 정리됨
+                Logger.debug("S3 Session cleanup (no close method needed)")
+            except Exception as e:
+                Logger.warn(f"Session close warning: {e}")
+            finally:
+                self._session = None
             
         self._initialized = False
         Logger.info("Storage Pool closed")

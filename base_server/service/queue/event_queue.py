@@ -106,6 +106,11 @@ class RedisCacheEventQueue(IEventQueue):
     async def _execute_redis_operation(self, operation_name: str, operation_func, *args, **kwargs):
         """Redis 작업을 CacheService를 통해 안전하게 실행"""
         try:
+            # CacheService 초기화 상태 확인
+            if not self.cache_service.is_initialized():
+                Logger.warn(f"Redis operation {operation_name} failed: CacheService is not initialized")
+                return None
+            
             async with self.cache_service.get_client() as client:
                 return await operation_func(client, *args, **kwargs)
         except Exception as e:

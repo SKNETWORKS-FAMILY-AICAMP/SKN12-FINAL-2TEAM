@@ -44,6 +44,7 @@ class S3StorageClient(IStorageClient):
         """S3 클라이언트 가져오기 (Pool에서 전달받은 client 사용)"""
         if self._s3_client is None:
             raise RuntimeError("S3 client not initialized by pool")
+        # AsyncExitStack으로 관리되는 클라이언트는 직접 사용 가능
         return self._s3_client
     
     async def upload_file(self, bucket: str, key: str, file_path: str, **kwargs) -> Dict[str, Any]:
@@ -59,13 +60,13 @@ class S3StorageClient(IStorageClient):
                 # 메타데이터 설정
                 extra_args = kwargs.get('extra_args', {})
                 
-                async with s3_client as s3:
-                    await s3.upload_file(
-                        Filename=file_path,
-                        Bucket=bucket,
-                        Key=key,
-                        ExtraArgs=extra_args
-                    )
+                # AsyncExitStack으로 관리되는 클라이언트는 직접 사용
+                await s3_client.upload_file(
+                    Filename=file_path,
+                    Bucket=bucket,
+                    Key=key,
+                    ExtraArgs=extra_args
+                )
                 
                 # 성공 메트릭 기록
                 upload_time = time.time() - start_time
@@ -132,13 +133,13 @@ class S3StorageClient(IStorageClient):
             
             extra_args = kwargs.get('extra_args', {})
             
-            async with s3_client as s3:
-                await s3.upload_fileobj(
-                    Fileobj=file_obj,
-                    Bucket=bucket,
-                    Key=key,
-                    ExtraArgs=extra_args
-                )
+            # AsyncExitStack으로 관리되는 클라이언트는 직접 사용
+            await s3_client.upload_fileobj(
+                Fileobj=file_obj,
+                Bucket=bucket,
+                Key=key,
+                ExtraArgs=extra_args
+            )
             
             Logger.info(f"S3 upload_fileobj success: s3://{bucket}/{key}")
             return {
@@ -159,12 +160,12 @@ class S3StorageClient(IStorageClient):
         try:
             s3_client = await self._get_client()
             
-            async with s3_client as s3:
-                await s3.download_file(
-                    Bucket=bucket,
-                    Key=key,
-                    Filename=file_path
-                )
+            # AsyncExitStack으로 관리되는 클라이언트는 직접 사용
+            await s3_client.download_file(
+                Bucket=bucket,
+                Key=key,
+                Filename=file_path
+            )
             
             Logger.info(f"S3 download success: s3://{bucket}/{key} -> {file_path}")
             return {
@@ -186,9 +187,9 @@ class S3StorageClient(IStorageClient):
         try:
             s3_client = await self._get_client()
             
-            async with s3_client as s3:
-                response = await s3.get_object(Bucket=bucket, Key=key)
-                content = await response['Body'].read()
+            # AsyncExitStack으로 관리되는 클라이언트는 직접 사용
+            response = await s3_client.get_object(Bucket=bucket, Key=key)
+            content = await response['Body'].read()
             
             Logger.info(f"S3 get_object success: s3://{bucket}/{key}")
             return {
@@ -211,8 +212,8 @@ class S3StorageClient(IStorageClient):
         try:
             s3_client = await self._get_client()
             
-            async with s3_client as s3:
-                await s3.delete_object(Bucket=bucket, Key=key)
+            # AsyncExitStack으로 관리되는 클라이언트는 직접 사용
+            await s3_client.delete_object(Bucket=bucket, Key=key)
             
             Logger.info(f"S3 delete success: s3://{bucket}/{key}")
             return {
@@ -247,8 +248,8 @@ class S3StorageClient(IStorageClient):
             if continuation_token:
                 list_kwargs['ContinuationToken'] = continuation_token
             
-            async with s3_client as s3:
-                response = await s3.list_objects_v2(**list_kwargs)
+            # AsyncExitStack으로 관리되는 클라이언트는 직접 사용
+            response = await s3_client.list_objects_v2(**list_kwargs)
             
             files = []
             if 'Contents' in response:
@@ -282,8 +283,8 @@ class S3StorageClient(IStorageClient):
         try:
             s3_client = await self._get_client()
             
-            async with s3_client as s3:
-                response = await s3.head_object(Bucket=bucket, Key=key)
+            # AsyncExitStack으로 관리되는 클라이언트는 직접 사용
+            response = await s3_client.head_object(Bucket=bucket, Key=key)
             
             Logger.info(f"S3 head_object success: s3://{bucket}/{key}")
             return {
@@ -314,8 +315,8 @@ class S3StorageClient(IStorageClient):
             s3_client = await self._get_client()
             
             # 간단한 list_buckets 호출로 연결 확인
-            async with s3_client as s3:
-                await s3.list_buckets()
+            # AsyncExitStack으로 관리되는 클라이언트는 직접 사용
+            await s3_client.list_buckets()
             
             response_time = time.time() - start_time
             self._connection_healthy = True
@@ -404,12 +405,12 @@ class S3StorageClient(IStorageClient):
             
             method = kwargs.get('method', 'get_object')
             
-            async with s3_client as s3:
-                url = await s3.generate_presigned_url(
-                    ClientMethod=method,
-                    Params={'Bucket': bucket, 'Key': key},
-                    ExpiresIn=expiration
-                )
+            # AsyncExitStack으로 관리되는 클라이언트는 직접 사용
+            url = await s3_client.generate_presigned_url(
+                ClientMethod=method,
+                Params={'Bucket': bucket, 'Key': key},
+                ExpiresIn=expiration
+            )
             
             Logger.info(f"S3 presigned URL generated: s3://{bucket}/{key}")
             return {
@@ -437,12 +438,12 @@ class S3StorageClient(IStorageClient):
                 'Key': source_key
             }
             
-            async with s3_client as s3:
-                await s3.copy_object(
-                    CopySource=copy_source,
-                    Bucket=dest_bucket,
-                    Key=dest_key
-                )
+            # AsyncExitStack으로 관리되는 클라이언트는 직접 사용
+            await s3_client.copy_object(
+                CopySource=copy_source,
+                Bucket=dest_bucket,
+                Key=dest_key
+            )
             
             Logger.info(f"S3 copy success: s3://{source_bucket}/{source_key} -> s3://{dest_bucket}/{dest_key}")
             return {
