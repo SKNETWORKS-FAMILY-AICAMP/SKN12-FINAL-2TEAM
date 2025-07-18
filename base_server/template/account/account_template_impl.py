@@ -100,11 +100,13 @@ class AccountTemplateImpl(AccountTemplate):
             # 데이터베이스 서비스 가져오기
             db_service = ServiceContainer.get_database_service()
             
-            # 1. 먼저 DB에서 저장된 해시값 조회
+            # 1. 먼저 DB에서 저장된 해시값 및 프로필 완료 상태 조회
             user_query = """
-            SELECT account_db_key, password_hash, nickname, account_level, account_status
-            FROM table_accountid 
-            WHERE platform_type = %s AND account_id = %s
+            SELECT a.account_db_key, a.password_hash, a.nickname, a.account_level, a.account_status,
+                   COALESCE(p.profile_completed, 0) as profile_completed
+            FROM table_accountid a
+            LEFT JOIN table_user_profiles p ON a.account_db_key = p.account_db_key
+            WHERE a.platform_type = %s AND a.account_id = %s
             """
             user_result = await db_service.execute_global_query(user_query, (request.platform_type, request.account_id))
             
@@ -160,6 +162,7 @@ class AccountTemplateImpl(AccountTemplate):
             # 7. 성공 응답 설정
             response.errorCode = 0
             response.nickname = user_data.get('nickname', '')
+            response.profile_completed = bool(user_data.get('profile_completed', 0))
             
             # account_info 설정 (내부 세션 생성용, 클라이언트 응답에서는 제거됨)
             response.account_info = {
@@ -218,11 +221,12 @@ class AccountTemplateImpl(AccountTemplate):
         try:
             db_service = ServiceContainer.get_database_service()
             
-            # 글로벌 DB에서 회원가입 처리 (finance DB 구조)
+            # 글로벌 DB에서 회원가입 처리 (finance DB 구조) - 옵션 1: 생년월일/성별 포함
             hashed_password = self._hash_password(request.password)
             result = await db_service.call_global_procedure(
-                "fp_user_register",
-                (request.platform_type, request.account_id, hashed_password, request.nickname, request.email)
+                "fp_user_signup",
+                (request.platform_type, request.account_id, hashed_password, request.email, request.nickname,
+                 request.birth_year, request.birth_month, request.birth_day, request.gender)
             )
             
             if result and len(result) > 0:
@@ -497,7 +501,7 @@ class AccountTemplateImpl(AccountTemplate):
             
             db_service = ServiceContainer.get_database_service()
             
-            # 3. DB에 프로필 정보 저장
+            # 3. DB에 프로필 정보 저장 (투자 정보만 처리)
             profile_result = await db_service.call_global_procedure(
                 "fp_profile_setup",
                 (
@@ -505,11 +509,7 @@ class AccountTemplateImpl(AccountTemplate):
                     request.investment_experience,
                     request.risk_tolerance,
                     request.investment_goal,
-                    request.monthly_budget,
-                    request.birth_year,
-                    request.birth_month,
-                    request.birth_day,
-                    request.gender
+                    request.monthly_budget
                 )
             )
             
@@ -535,10 +535,10 @@ class AccountTemplateImpl(AccountTemplate):
                     risk_tolerance=profile_data.get('risk_tolerance', request.risk_tolerance),
                     investment_goal=profile_data.get('investment_goal', request.investment_goal),
                     monthly_budget=float(profile_data.get('monthly_budget', request.monthly_budget)),
-                    birth_year=profile_data.get('birth_year', request.birth_year),       # 설정된 출생년도
-                    birth_month=profile_data.get('birth_month', request.birth_month),   # 설정된 출생월
-                    birth_day=profile_data.get('birth_day', request.birth_day),         # 설정된 출생일
-                    gender=profile_data.get('gender', request.gender),                  # 설정된 성별
+                    birth_year=profile_data.get('birth_year'),       # DB에서 조회된 출생년도
+                    birth_month=profile_data.get('birth_month'),     # DB에서 조회된 출생월
+                    birth_day=profile_data.get('birth_day'),         # DB에서 조회된 출생일
+                    gender=profile_data.get('gender'),               # DB에서 조회된 성별
                     profile_completed=True
                 )
             else:
@@ -551,10 +551,10 @@ class AccountTemplateImpl(AccountTemplate):
                     risk_tolerance=request.risk_tolerance,
                     investment_goal=request.investment_goal,
                     monthly_budget=request.monthly_budget,
-                    birth_year=request.birth_year,       # 요청에서 받은 출생년도
-                    birth_month=request.birth_month,     # 요청에서 받은 출생월
-                    birth_day=request.birth_day,         # 요청에서 받은 출생일
-                    gender=request.gender,               # 요청에서 받은 성별
+                    birth_year=None,                     # 프로필 설정에서는 생년월일 처리 안함
+                    birth_month=None,                    # 프로필 설정에서는 생년월일 처리 안함
+                    birth_day=None,                      # 프로필 설정에서는 생년월일 처리 안함
+                    gender=None,                         # 프로필 설정에서는 성별 처리 안함
                     profile_completed=True
                 )
             
@@ -600,9 +600,9 @@ class AccountTemplateImpl(AccountTemplate):
                 # 프로필이 없는 경우 기본 프로필 정보 반환
                 Logger.warn(f"Profile not found for account_db_key={account_db_key}, returning default profile")
                 
-                # 기본 계정 정보 조회
+                # 기본 계정 정보 조회 (birth/gender 필드 포함)
                 account_query = """
-                SELECT account_id, nickname, email 
+                SELECT account_id, nickname, email, birth_year, birth_month, birth_day, gender
                 FROM table_accountid 
                 WHERE account_db_key = %s
                 """
@@ -618,10 +618,10 @@ class AccountTemplateImpl(AccountTemplate):
                         risk_tolerance='MODERATE',
                         investment_goal='GROWTH',
                         monthly_budget=0.0,
-                        birth_year=None,        # 프로필 미설정 시 None
-                        birth_month=None,       # 프로필 미설정 시 None
-                        birth_day=None,         # 프로필 미설정 시 None
-                        gender=None,            # 프로필 미설정 시 None
+                        birth_year=account_data.get('birth_year'),         # table_accountid에서 조회
+                        birth_month=account_data.get('birth_month'),       # table_accountid에서 조회
+                        birth_day=account_data.get('birth_day'),           # table_accountid에서 조회
+                        gender=account_data.get('gender'),                 # table_accountid에서 조회
                         profile_completed=False
                     )
                     
@@ -652,10 +652,10 @@ class AccountTemplateImpl(AccountTemplate):
                 risk_tolerance=profile_data.get('risk_tolerance', 'MODERATE'),
                 investment_goal=profile_data.get('investment_goal', 'GROWTH'),
                 monthly_budget=monthly_budget,
-                birth_year=profile_data.get('birth_year'),          # DB에서 조회된 출생년도
-                birth_month=profile_data.get('birth_month'),        # DB에서 조회된 출생월
-                birth_day=profile_data.get('birth_day'),            # DB에서 조회된 출생일
-                gender=profile_data.get('gender'),                  # DB에서 조회된 성별
+                birth_year=profile_data.get('birth_year'),          # table_accountid에서 조회된 출생년도
+                birth_month=profile_data.get('birth_month'),        # table_accountid에서 조회된 출생월
+                birth_day=profile_data.get('birth_day'),            # table_accountid에서 조회된 출생일
+                gender=profile_data.get('gender'),                  # table_accountid에서 조회된 성별
                 profile_completed=bool(profile_data.get('profile_completed', 0))
             )
             
@@ -686,7 +686,7 @@ class AccountTemplateImpl(AccountTemplate):
             
             db_service = ServiceContainer.get_database_service()
             
-            # 1. DB에 프로필 업데이트 (기존 fp_profile_setup 재사용)
+            # 1. DB에 프로필 업데이트 (투자 정보만 처리)
             profile_result = await db_service.call_global_procedure(
                 "fp_profile_setup",
                 (
@@ -694,11 +694,7 @@ class AccountTemplateImpl(AccountTemplate):
                     request.investment_experience,
                     request.risk_tolerance,
                     request.investment_goal,
-                    request.monthly_budget,
-                    request.birth_year,
-                    request.birth_month,
-                    request.birth_day,
-                    request.gender
+                    request.monthly_budget
                 )
             )
             
@@ -724,10 +720,10 @@ class AccountTemplateImpl(AccountTemplate):
                     risk_tolerance=profile_data.get('risk_tolerance', 'MODERATE'),
                     investment_goal=profile_data.get('investment_goal', 'GROWTH'),
                     monthly_budget=float(profile_data.get('monthly_budget', 0.0)),
-                    birth_year=profile_data.get('birth_year'),          # 업데이트된 출생년도
-                    birth_month=profile_data.get('birth_month'),        # 업데이트된 출생월
-                    birth_day=profile_data.get('birth_day'),            # 업데이트된 출생일
-                    gender=profile_data.get('gender'),                  # 업데이트된 성별
+                    birth_year=profile_data.get('birth_year'),          # table_accountid에서 조회된 출생년도
+                    birth_month=profile_data.get('birth_month'),        # table_accountid에서 조회된 출생월
+                    birth_day=profile_data.get('birth_day'),            # table_accountid에서 조회된 출생일
+                    gender=profile_data.get('gender'),                  # table_accountid에서 조회된 성별
                     profile_completed=bool(profile_data.get('profile_completed', 0))
                 )
                 response.profile = profile

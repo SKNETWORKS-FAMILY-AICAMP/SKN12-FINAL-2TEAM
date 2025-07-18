@@ -388,6 +388,22 @@ class MessageQueueManager:
         
         return consumer
     
+    async def stop_all_consumers(self):
+        """모든 소비자 중지"""
+        try:
+            for consumer_key, consumer in self.consumers.items():
+                try:
+                    await consumer.stop()
+                    Logger.info(f"소비자 중지 완료: {consumer_key}")
+                except Exception as e:
+                    Logger.error(f"소비자 중지 중 오류: {consumer_key} - {e}")
+            
+            self.consumers.clear()
+            Logger.info("모든 소비자 중지 완료")
+            
+        except Exception as e:
+            Logger.error(f"소비자 중지 중 오류: {e}")
+    
     async def start_delayed_message_processor(self):
         """지연 메시지 처리기 시작"""
         async def process_delayed():

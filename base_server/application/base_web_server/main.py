@@ -9,7 +9,7 @@ from fastapi import FastAPI
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 sys.path.insert(0, project_root)
 from contextlib import asynccontextmanager
-from service.core.logger import Logger, ConsoleLogger
+from service.core.logger import Logger, ConsoleLogger, FileLogger
 from service.core.argparse_util import parse_log_level, parse_app_env
 from template.base.template_context import TemplateContext, TemplateType
 from template.account.account_template_impl import AccountTemplateImpl
@@ -71,8 +71,19 @@ database_service = None
 async def lifespan(app: FastAPI):
     global database_service
     
-    Logger.init(ConsoleLogger(log_level)) #파일로 수정
+    # FileLogger로 변경 - 콘솔과 파일에 동시 출력
+    file_logger = FileLogger(
+        log_level=log_level,
+        use_console=True,  # 콘솔에도 출력
+        prefix="base_web_server",  # 로그 파일 접두사
+        folder="logs",  # 로그 디렉토리
+        crash_report_url=None,  # 크래시 리포트 URL (옵션)
+        timezone="KST",  # 한국 시간대 사용
+        max_file_size_kb=10240  # 10MB 제한
+    )
+    Logger.init(file_logger)
     Logger.info(f"base_web_server 시작 (로그레벨: {log_level.name}, 환경: {app_env}, config: {config_file})")
+    Logger.info(f"로그 파일 경로: {file_logger._log_file_path}")
     
     try:
         with open(config_file, "r", encoding="utf-8") as f:
@@ -659,9 +670,8 @@ async def lifespan(app: FastAPI):
         
         # Logger 정리 - 마지막에 수행
         Logger.info("Logger 종료 중...")
-        # Logger가 ConsoleLogger인 경우 특별한 정리 불필요하지만
-        # 향후 파일 로거 등으로 변경될 경우를 대비
         await asyncio.sleep(0.1)  # 마지막 로그 출력 대기
+        Logger.shutdown()  # 파일 로거의 경우 큐 비우고 스레드 종료
     except Exception as e:
         Logger.error(f"전역 리소스 정리 오류: {e}")
 

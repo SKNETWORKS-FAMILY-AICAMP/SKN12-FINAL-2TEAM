@@ -86,7 +86,7 @@ CREATE TABLE IF NOT EXISTS `table_user_settings` (
 -- 프로필 관련 프로시저
 -- =====================================
 
--- 프로필 설정 생성/업데이트
+-- 프로필 설정 생성/업데이트 (옵션 1: 투자 정보만 처리)
 DROP PROCEDURE IF EXISTS `fp_profile_setup`;
 DELIMITER ;;
 CREATE PROCEDURE `fp_profile_setup`(
@@ -94,11 +94,7 @@ CREATE PROCEDURE `fp_profile_setup`(
     IN p_investment_experience VARCHAR(20),
     IN p_risk_tolerance VARCHAR(20),
     IN p_investment_goal VARCHAR(20),
-    IN p_monthly_budget DECIMAL(15,2),
-    IN p_birth_year INT,
-    IN p_birth_month INT,
-    IN p_birth_day INT,
-    IN p_gender VARCHAR(10)
+    IN p_monthly_budget DECIMAL(15,2)
 )
 BEGIN
     DECLARE v_existing_count INT DEFAULT 0;
@@ -120,29 +116,23 @@ BEGIN
     WHERE account_db_key = p_account_db_key;
     
     IF v_existing_count > 0 THEN
-        -- 기존 프로필 업데이트
+        -- 기존 프로필 업데이트 (투자 정보만)
         UPDATE table_user_profiles 
         SET investment_experience = p_investment_experience,
             risk_tolerance = p_risk_tolerance,
             investment_goal = p_investment_goal,
             monthly_budget = p_monthly_budget,
-            birth_year = p_birth_year,
-            birth_month = p_birth_month,
-            birth_day = p_birth_day,
-            gender = p_gender,
             profile_completed = 1,
             updated_at = NOW()
         WHERE account_db_key = p_account_db_key;
     ELSE
-        -- 새 프로필 생성
+        -- 새 프로필 생성 (투자 정보만)
         INSERT INTO table_user_profiles (
             account_db_key, investment_experience, risk_tolerance, 
-            investment_goal, monthly_budget, birth_year, birth_month, 
-            birth_day, gender, profile_completed
+            investment_goal, monthly_budget, profile_completed
         ) VALUES (
             p_account_db_key, p_investment_experience, p_risk_tolerance,
-            p_investment_goal, p_monthly_budget, p_birth_year, p_birth_month,
-            p_birth_day, p_gender, 1
+            p_investment_goal, p_monthly_budget, 1
         );
     END IF;
     
@@ -475,6 +465,47 @@ BEGIN
     END IF;
     
     SELECT 'SUCCESS' as result, v_completion_rate as completion_rate, v_is_completed as is_completed;
+    
+END ;;
+DELIMITER ;
+
+-- =====================================
+-- 사용자 프로필 완성 상태 조회 (로그인 시 사용)
+DROP PROCEDURE IF EXISTS `fp_get_profile_status`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_get_profile_status`(
+    IN p_account_db_key BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE ProcParam VARCHAR(4000);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET ProcParam = CONCAT(p_account_db_key);
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        ROLLBACK;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_get_profile_status', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        RESIGNAL;
+    END;
+    
+    SELECT 
+        a.account_db_key,
+        a.account_id,
+        a.nickname,
+        a.email,
+        a.birth_year,
+        a.birth_month,
+        a.birth_day,
+        a.gender,
+        COALESCE(p.profile_completed, 0) as profile_completed,
+        COALESCE(p.investment_experience, '') as investment_experience,
+        COALESCE(p.risk_tolerance, '') as risk_tolerance,
+        COALESCE(p.investment_goal, '') as investment_goal,
+        COALESCE(p.monthly_budget, 0.00) as monthly_budget
+    FROM table_accountid a
+    LEFT JOIN table_user_profiles p ON a.account_db_key = p.account_db_key
+    WHERE a.account_db_key = p_account_db_key;
     
 END ;;
 DELIMITER ;
