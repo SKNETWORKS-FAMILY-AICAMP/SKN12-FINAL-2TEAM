@@ -1,3 +1,5 @@
+import axios from "axios";
+
 interface LoginRequest {
   email: string
   password: string
@@ -32,34 +34,14 @@ interface RefreshTokenResponse {
 }
 
 export const authApi = {
-  async login(email: string, password: string): Promise<{ data: AuthResponse }> {
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-
-    // Mock successful login
-    const mockResponse: AuthResponse = {
-      user: {
-        id: "1",
-        email,
-        name: "John Doe",
-        avatar: "/avatars/user.jpg",
-        role: "premium",
-        preferences: {
-          theme: "system",
-          language: "ko",
-          notifications: true,
-        },
-      },
-      token: "mock-jwt-token-" + Date.now(),
-      refreshToken: "mock-refresh-token-" + Date.now(),
+  async login(email: string, password: string): Promise<{ data: any }> {
+    // 실제 API 호출
+    const res = await axios.post("/api/account/login", { email, password });
+    const { error_code, error_message, data } = res.data;
+    if (error_code !== 0) {
+      throw new Error(error_message || "로그인 실패");
     }
-
-    // Simulate login validation
-    if (email === "demo@example.com" && password === "demo123") {
-      return { data: mockResponse }
-    }
-
-    throw new Error("Invalid credentials")
+    return { data };
   },
 
   async register(data: RegisterRequest): Promise<{ data: AuthResponse }> {

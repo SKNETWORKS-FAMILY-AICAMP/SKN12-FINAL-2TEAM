@@ -29,6 +29,20 @@ class ApiClient {
           config.headers.Authorization = `Bearer ${token}`
         }
 
+        // accessToken, sequence 자동 주입 (BaseRequest 호환)
+        if (
+          config.method &&
+          ["post", "put"].includes(config.method.toLowerCase()) &&
+          typeof config.data === "object" &&
+          config.data !== null
+        ) {
+          config.data = {
+            ...config.data,
+            accessToken: token || "",
+            sequence: Date.now(),
+          }
+        }
+
         return config
       },
       (error) => Promise.reject(error),

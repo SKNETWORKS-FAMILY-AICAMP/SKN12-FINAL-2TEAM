@@ -3,71 +3,100 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Plus, MessageCircle, FolderOpen, Zap, Search, Settings, ArrowUp, Menu, ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
-
-const MAX_CHATS = 10;
+import { useChat } from "@/hooks/use-chat";
 
 export default function ChatPage() {
+  const {
+    rooms,
+    currentRoomId,
+    setCurrentRoomId,
+    messages,
+    isLoading,
+    error,
+    createRoom,
+    sendMessage,
+    personas,
+    selectedPersona,
+    setSelectedPersona,
+  } = useChat();
   const [message, setMessage] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [chatHistoryItems, setChatHistoryItems] = useState<string[]>(["Old conversation"]);
-  const [activeChat, setActiveChat] = useState<number>(0); // index of selected chat
-  const [chatMessages, setChatMessages] = useState<Array<Array<{ from: "user" | "bot"; text: string }>>>([
-    [
-      { from: "bot", text: "안녕하세요! 무엇을 도와드릴까요?" }
-    ]
-  ]);
   const router = useRouter();
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  // Scroll to bottom when messages change or chat changes
+  // Persona selection modal state
+  const [showPersonaModal, setShowPersonaModal] = useState(false);
+
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
-  }, [chatMessages, activeChat]);
+  }, [messages, currentRoomId]);
 
-  const handleSubmit = (e: React.FormEvent | React.KeyboardEvent) => {
+  const handleSubmit = async (e: React.FormEvent | React.KeyboardEvent) => {
     e.preventDefault();
-    if (message.trim()) {
-      // Add user message
-      setChatMessages((prev) => {
-        const updated = [...prev];
-        updated[activeChat] = [...updated[activeChat], { from: "user", text: message }];
-        return updated;
-      });
+    if (message.trim() && !isLoading) {
+      await sendMessage(message);
       setMessage("");
-      // Add bot reply after short delay
-      setTimeout(() => {
-        setChatMessages((prev) => {
-          const updated = [...prev];
-          const botReplies = [
-            "좋은 질문입니다! 더 도와드릴까요?",
-            "AI 챗봇이 답변 중입니다.",
-            "자세한 정보를 원하시면 말씀해 주세요.",
-            "트레이딩 관련 추가 질문이 있으신가요?"
-          ];
-          const reply = botReplies[Math.floor(Math.random() * botReplies.length)];
-          updated[activeChat] = [...updated[activeChat], { from: "bot", text: reply }];
-          return updated;
-        });
-      }, 700);
     }
   };
 
-  const handleNewChat = () => {
-    if (chatHistoryItems.length >= MAX_CHATS) return;
-    const newTitle = `새 채팅 ${chatHistoryItems.filter(t => t.startsWith('새 채팅')).length + 1}`;
-    setChatHistoryItems([newTitle, ...chatHistoryItems]);
-    setChatMessages([[{ from: "bot", text: "안녕하세요! 무엇을 도와드릴까요?" }], ...chatMessages]);
-    setActiveChat(0);
+  const handleNewChat = async () => {
+    if (personas.length > 0) {
+      setShowPersonaModal(true);
+    } else {
+      await createRoom(`새 채팅 ${rooms.length + 1}`);
+    }
   };
 
-  const handleSelectChat = (index: number) => {
-    setActiveChat(index);
+  const handleCreateRoomWithPersona = async () => {
+    await createRoom(`새 채팅 ${rooms.length + 1}`, selectedPersona || undefined);
+    setShowPersonaModal(false);
+  };
+
+  const handleSelectChat = (roomId: string) => {
+    setCurrentRoomId(roomId);
   };
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-[#0a0a23] via-[#18181c] to-[#23243a] text-white flex">
+      {/* Persona Modal */}
+      {showPersonaModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-[#18181c] rounded-xl p-8 w-full max-w-md shadow-2xl border border-[#23243a]">
+            <h2 className="text-xl font-bold mb-4 text-center">AI 페르소나 선택</h2>
+            <div className="flex flex-col gap-4 mb-6">
+              {personas.map((persona) => (
+                <label key={persona.persona_id} className={`flex items-center gap-4 p-3 rounded-lg cursor-pointer border transition-all ${selectedPersona === persona.persona_id ? 'border-blue-500 bg-blue-900/20' : 'border-[#23243a] bg-[#23243a]/40'}`}>
+                  <img src={persona.avatar_url} alt={persona.name} className="w-12 h-12 rounded-full object-cover border border-gray-700" />
+                  <div className="flex-1">
+                    <div className="font-semibold text-base">{persona.name}</div>
+                    <div className="text-xs text-gray-400">{persona.description}</div>
+                  </div>
+                  <input
+                    type="radio"
+                    checked={selectedPersona === persona.persona_id}
+                    onChange={() => setSelectedPersona(persona.persona_id)}
+                    className="accent-blue-500 w-5 h-5"
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                className="px-4 py-2 rounded bg-gray-700 text-white hover:bg-gray-600 transition"
+                onClick={() => setShowPersonaModal(false)}
+                disabled={isLoading}
+              >취소</button>
+              <button
+                className="px-4 py-2 rounded bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold hover:opacity-90 transition"
+                onClick={handleCreateRoomWithPersona}
+                disabled={isLoading || !selectedPersona}
+              >선택하고 시작</button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Sidebar */}
       <div className={`${sidebarOpen ? 'w-80' : 'w-0'} transition-all duration-300 bg-black/40 border-r border-[#23243a] backdrop-blur-xl overflow-hidden flex flex-col`}>
         {/* Back Button */}
@@ -80,9 +109,9 @@ export default function ChatPage() {
             <span>뒤로가기</span>
           </button>
           <button
-            className={`flex items-center gap-2 font-semibold transition-colors ${chatHistoryItems.length >= MAX_CHATS ? 'opacity-50 cursor-not-allowed' : 'text-blue-400 hover:text-blue-300'}`}
+            className={`flex items-center gap-2 font-semibold transition-colors text-blue-400 hover:text-blue-300`}
             onClick={handleNewChat}
-            disabled={chatHistoryItems.length >= MAX_CHATS}
+            disabled={isLoading}
           >
             <Plus size={16} />
             <span>새 채팅</span>
@@ -108,17 +137,17 @@ export default function ChatPage() {
           <div className="p-4">
             <h3 className="text-xs text-gray-400 mb-3 font-semibold tracking-wider">최근 항목</h3>
             <div className="space-y-1">
-              {chatHistoryItems.map((item, index) => (
+              {rooms.map((item) => (
                 <div
-                  key={index}
+                  key={item.room_id}
                   className={`px-3 py-2 text-sm rounded cursor-pointer truncate transition-all font-medium ${
-                    activeChat === index
+                    currentRoomId === item.room_id
                       ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow'
                       : 'text-gray-300 hover:bg-[#23243a]'
                   }`}
-                  onClick={() => handleSelectChat(index)}
+                  onClick={() => handleSelectChat(item.room_id)}
                 >
-                  {item}
+                  {item.room_name}
                 </div>
               ))}
             </div>
@@ -155,19 +184,20 @@ export default function ChatPage() {
           <div className="w-full max-w-2xl">
             <div className="mb-8 text-center">
               <h1 className="text-4xl font-light mb-2 bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
-                {chatHistoryItems[activeChat]}
+                {rooms.find((r) => r.room_id === currentRoomId)?.room_name || "채팅을 선택하세요"}
               </h1>
             </div>
             <div className="flex flex-col gap-3 mb-8 max-h-[400px] min-h-[200px] overflow-y-auto bg-transparent p-2 rounded-lg scrollbar-hide">
-              {chatMessages[activeChat]?.map((msg, idx) => (
-                <div key={idx} className={`flex ${msg.from === "user" ? "justify-end" : "justify-start"}`}>
-                  <div className={`px-4 py-2 rounded-xl max-w-xs break-words text-sm shadow ${msg.from === "user" ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-100"}`}>
-                    {msg.text}
+              {messages.map((msg, idx) => (
+                <div key={idx} className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
+                  <div className={`px-4 py-2 rounded-xl max-w-xs break-words text-sm shadow ${msg.sender === "user" ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-100"}`}>
+                    {msg.message}
                   </div>
                 </div>
               ))}
               <div ref={messagesEndRef} />
             </div>
+            {error && <div className="text-red-400 text-sm text-center mb-2">{error}</div>}
           </div>
         </div>
         {/* Input Area */}
@@ -185,10 +215,12 @@ export default function ChatPage() {
                     handleSubmit(e);
                   }
                 }}
+                disabled={isLoading || !currentRoomId}
               />
               <button
                 onClick={handleSubmit}
                 className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 bg-gradient-to-r from-blue-500 to-indigo-600 hover:opacity-90 rounded-lg transition-colors"
+                disabled={isLoading || !message.trim() || !currentRoomId}
               >
                 <ArrowUp size={16} />
               </button>

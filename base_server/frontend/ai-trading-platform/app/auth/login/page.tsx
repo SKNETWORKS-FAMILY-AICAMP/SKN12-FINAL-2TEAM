@@ -6,9 +6,10 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Loader2, TrendingUp, Zap } from "lucide-react"
 import { useAuth } from "@/hooks/use-auth"
+import axios from "axios"
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("demo@example.com")
+  const [accountId, setAccountId] = useState("")
   const [password, setPassword] = useState("demo123")
   const [error, setError] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -22,10 +23,45 @@ export default function LoginPage() {
     setIsLoading(true)
 
     try {
-      await login(email, password)
-      router.push("/dashboard")
-    } catch (err) {
-      setError("로그인에 실패했습니다. 이메일과 비밀번호를 확인해주세요.")
+      // payload 생성 및 콘솔 출력
+      const payload = {
+        platform_type: 1, // int로 고정
+        account_id: accountId,
+        password: password,
+      };
+      console.log("로그인 요청 payload:", payload);
+
+      const res = await axios.post("http://127.0.0.1:8000/api/account/login", payload);
+      let data = res.data;
+      if (typeof data === "string") {
+        try {
+          data = JSON.parse(data);
+        } catch (parseErr) {
+          console.error("로그인 응답 파싱 에러:", parseErr, data);
+          setError("서버 응답 파싱 오류가 발생했습니다.");
+          setIsLoading(false);
+          return;
+        }
+      }
+      console.log('로그인 응답:', data);
+      if (data.errorCode === 0 || data.errorCode === "0") {
+        // accessToken, refreshToken, user_id 저장
+        if (data.accessToken) localStorage.setItem('accessToken', data.accessToken)
+        if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken)
+        if (data.user_id) localStorage.setItem('userId', data.user_id)
+        router.push("/onboarding")
+        return;
+      } else {
+        const errorCode = data.errorCode;
+        const message = data.message;
+        console.log('로그인 실패 errorCode:', errorCode, 'message:', message);
+        setError(message || `로그인 실패: 에러코드 ${errorCode}`);
+      }
+    } catch (err: any) {
+      console.error("로그인 에러:", err);
+      const errorCode = err?.response?.data?.errorCode;
+      const message = err?.response?.data?.message;
+      setError(message || "네트워크 오류가 발생했습니다.");
     } finally {
       setIsLoading(false)
     }
@@ -83,13 +119,13 @@ export default function LoginPage() {
         {/* Login Form */}
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: 24 }}>
-            <label style={{ color: "#fff", fontWeight: 500, marginBottom: 8, display: "block" }}>이메일</label>
+            <label style={{ color: "#fff", fontWeight: 500, marginBottom: 8, display: "block" }}>아이디</label>
             <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
+              type="text"
+              value={accountId}
+              onChange={e => setAccountId(e.target.value)}
               required
-              placeholder="demo@example.com"
+              placeholder="아이디"
               style={{
                 width: "100%",
                 padding: "14px 16px",
@@ -112,7 +148,7 @@ export default function LoginPage() {
               value={password}
               onChange={e => setPassword(e.target.value)}
               required
-              placeholder="demo123"
+              placeholder="비밀번호"
               style={{
                 width: "100%",
                 padding: "14px 16px",
