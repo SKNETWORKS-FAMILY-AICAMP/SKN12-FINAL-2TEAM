@@ -12,7 +12,6 @@ from service.llm.AIChat.BaseFinanceTool import BaseFinanceTool
 from service.llm.AIChat.BasicTools.MacroEconomicTool import MacroEconomicTool
 from service.llm.AIChat.BasicTools.TechnicalAnalysisTool import TechnicalAnalysisTool
 from service.llm.AIChat.BasicTools.MarketDataTool import MarketDataTool, MarketDataInput
-from service.llm.AIChat_service import AIChatService
 
 __all__ = ["KalmanRegimeFilterTool"]
 
@@ -85,7 +84,10 @@ class KalmanRegimeFilterTool(BaseFinanceTool):
       2) 칼만 필터 업데이트
       3) 트레이딩 신호·리스크·경고 생성
     """
-    def __init__(self, ai_chat_service: AIChatService):
+    def __init__(self, ai_chat_service):
+        from service.llm.AIChat_service import AIChatService
+        if not isinstance(ai_chat_service, AIChatService):
+            raise TypeError("Expected AIChatService instance")
         self.ai_chat_service = ai_chat_service
         self.filter = KalmanRegimeFilterCore()
         self.max_latency = 5.0  # seconds

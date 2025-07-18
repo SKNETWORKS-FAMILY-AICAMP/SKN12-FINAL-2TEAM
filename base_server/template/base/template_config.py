@@ -13,8 +13,12 @@ class TemplateConfig(BaseModel):
     env: str
     localPath: str = ""
 
+class ProviderConfig(BaseModel):
+    provider: str
+    api_key: str
+    model: str
+
 class AppConfig(BaseModel):
-    templateConfig: TemplateConfig
     databaseConfig: DatabaseConfig
     cacheConfig: CacheConfig
     externalConfig: ExternalConfig
@@ -22,4 +26,4 @@ class AppConfig(BaseModel):
     searchConfig: SearchConfig
     vectordbConfig: VectorDbConfig
     llmConfig: LlmConfig
-    netConfig: NetConfig
+    templateConfig: TemplateConfig

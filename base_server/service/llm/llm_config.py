@@ -16,10 +16,19 @@ class ApiKeys(BaseModel):
     OPENAI_API_KEY: str
     FRED_API_KEY: str
 
+class ProviderConfig(BaseModel):
+    provider: str
+    api_key: str
+    model: str
+    max_tokens: Optional[int] = None
+    temperature: Optional[float] = None
+    timeout: Optional[int] = None
+
 class LlmConfig(BaseModel):
     default_provider: str
-    providers: Dict[str, LlmProviderConfig]
-    API_Key: ApiKeys    # JSON의 "API_Key" 섹션을 직접 매핑
+    concurrent_requests: int
+    providers: Dict[str, ProviderConfig]
+    API_Key: Dict[str, str]     # 혹은 별도 필드
 
     # 채팅 관련 설정
     max_conversation_length: int = 20

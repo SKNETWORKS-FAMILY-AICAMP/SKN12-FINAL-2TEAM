@@ -15,7 +15,6 @@ from pydantic import BaseModel, Field
 from datetime import date, timedelta, datetime
 
 from service.llm.AIChat.BaseFinanceTool import BaseFinanceTool  # 👈 프로젝트 내부 베이스 툴
-from service.llm.AIChat_service import AIChatService
 
 # ────────────────────────────────
 # 1. 헬퍼
@@ -93,7 +92,10 @@ class MarketDataTool(BaseFinanceTool):
     description = "주식·ETF·채권·원자재·VIX 시계열과 리스크 지표를 반환"
     args_schema: Type[BaseModel] = MarketDataInput
 
-    def __init__(self, ai_chat_service: AIChatService):
+    def __init__(self, ai_chat_service):
+        from service.llm.AIChat_service import AIChatService
+        if not isinstance(ai_chat_service, AIChatService):
+            raise TypeError("Expected AIChatService instance")
         self.ai_chat_service = ai_chat_service
 
     # LangChain function‑calling entry

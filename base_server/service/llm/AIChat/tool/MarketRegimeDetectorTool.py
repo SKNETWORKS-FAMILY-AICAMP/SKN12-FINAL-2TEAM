@@ -12,7 +12,6 @@ from pydantic import BaseModel, Field
 from service.llm.AIChat.BasicTools.MacroEconomicTool import MacroEconomicTool
 from service.llm.AIChat.BasicTools.TechnicalAnalysisTool import TechnicalAnalysisTool, TechnicalAnalysisInput
 from service.llm.AIChat.BasicTools.MarketDataTool import MarketDataTool, MarketDataInput
-from service.llm.AIChat_service import AIChatService
 
 class MarketRegimeDetectorInput(BaseModel):
     """
@@ -131,7 +130,10 @@ class MarketRegimeDetector:
         return regime, posteriors, self.transition_matrix.copy()
 
 class MarketRegimeDetectorTool(BaseFinanceTool):
-    def __init__(self, ai_chat_service: AIChatService):
+    def __init__(self, ai_chat_service):
+        from service.llm.AIChat_service import AIChatService
+        if not isinstance(ai_chat_service, AIChatService):
+            raise TypeError("Expected AIChatService instance")
         self.ai_chat_service = ai_chat_service
         self.detector = MarketRegimeDetector()
 

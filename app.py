@@ -10,7 +10,7 @@ from langchain_openai import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
 from langchain_community.chat_message_histories import RedisChatMessageHistory
 from langchain_core.prompts import ChatPromptTemplate
-from service.llm.AIChat.Router import run_question           # LangGraph 툴 실행
+from base_server.service.llm.AIChat.Router import run_question           # LangGraph 툴 실행
 
 # ── 환경
 REDIS_URL  = os.getenv("REDIS_URL", "redis://localhost:6379/0")

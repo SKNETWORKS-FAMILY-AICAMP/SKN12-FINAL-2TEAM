@@ -4,7 +4,6 @@ import os
 from typing import List, Optional, Dict, Any
 from service.llm.AIChat.BaseFinanceTool import BaseFinanceTool
 from pydantic import BaseModel, Field
-from service.llm.AIChat_service import AIChatService
 
 class IndustryAnalysisInput(BaseModel):
     industry_name: str = Field(
@@ -42,7 +41,10 @@ class IndustryAnalysisOutput:
 class IndustryAnalysisTool(BaseFinanceTool):
     BASE_URL = "https://financialmodelingprep.com/api/v3/stock-screener"
 
-    def __init__(self, ai_chat_service: AIChatService):
+    def __init__(self, ai_chat_service):
+        from service.llm.AIChat_service import AIChatService
+        if not isinstance(ai_chat_service, AIChatService):
+            raise TypeError("Expected AIChatService instance")
         self.ai_chat_service = ai_chat_service
 
     def get_data(self, **kwargs) -> IndustryAnalysisOutput:

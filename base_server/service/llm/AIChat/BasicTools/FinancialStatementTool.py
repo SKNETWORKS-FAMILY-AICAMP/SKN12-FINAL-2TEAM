@@ -2,8 +2,6 @@ import requests
 from service.llm.AIChat.BaseFinanceTool import BaseFinanceTool
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
-from service.llm.AIChat_service import AIChatService
-
 
 class FinancialStatementParams(BaseModel):
     ticker: str = Field(..., description="조회할 미국 주식의 종목 코드 (예: AAPL)")
@@ -44,12 +42,16 @@ class FinancialStatementTool(BaseFinanceTool):
         "enterprise-values": "기업가치"
     }
     BASE_URL = "https://financialmodelingprep.com/api/v3"
-
-    def __init__(self, ai_chat_service: AIChatService, statement_type: str):
+    
+    def __init__(self, ai_chat_service, statement_type: str):
+        # 지연 임포트
+        from service.llm.AIChat_service import AIChatService
+        if not isinstance(ai_chat_service, AIChatService):
+            raise TypeError("Expected AIChatService instance")
         self.ai_chat_service = ai_chat_service
         statement_type = statement_type.lower()
         if statement_type not in self.SUPPORTED_TYPES:
-            raise ValueError(f"❌ 지원하지 않는 유형입니다: {statement_type}")
+            raise ValueError(f"Unsupported type: {statement_type}")
         self.statement_type = statement_type
 
     @staticmethod

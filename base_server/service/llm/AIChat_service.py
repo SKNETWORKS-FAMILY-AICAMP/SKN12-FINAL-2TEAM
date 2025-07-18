@@ -15,8 +15,17 @@ class AIChatService:
     """AI 채팅 서비스 - LLM 응답 생성에만 집중"""
     def __init__(self, llm_config: LlmConfig):
         self.llm_config = llm_config
-        self.llm = ServiceContainer.get_llm()
-        self.llm_stream = ServiceContainer.get_llm_stream() or self.llm
+        # llm 인스턴스는 llm_config에서 직접 생성
+        from langchain_openai import ChatOpenAI
+        api_key = os.getenv("OPENAI_API_KEY") or llm_config.providers[llm_config.default_provider].api_key
+        self.llm = ChatOpenAI(model=llm_config.providers[llm_config.default_provider].model,
+                              temperature=llm_config.providers[llm_config.default_provider].temperature,
+                              openai_api_key=api_key)
+        # 스트리밍용 LLM
+        self.llm_stream = ChatOpenAI(model=llm_config.providers[llm_config.default_provider].model,
+                                     temperature=llm_config.providers[llm_config.default_provider].temperature,
+                                     streaming=True,
+                                     openai_api_key=api_key)
         self._session_mem: dict[str, ConversationBufferMemory] = {}
 
         if not CacheService.is_initialized():

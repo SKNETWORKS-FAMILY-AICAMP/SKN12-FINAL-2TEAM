@@ -5,6 +5,8 @@ import asyncio
 from datetime import datetime
 from fastapi import FastAPI
 
+from base_server.service.llm import llm_config
+
 # 프로젝트 루트를 Python 경로에 추가
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 sys.path.insert(0, project_root)
@@ -41,6 +43,8 @@ from service.lock.lock_service import LockService
 from service.scheduler.scheduler_service import SchedulerService
 from service.outbox.outbox_pattern import OutboxService
 from service.queue.queue_service import QueueService, initialize_queue_service
+from service.llm.AIChat_service import AIChatService
+from service.llm.llm_config import LlmConfig
 
 # uvicorn base_server.application.base_web_server.main:app --reload --  logLevel=Debug
 
@@ -81,15 +85,11 @@ async def lifespan(app: FastAPI):
         
         # AppConfig 객체 생성
         app_config = AppConfig(**config_data)
-        
         # 데이터베이스 서비스 초기화
         try:
             database_service = DatabaseService(app_config.databaseConfig)
             await database_service.init_service()
-            
-            # 서비스 컨테이너에 등록
-            ServiceContainer.init(database_service)
-            Logger.info("데이터베이스 서비스 초기화 및 컨테이너 등록 완료")
+            Logger.info("데이터베이스 서비스 초기화 완료")
         except Exception as e:
             Logger.error(f"데이터베이스 서비스 초기화 실패: {e}")
             Logger.info("데이터베이스 없이 계속 진행")
@@ -133,6 +133,11 @@ async def lifespan(app: FastAPI):
             Logger.info("캐시 서비스 초기화 완료")
             ServiceContainer.set_cache_service_initialized(True)
         
+        # DB 성공 여부와 상관 없이 AIChatService는 무조건 생성·등록
+        ai_service = AIChatService(app_config.llmConfig)
+        ServiceContainer.init(database_service if database_service else None, ai_service)
+        Logger.info("AIChatService 초기화 및 컨테이너 등록 완료")
+
         # External 서비스 초기화
         try:
             await ExternalService.init(app_config.externalConfig)

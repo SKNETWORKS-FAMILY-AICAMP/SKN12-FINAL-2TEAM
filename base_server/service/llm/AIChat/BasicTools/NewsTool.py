@@ -3,7 +3,6 @@ import requests
 from typing import Optional, List, Dict, Any
 from service.llm.AIChat.BaseFinanceTool import BaseFinanceTool
 from pydantic import BaseModel, Field
-from service.llm.AIChat_service import AIChatService
 
 class NewsInput(BaseModel):
     query: str = Field(..., description="검색할 뉴스 키워드 또는 종목 코드 (예: 'TSLA', '금리 인상')")
@@ -32,7 +31,10 @@ class NewsOutput(BaseModel):
 class NewsTool(BaseFinanceTool):
     BASE_URL = "https://gnews.io/api/v4/search"
 
-    def __init__(self, ai_chat_service: AIChatService):
+    def __init__(self, ai_chat_service):
+        from service.llm.AIChat_service import AIChatService
+        if not isinstance(ai_chat_service, AIChatService):
+            raise TypeError("Expected AIChatService instance")
         self.ai_chat_service = ai_chat_service
 
     # **params로 받도록 변경!

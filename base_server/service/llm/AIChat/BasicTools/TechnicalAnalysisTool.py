@@ -7,7 +7,6 @@ from service.llm.AIChat.BaseFinanceTool import BaseFinanceTool
 from ta.momentum import RSIIndicator
 from ta.trend import MACD, EMAIndicator
 import pandas as pd
-from service.llm.AIChat_service import AIChatService
 
 class TechnicalAnalysisInput(BaseModel):
     tickers: List[str] = Field(
@@ -44,7 +43,11 @@ class TechnicalAnalysisOutput:
         self.results = results  # 여러 종목의 기술적 분석 결과들
 
 class TechnicalAnalysisTool(BaseFinanceTool):
-    def __init__(self, ai_chat_service: AIChatService):
+    def __init__(self, ai_chat_service):
+        # 지연 임포트로 순환 참조 방지
+        from service.llm.AIChat_service import AIChatService
+        if not isinstance(ai_chat_service, AIChatService):
+            raise TypeError("Expected AIChatService instance")
         self.ai_chat_service = ai_chat_service
 
     def get_data(self, **params) -> TechnicalAnalysisOutput:
