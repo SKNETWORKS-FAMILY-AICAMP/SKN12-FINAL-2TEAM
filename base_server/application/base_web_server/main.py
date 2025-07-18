@@ -398,7 +398,6 @@ async def lifespan(app: FastAPI):
         # 큐 시스템 초기화 상태 및 발행/수신 동작 확인
         if CacheService.is_initialized() and QueueService._initialized:
             try:
-                import asyncio
                 from datetime import datetime
                 from service.queue.message_queue import MessagePriority
                 from service.queue.event_queue import EventType
@@ -563,15 +562,6 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         Logger.error(f"DataTableManager 정리 오류: {e}")
     
-    # QueueService 종료 (큐 처리 완료 후)
-    try:
-        if QueueService._initialized:
-            await QueueService.shutdown()
-            ServiceContainer.set_queue_service_initialized(False)
-            Logger.info("QueueService 종료")
-    except Exception as e:
-        Logger.error(f"QueueService 종료 오류: {e}")
-    
     # SchedulerService 종료 (스케줄된 작업 완료 후)
     try:
         if SchedulerService.is_initialized():
@@ -580,6 +570,15 @@ async def lifespan(app: FastAPI):
             Logger.info("SchedulerService 종료")
     except Exception as e:
         Logger.error(f"SchedulerService 종료 오류: {e}")
+    
+    # QueueService 종료 (큐 처리 완료 후)
+    try:
+        if QueueService._initialized:
+            await QueueService.shutdown()
+            ServiceContainer.set_queue_service_initialized(False)
+            Logger.info("QueueService 종료")
+    except Exception as e:
+        Logger.error(f"QueueService 종료 오류: {e}")
     
     # LockService 종료 (분산락 해제)
     try:
@@ -622,7 +621,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         Logger.error(f"External 서비스 종료 오류: {e}")
         
-    # 캐시 서비스 종료 (Redis 연결)
+    # 캐시 서비스 종료 (Redis 연결) - CacheService 의존 서비스들 이후 종료
     try:
         if CacheService.is_initialized():
             await CacheService.shutdown()
@@ -695,7 +694,6 @@ signal.signal(signal.SIGTERM, signal_handler)
 
 async def test_queue_systems():
     """큐 시스템 종합 테스트 - 메시지큐와 이벤트큐 발행/수신 확인"""
-    import asyncio
     from datetime import datetime
     from service.queue.queue_service import QueueService, get_queue_service
     from service.queue.message_queue import QueueMessage, MessagePriority

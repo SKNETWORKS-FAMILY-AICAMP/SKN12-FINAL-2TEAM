@@ -136,10 +136,14 @@ class AccountInfoResponse(BaseResponse):
 
 class AccountProfileSetupRequest(BaseRequest):
     """프로필 설정 요청"""
-    investment_experience: str
-    risk_tolerance: str  
-    investment_goal: str
-    monthly_budget: float
+    investment_experience: str  # "초급", "중급", "고급"
+    risk_tolerance: str         # "보수적", "보통", "공격적"  
+    investment_goal: str        # "장기투자", "단기수익", "안정성"
+    monthly_budget: float       # 월 투자 예산
+    birth_year: Optional[int] = None    # 생년 (선택사항)
+    birth_month: Optional[int] = None   # 생월 (선택사항)
+    birth_day: Optional[int] = None     # 생일 (선택사항)
+    gender: Optional[str] = None        # "M", "F", "OTHER" (선택사항)
 
 class AccountProfileSetupResponse(BaseResponse):
     """프로필 설정 응답"""
@@ -154,14 +158,18 @@ class AccountProfileGetRequest(BaseRequest):
 class AccountProfileGetResponse(BaseResponse):
     """프로필 조회 응답"""
     profile: Optional[UserProfile] = None
+    message: str = ""
 
 class AccountProfileUpdateRequest(BaseRequest):
     """프로필 수정 요청"""
-    nickname: Optional[str] = None
-    investment_experience: Optional[str] = None
-    risk_tolerance: Optional[str] = None
-    investment_goal: Optional[str] = None
-    monthly_budget: Optional[float] = None
+    investment_experience: str  # "초급", "중급", "고급" - 필수
+    risk_tolerance: str         # "보수적", "보통", "공격적" - 필수
+    investment_goal: str        # "장기투자", "단기수익", "안정성" - 필수
+    monthly_budget: float       # 월 투자 예산 - 필수
+    birth_year: Optional[int] = None    # 생년
+    birth_month: Optional[int] = None   # 생월
+    birth_day: Optional[int] = None     # 생일
+    gender: Optional[str] = None        # "M", "F", "OTHER"
 
 class AccountProfileUpdateResponse(BaseResponse):
     """프로필 수정 응답"""

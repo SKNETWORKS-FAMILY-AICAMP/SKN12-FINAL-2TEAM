@@ -33,32 +33,46 @@ class LoggerInterface:
 class ConsoleLogger(LoggerInterface):
     def __init__(self, log_level: LogLevel):
         self._log_level = log_level
+        self._color_codes = {
+            LogLevel.FATAL: "\033[41;97m",  # 빨간색 배경 + 흰색 글자
+            LogLevel.ERROR: "\033[91m",     # 빨간색
+            LogLevel.WARN: "\033[93m",      # 노란색
+            LogLevel.INFO: "\033[92m",      # 녹색
+            LogLevel.DEBUG: "\033[94m",     # 파란색
+            LogLevel.TRACE: "\033[95m"      # 자주색
+        }
+        self._reset = "\033[0m"
+    
+    def _colorize_log(self, level: LogLevel, message: str) -> str:
+        color = self._color_codes.get(level, "")
+        return f"{color}{message}{self._reset}"
+    
     def set_level(self, level: LogLevel):
         self._log_level = level
     def info(self, log: str):
         if self._log_level != LogLevel.ALL and self._log_level < LogLevel.INFO:
             return
-        print(f"[Info] : {log}")
+        print(self._colorize_log(LogLevel.INFO, f"[Info] : {log}"))
     def fatal(self, log: str):
         if self._log_level != LogLevel.ALL and self._log_level < LogLevel.FATAL:
             return
-        print(f"[Fatal] : {log}")
+        print(self._colorize_log(LogLevel.FATAL, f"[Fatal] : {log}"))
     def error(self, log: str):
         if self._log_level != LogLevel.ALL and self._log_level < LogLevel.ERROR:
             return
-        print(f"[Error] : {log}")
+        print(self._colorize_log(LogLevel.ERROR, f"[Error] : {log}"))
     def warn(self, log: str):
         if self._log_level != LogLevel.ALL and self._log_level < LogLevel.WARN:
             return
-        print(f"[Warn] : {log}")
+        print(self._colorize_log(LogLevel.WARN, f"[Warn] : {log}"))
     def debug(self, log: str):
         if self._log_level != LogLevel.ALL and self._log_level < LogLevel.DEBUG:
             return
-        print(f"[Debug] : {log}")
+        print(self._colorize_log(LogLevel.DEBUG, f"[Debug] : {log}"))
     def trace(self, log: str):
         if self._log_level != LogLevel.ALL and self._log_level < LogLevel.TRACE:
             return
-        print(f"[Trace] : {log}")
+        print(self._colorize_log(LogLevel.TRACE, f"[Trace] : {log}"))
 
 class FileLogger(LoggerInterface):
     def __init__(self, log_level: LogLevel = LogLevel.INFO, use_console: bool = True, prefix: str = "App", folder: str = "log", crash_report_url: Optional[str] = None):
@@ -72,6 +86,15 @@ class FileLogger(LoggerInterface):
         self._log_file_path = self._make_log_file_path()
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
+        self._color_codes = {
+            LogLevel.FATAL: "\033[41;97m",  # 빨간색 배경 + 흰색 글자
+            LogLevel.ERROR: "\033[91m",     # 빨간색
+            LogLevel.WARN: "\033[93m",      # 노란색
+            LogLevel.INFO: "\033[92m",      # 녹색
+            LogLevel.DEBUG: "\033[94m",     # 파란색
+            LogLevel.TRACE: "\033[95m"      # 자주색
+        }
+        self._reset = "\033[0m"
 
     def _make_log_file_path(self):
         os.makedirs(self._folder, exist_ok=True)
@@ -105,9 +128,13 @@ class FileLogger(LoggerInterface):
     def trace(self, msg: str):
         self.log(LogLevel.TRACE, msg)
 
+    def _colorize_log(self, level: LogLevel, message: str) -> str:
+        color = self._color_codes.get(level, "")
+        return f"{color}{message}{self._reset}"
+    
     def _print_console(self, level: LogLevel, log: str):
-        # 색상 출력은 생략, 필요시 colorama 등 사용 가능
-        print(log)
+        # 로그 레벨별 색상 적용
+        print(self._colorize_log(level, log))
 
     def _run(self):
         while self._running:

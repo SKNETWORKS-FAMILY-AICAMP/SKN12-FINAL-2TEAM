@@ -21,11 +21,7 @@ class DashboardTemplateImpl(BaseTemplate):
         Logger.info(f"Dashboard main request: period={request.chart_period}")
         
         try:
-            if not client_session or not client_session.session:
-                response.errorCode = 2001
-                Logger.info("Dashboard main failed: no session")
-                return response
-            
+            # 세션에서 사용자 정보 가져오기 (세션 검증은 template_service에서 이미 완료)
             account_db_key = getattr(client_session.session, 'account_db_key', 0)
             shard_id = getattr(client_session.session, 'shard_id', 1)
             
@@ -99,33 +95,34 @@ class DashboardTemplateImpl(BaseTemplate):
                     volume=int(market.get('volume', 0))
                 ))
             
-            # 7. 포트폴리오 차트 데이터 처리
+            # 7. 포트폴리오 차트 데이터 처리 (시간별 포트폴리오 가치 변화)
             portfolio_chart = []
             if chart_data:
                 for chart_point in chart_data:
                     portfolio_chart.append({
-                        "date": str(chart_point.get('date')),
-                        "value": float(chart_point.get('total_value', 0.0)),
-                        "return_rate": float(chart_point.get('return_rate', 0.0))
+                        "date": str(chart_point.get('date')),               # 날짜
+                        "value": float(chart_point.get('total_value', 0.0)), # 포트폴리오 총 가치
+                        "return_rate": float(chart_point.get('return_rate', 0.0)) # 수익률
                     })
             
-            # 8. 자산 배분 차트 데이터 생성
+            # 8. 자산 배분 차트 데이터 생성 (종목별 포트폴리오 비중)
             allocation_chart = []
             total_stock_value = sum(float(h.get('market_value', 0)) for h in holdings_data)
             if total_stock_value > 0:
-                for holding in holdings_data[:5]:  # 상위 5개만
+                for holding in holdings_data[:5]:  # 상위 5개 종목만 표시
                     allocation_chart.append({
-                        "symbol": holding.get('symbol'),
-                        "name": holding.get('name'),
-                        "value": float(holding.get('market_value', 0.0)),
-                        "percentage": round(float(holding.get('market_value', 0.0)) / total_stock_value * 100, 1)
+                        "symbol": holding.get('symbol'),                    # 종목 코드
+                        "name": holding.get('name'),                       # 종목명
+                        "value": float(holding.get('market_value', 0.0)),  # 시장 가치
+                        "percentage": round(float(holding.get('market_value', 0.0)) / total_stock_value * 100, 1) # 비중
                     })
             
+            # 9. Response 데이터 설정
             response.errorCode = 0
             response.asset_summary = asset_summary
             response.holdings = holdings
-            response.portfolio_chart = []
-            response.allocation_chart = []
+            response.portfolio_chart = portfolio_chart    # 차트 데이터 활성화
+            response.allocation_chart = allocation_chart  # 차트 데이터 활성화  
             response.recent_alerts = recent_alerts
             response.market_overview = market_overview
             
