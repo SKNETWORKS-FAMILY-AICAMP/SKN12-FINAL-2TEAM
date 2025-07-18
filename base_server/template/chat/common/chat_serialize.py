@@ -30,8 +30,6 @@ class ChatMessageSendRequest(BaseRequest):
     room_id: str
     content: str
     persona: str 
-    include_portfolio: bool = True
-    analysis_symbols: List[str] = []
 
 class ChatMessageSendResponse(BaseResponse):
     """채팅 메시지 전송 응답"""
