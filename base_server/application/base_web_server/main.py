@@ -4,6 +4,7 @@ import json
 import asyncio
 from datetime import datetime
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 # 프로젝트 루트를 Python 경로에 추가
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -789,6 +790,15 @@ async def test_queue_systems():
         Logger.error(f"상세 오류: {traceback.format_exc()}")
 
 app = FastAPI(lifespan=lifespan)
+
+# CORS 미들웨어 추가 (모든 origin, method, header 허용)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # 라우터 등록
 from .routers import account, admin, tutorial, dashboard, portfolio, chat, autotrade, market, settings, notification, crawler
