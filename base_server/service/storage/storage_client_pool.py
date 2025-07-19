@@ -101,19 +101,18 @@ class StorageClientPool(IStorageClientPool):
     def new(self) -> IStorageClient:
         """Storage 클라이언트 반환 (Session 재사용)"""
         if not self._initialized:
-            # 동기 컨텍스트에서 비동기 초기화 실행
+            # 🔧 근본 수정: 동기 컨텍스트에서 비동기 초기화를 완료까지 대기
             try:
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
-                    # 이미 실행 중인 루프가 있으면 태스크 생성
-                    task = asyncio.create_task(self._init_session())
-                    # 짧은 대기 후 재시도
-                    import time
-                    time.sleep(0.1)
+                    # 실행 중인 루프에서는 동기적으로 대기할 수 없음
+                    raise RuntimeError("Cannot initialize Storage Pool from running event loop. Use async get_client() instead.")
                 else:
                     # 루프가 실행 중이 아니면 직접 실행
                     loop.run_until_complete(self._init_session())
-            except RuntimeError:
+            except RuntimeError as e:
+                if "Cannot initialize" in str(e):
+                    raise e
                 # 새 루프 생성하여 실행
                 asyncio.run(self._init_session())
             

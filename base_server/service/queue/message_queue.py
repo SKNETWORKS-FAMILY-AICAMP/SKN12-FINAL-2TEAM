@@ -13,7 +13,6 @@ from abc import ABC, abstractmethod
 
 from service.core.logger import Logger
 from service.cache.redis_cache_client import RedisCacheClient
-from service.lock.distributed_lock import DistributedLockManager
 
 
 class MessageStatus(Enum):
@@ -82,7 +81,6 @@ class RedisCacheMessageQueue(IMessageQueue):
         
         # Redis 키 패턴들
         self.message_key_pattern = "mq:message:{message_id}"
-        self.queue_key_pattern = "mq:queue:{queue_name}"
         self.priority_queue_pattern = "mq:priority:{queue_name}:{priority}"
         self.delayed_key_pattern = "mq:delayed:messages"
         self.processing_key_pattern = "mq:processing:{queue_name}"
@@ -114,30 +112,6 @@ class RedisCacheMessageQueue(IMessageQueue):
         return nil
         """
         
-        self._cleanup_expired_processing_script = """
-        -- 만료된 처리 중 메시지를 다시 큐로 복원 (KEYS 명령어 사용하지 않음)
-        -- 이 스크립트는 cleanup_expired_processing_messages에서 개별 호출로 처리
-        -- KEYS[1]: processing_key, ARGV[1]: message_key_base, ARGV[2]: queue_key_base
-        
-        local ttl = redis.call('TTL', KEYS[1])
-        if ttl == -2 then  -- 키가 만료됨
-            local message_id = string.match(KEYS[1], ':([^:]+)$')
-            if message_id then
-                -- 메시지 정보 조회
-                local message_key = ARGV[1] .. ':' .. message_id
-                local priority = redis.call('HGET', message_key, 'priority')
-                if priority then
-                    -- 적절한 우선순위 큐로 복원
-                    local queue_key = ARGV[2] .. ':' .. priority
-                    redis.call('RPUSH', queue_key, message_id)
-                    redis.call('DEL', KEYS[1])
-                    return 1
-                end
-            end
-            redis.call('DEL', KEYS[1])
-        end
-        return 0
-        """
     
     async def _execute_redis_operation(self, operation_name: str, operation_func, *args, **kwargs):
         """Redis 작업을 CacheService를 통해 안전하게 실행"""
@@ -329,22 +303,39 @@ class RedisCacheMessageQueue(IMessageQueue):
     async def cleanup_expired_processing_messages(self, queue_name: str) -> int:
         """만료된 처리 중 메시지들을 큐로 복원"""
         async def _cleanup_operation(client, q_name):
-            processing_key_base = self.processing_key_pattern.format(queue_name=q_name)
-            message_key_base = self.message_key_pattern.format(message_id="")
-            message_key_base = message_key_base.rstrip(":")
-            priority_queue_base = self.priority_queue_pattern.format(queue_name=q_name, priority="")
-            priority_queue_base = priority_queue_base.rstrip(":")
+            processing_key_pattern = self.processing_key_pattern.format(queue_name=q_name)
             
-            # Lua 스크립트로 만료된 메시지 복원
-            restored_count = await client.eval(
-                self._cleanup_expired_processing_script,
-                0,  # 키 개수 (ARGV만 사용)
-                processing_key_base,      # ARGV[1]: mq:processing:{queue_name}
-                message_key_base,         # ARGV[2]: mq:message
-                priority_queue_base       # ARGV[3]: mq:priority:{queue_name}
-            )
+            # 처리 중인 메시지 키들 조회
+            processing_keys = await client.scan_keys(f"{processing_key_pattern}:*")
+            restored_count = 0
             
-            return restored_count or 0
+            for processing_key in processing_keys:
+                try:
+                    # TTL 확인 (만료된 키만 처리)
+                    ttl = await client.ttl(processing_key)
+                    if ttl == -2:  # 키가 만료됨
+                        # 메시지 ID 추출
+                        message_id = processing_key.split(':')[-1]
+                        
+                        # 메시지 정보 조회
+                        message_key = self.message_key_pattern.format(message_id=message_id)
+                        message_data = await client.get_hash_all(message_key)
+                        
+                        if message_data and 'priority' in message_data:
+                            # 적절한 우선순위 큐로 복원
+                            priority_queue_key = self.priority_queue_pattern.format(
+                                queue_name=q_name, priority=message_data['priority']
+                            )
+                            await client.list_push_right(priority_queue_key, message_id)
+                            await client.delete(processing_key)
+                            restored_count += 1
+                        else:
+                            # 메시지 데이터가 없으면 처리 키만 삭제
+                            await client.delete(processing_key)
+                except Exception as e:
+                    Logger.error(f"만료된 메시지 복원 중 오류: {processing_key} - {e}")
+            
+            return restored_count
         
         result = await self._execute_redis_operation("cleanup_expired", _cleanup_operation, queue_name)
         return result if result is not None else 0

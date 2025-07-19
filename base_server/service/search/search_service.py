@@ -46,6 +46,37 @@ class SearchService:
             raise RuntimeError("SearchService client pool not available")
         return cls._client_pool.new()
     
+    @classmethod
+    async def create_test_index(cls, index: str) -> Dict[str, Any]:
+        """테스트용 인덱스 생성 (유연한 매핑)"""
+        try:
+            client = cls.get_client()
+            
+            # 🔧 근본 해결: 동적 매핑 허용하는 유연한 스키마
+            mappings = {
+                "dynamic": True,  # 동적 필드 매핑 허용
+                "properties": {
+                    "content": {"type": "text", "analyzer": "standard"},
+                    "message": {"type": "text", "analyzer": "standard"}, 
+                    "timestamp": {"type": "long"},
+                    "server_id": {"type": "keyword"}
+                }
+            }
+            
+            settings = {
+                "number_of_shards": 1,
+                "number_of_replicas": 0  # 테스트용이므로 복제본 없음
+            }
+            
+            # async with 대신 직접 클라이언트 사용
+            result = await client.create_index(index, mappings=mappings, settings=settings)
+            Logger.info(f"테스트 인덱스 생성 성공: {index}")
+            return result
+                
+        except Exception as e:
+            Logger.error(f"테스트 인덱스 생성 실패: {e}")
+            return {"success": False, "error": str(e)}
+    
     # === 인덱스 관리 ===
     @classmethod
     async def create_index(cls, index: str, mappings: Optional[Dict] = None, settings: Optional[Dict] = None, **kwargs) -> Dict[str, Any]:
