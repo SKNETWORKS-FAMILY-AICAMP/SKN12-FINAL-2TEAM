@@ -43,6 +43,8 @@ from service.scheduler.scheduler_service import SchedulerService
 from service.outbox.outbox_pattern import OutboxService
 from service.queue.queue_service import QueueService, initialize_queue_service
 from service.core.service_monitor import service_monitor
+from service.websocket.websocket_service import WebSocketService
+from service.websocket.websocket_config import WebSocketConfig
 
 # uvicorn base_server.application.base_web_server.main:app --reload --  logLevel=Debug
 
@@ -416,6 +418,27 @@ async def lifespan(app: FastAPI):
             Logger.error(f"QueueService 초기화 실패: {e}")
             Logger.info("QueueService 없이 계속 진행")
         
+        # WebSocket 서비스 초기화
+        try:
+            websocket_config = WebSocketConfig()
+            # 개발 환경에서는 인증을 선택적으로 설정
+            if app_env in ["LOCAL", "DEBUG"]:
+                websocket_config.require_auth = False
+                Logger.info("WebSocket 인증 비활성화 (개발 환경)")
+            
+            if WebSocketService.init(websocket_config):
+                Logger.info("WebSocket 서비스 초기화 완료")
+                ServiceContainer.set_websocket_service_initialized(True)
+                
+                # 백그라운드 태스크 시작
+                await WebSocketService.start_background_tasks()
+                Logger.info("WebSocket 백그라운드 태스크 시작")
+            else:
+                Logger.warn("WebSocket 서비스 초기화 실패")
+        except Exception as e:
+            Logger.error(f"WebSocket 서비스 초기화 실패: {e}")
+            Logger.info("WebSocket 서비스 없이 계속 진행")
+        
     except Exception as e:
         Logger.error(f"❌ Config 파일 로드 실패: {config_file} - {e}")
         Logger.error("🚫 서버 시작 불가 - 올바른 config 파일이 필요합니다")
@@ -510,7 +533,8 @@ async def lifespan(app: FastAPI):
         ("market", "마켓"),
         ("settings", "설정"),
         ("notification", "알림"),
-        ("crawler", "크롤러")
+        ("crawler", "크롤러"),
+        ("websocket", "웹소켓")
     ]
     
     protocol_callback_status = {}
@@ -550,6 +574,9 @@ async def lifespan(app: FastAPI):
             elif protocol_name == "crawler":
                 from .routers.crawler import setup_crawler_protocol_callbacks
                 setup_crawler_protocol_callbacks()
+            elif protocol_name == "websocket":
+                from .routers.websocket import setup_websocket_protocol_callbacks
+                setup_websocket_protocol_callbacks()
             else:
                 raise ImportError(f"Unknown protocol: {protocol_name}")
                 
@@ -608,7 +635,8 @@ async def lifespan(app: FastAPI):
         services_status = {
             "database": core_services_status["database"],
             "cache": core_services_status["cache"],
-            "template": core_services_status["template"]
+            "template": core_services_status["template"],
+            "websocket": WebSocketService.is_initialized()
         }
         
         # 큐 시스템 통합 테스트
@@ -714,6 +742,49 @@ async def lifespan(app: FastAPI):
         else:
             services_status["queue_system"] = False
             Logger.warn("❌ 큐 시스템 초기화되지 않음")
+        
+        # WebSocket 시스템 통합 테스트
+        if WebSocketService.is_initialized():
+            try:
+                Logger.info("🔌 WebSocket 시스템 테스트 시작...")
+                
+                # 1. 서비스 상태 확인
+                health_check = await WebSocketService.health_check()
+                if health_check.get("healthy"):
+                    Logger.info("✅ WebSocket 서비스 health check 성공")
+                else:
+                    Logger.warn("⚠️ WebSocket 서비스 health check 실패")
+                
+                # 2. 통계 정보 확인
+                stats = WebSocketService.get_stats()
+                Logger.info(f"WebSocket 초기 상태 - 연결: {stats.get('active_connections', 0)}, 총 연결: {stats.get('total_connections', 0)}")
+                
+                # 3. 테스트 메시지 핸들러 등록
+                test_message_received = {"count": 0}
+                
+                async def test_handler(client_id: str, data: dict):
+                    test_message_received["count"] += 1
+                    Logger.info(f"WebSocket 테스트 메시지 수신: {data}")
+                
+                WebSocketService.register_message_handler("test_message", test_handler)
+                
+                # 4. 채널 관리 테스트
+                test_channels = WebSocketService.get_all_channels()
+                Logger.info(f"활성 채널 수: {len(test_channels)}")
+                
+                # 5. 연결 사용자 확인
+                connected_users = WebSocketService.get_connected_users()
+                Logger.info(f"연결된 사용자 수: {len(connected_users)}")
+                
+                services_status["websocket_system"] = True
+                Logger.info("✅ WebSocket 시스템 테스트 완료")
+                
+            except Exception as e:
+                services_status["websocket_system"] = False
+                Logger.warn(f"⚠️ WebSocket 시스템 테스트 실패: {e}")
+        else:
+            services_status["websocket_system"] = False
+            Logger.warn("❌ WebSocket 시스템 초기화되지 않음")
         
         test_results = {
             "results": {
@@ -826,6 +897,15 @@ async def lifespan(app: FastAPI):
             ServiceContainer.set_queue_service_initialized(False)
         except Exception as force_e:
             Logger.error(f"QueueService 강제 종료도 실패: {force_e}")
+    
+    # WebSocket 서비스 종료
+    try:
+        if WebSocketService.is_initialized():
+            await WebSocketService.shutdown()
+            ServiceContainer.set_websocket_service_initialized(False)
+            Logger.info("WebSocket 서비스 종료 완료")
+    except Exception as e:
+        Logger.error(f"WebSocket 서비스 종료 오류: {e}")
     
     # LockService 종료 (분산락 해제)
     try:
@@ -1049,7 +1129,7 @@ app.add_middleware(
 )
 
 # 라우터 등록
-from .routers import account, admin, tutorial, dashboard, portfolio, chat, autotrade, market, settings, notification, crawler
+from .routers import account, admin, tutorial, dashboard, portfolio, chat, autotrade, market, settings, notification, crawler, websocket
 app.include_router(account.router, prefix="/api/account", tags=["account"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 app.include_router(tutorial.router, prefix="/api/tutorial", tags=["tutorial"])
@@ -1061,6 +1141,7 @@ app.include_router(market.router, prefix="/api/market", tags=["market"])
 app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(notification.router, prefix="/api/notification", tags=["notification"])
 app.include_router(crawler.router, prefix="/api/crawler", tags=["crawler"])
+app.include_router(websocket.router, prefix="/api/websocket", tags=["websocket"])
 
 @app.get("/")
 def root():

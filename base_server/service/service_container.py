@@ -23,6 +23,7 @@ class ServiceContainer:
     _lock_service_initialized: bool = False
     _scheduler_service_initialized: bool = False
     _queue_service_initialized: bool = False
+    _websocket_service_initialized: bool = False
     
     def __new__(cls):
         if cls._instance is None:
@@ -66,6 +67,12 @@ class ServiceContainer:
         """QueueService 초기화 상태 설정"""
         container = cls()
         container._queue_service_initialized = initialized
+    
+    @classmethod
+    def set_websocket_service_initialized(cls, initialized: bool):
+        """WebSocketService 초기화 상태 설정"""
+        container = cls()
+        container._websocket_service_initialized = initialized
     
     @classmethod
     def set_cache_service_initialized(cls, initialized: bool):
@@ -132,7 +139,8 @@ class ServiceContainer:
             "cache": container._cache_service is not None,
             "lock": container._lock_service_initialized,
             "scheduler": container._scheduler_service_initialized,
-            "queue": container._queue_service_initialized
+            "queue": container._queue_service_initialized,
+            "websocket": container._websocket_service_initialized
         }
         
         # Singleton 패턴 서비스들 (동적 import로 순환 import 방지)
