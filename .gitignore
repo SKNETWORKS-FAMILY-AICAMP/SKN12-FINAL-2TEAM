@@ -173,3 +173,4 @@ base_server/*.crt
 base_server/*.key
 base_server/**/*.crt
 base_server/**/*.key
+CLAUDE.md
