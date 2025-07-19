@@ -87,6 +87,57 @@ class RedisCacheMessageQueue(IMessageQueue):
         self.delayed_key_pattern = "mq:delayed:messages"
         self.processing_key_pattern = "mq:processing:{queue_name}"
         self.dlq_key_pattern = "mq:dlq:{queue_name}"
+        
+        # Lua 스크립트들 (네임스페이스 고려)
+        self._dequeue_lua_script = """
+        -- 원자적 dequeue 스크립트
+        -- KEYS[1~8]: queue_keys(4개) + message_key_base + processing_key_base + consumer_id + started_at + visibility_timeout
+        
+        for i = 1, 4 do
+            local message_id = redis.call('LPOP', KEYS[i])
+            if message_id then
+                -- 메시지 존재 확인
+                local message_key = KEYS[5] .. ':' .. message_id
+                local exists = redis.call('EXISTS', message_key)
+                if exists == 1 then
+                    -- 처리 중 상태로 마킹
+                    local processing_key = KEYS[6] .. ':' .. message_id
+                    redis.call('HSET', processing_key, 'message_id', message_id)
+                    redis.call('HSET', processing_key, 'consumer_id', KEYS[7])
+                    redis.call('HSET', processing_key, 'started_at', KEYS[8])
+                    redis.call('HSET', processing_key, 'visibility_timeout', KEYS[9])
+                    redis.call('EXPIRE', processing_key, tonumber(KEYS[9]))
+                    return message_id
+                end
+            end
+        end
+        return nil
+        """
+        
+        self._cleanup_expired_processing_script = """
+        -- 만료된 처리 중 메시지를 다시 큐로 복원 (KEYS 명령어 사용하지 않음)
+        -- 이 스크립트는 cleanup_expired_processing_messages에서 개별 호출로 처리
+        -- KEYS[1]: processing_key, ARGV[1]: message_key_base, ARGV[2]: queue_key_base
+        
+        local ttl = redis.call('TTL', KEYS[1])
+        if ttl == -2 then  -- 키가 만료됨
+            local message_id = string.match(KEYS[1], ':([^:]+)$')
+            if message_id then
+                -- 메시지 정보 조회
+                local message_key = ARGV[1] .. ':' .. message_id
+                local priority = redis.call('HGET', message_key, 'priority')
+                if priority then
+                    -- 적절한 우선순위 큐로 복원
+                    local queue_key = ARGV[2] .. ':' .. priority
+                    redis.call('RPUSH', queue_key, message_id)
+                    redis.call('DEL', KEYS[1])
+                    return 1
+                end
+            end
+            redis.call('DEL', KEYS[1])
+        end
+        return 0
+        """
     
     async def _execute_redis_operation(self, operation_name: str, operation_func, *args, **kwargs):
         """Redis 작업을 CacheService를 통해 안전하게 실행"""
@@ -152,48 +203,71 @@ class RedisCacheMessageQueue(IMessageQueue):
     
     async def dequeue(self, queue_name: str, consumer_id: str, 
                      visibility_timeout: int = 300) -> Optional[QueueMessage]:
-        """메시지 큐에서 제거하여 반환"""
+        """메시지 큐에서 원자적으로 제거하여 반환 (네임스페이스 고려)"""
         async def _dequeue_operation(client, q_name, c_id, timeout):
-            # 우선순위 순서대로 확인 (CRITICAL=4, HIGH=3, NORMAL=2, LOW=1)
-            for priority in [4, 3, 2, 1]:
+            # 네임스페이스를 고려한 Lua Script 사용
+            # KEYS 배열로 네임스페이스가 자동 적용되도록 수정
+            
+            # 키 리스트 준비 (우선순위별) - 네임스페이스 수동 적용
+            queue_keys = []
+            for priority in [4, 3, 2, 1]:  # CRITICAL -> LOW
                 priority_queue_key = self.priority_queue_pattern.format(
                     queue_name=q_name, priority=priority
                 )
-                
-                message_id = await client.list_pop_left(priority_queue_key)
-                if message_id:
-                    # 메시지 상세 정보 가져오기
-                    message_key = self.message_key_pattern.format(message_id=message_id)
-                    message_data = await client.get_hash_all(message_key)
-                    
-                    if not message_data:
-                        continue
-                    
-                    # 처리 중 상태로 이동
-                    processing_key = self.processing_key_pattern.format(queue_name=q_name)
-                    processing_info = {
-                        "message_id": str(message_id),
-                        "consumer_id": str(c_id),
-                        "started_at": datetime.now().isoformat(),
-                        "visibility_timeout": str(timeout)
-                    }
-                    if processing_info:  # 빈 딕셔너리가 아닌지 확인
-                        await client.set_hash_all(f"{processing_key}:{message_id}", processing_info)
-                    
-                    # QueueMessage 객체로 변환
-                    return QueueMessage(
-                        id=message_data["id"],
-                        queue_name=message_data["queue_name"],
-                        payload=json.loads(message_data["payload"]),
-                        message_type=message_data["message_type"],
-                        priority=MessagePriority(int(message_data["priority"])),
-                        created_at=datetime.fromisoformat(message_data["created_at"]),
-                        retry_count=int(message_data.get("retry_count", 0)),
-                        max_retries=int(message_data.get("max_retries", 3)),
-                        partition_key=message_data.get("partition_key") or None
-                    )
+                namespaced_queue_key = client._get_key(priority_queue_key)
+                queue_keys.append(namespaced_queue_key)
             
-            return None
+            # 네임스페이스가 적용된 키 베이스 패턴들 생성
+            message_key_base = self.message_key_pattern.format(message_id="")
+            message_key_base = message_key_base.rstrip(":")
+            processing_key_base = self.processing_key_pattern.format(queue_name=q_name)
+            
+            # 네임스페이스 적용된 키 베이스들 생성
+            namespaced_message_key_base = client._get_key(message_key_base)
+            namespaced_processing_key_base = client._get_key(processing_key_base)
+            
+            # eval 사용 (분산락과 동일한 방식) - numkeys만 전달
+            message_id = await client.eval(
+                self._dequeue_lua_script,
+                9,  # numkeys: queue_keys(4) + message_key_base + processing_key_base + consumer_id + started_at + visibility_timeout
+                *queue_keys,                    # KEYS[1~4]: 네임스페이스 적용된 우선순위별 큐
+                namespaced_message_key_base,    # KEYS[5]: 네임스페이스 적용된 mq:message
+                namespaced_processing_key_base, # KEYS[6]: 네임스페이스 적용된 mq:processing:{queue_name}
+                c_id,                          # KEYS[7]: consumer_id
+                datetime.now().isoformat(),    # KEYS[8]: started_at
+                str(timeout)                   # KEYS[9]: visibility_timeout
+            )
+            
+            if not message_id:
+                return None
+            
+            # 메시지 상세 정보 가져오기
+            message_key = self.message_key_pattern.format(message_id=message_id)
+            message_data = await client.get_hash_all(message_key)
+            
+            if not message_data:
+                Logger.warn(f"Message data not found for ID: {message_id}")
+                return None
+            
+            # QueueMessage 객체로 변환
+            try:
+                return QueueMessage(
+                    id=message_data["id"],
+                    queue_name=message_data["queue_name"],
+                    payload=json.loads(message_data["payload"]),
+                    message_type=message_data["message_type"],
+                    priority=MessagePriority(int(message_data["priority"])),
+                    created_at=datetime.fromisoformat(message_data["created_at"]),
+                    retry_count=int(message_data.get("retry_count", 0)),
+                    max_retries=int(message_data.get("max_retries", 3)),
+                    partition_key=message_data.get("partition_key") or None
+                )
+            except (KeyError, ValueError, json.JSONDecodeError) as e:
+                Logger.error(f"Failed to parse message data {message_id}: {e}")
+                # 파싱 실패 시 처리 중 상태에서 제거
+                processing_key = f"{processing_key_base}:{message_id}"
+                await client.delete(processing_key)
+                return None
         
         return await self._execute_redis_operation("dequeue", _dequeue_operation, queue_name, consumer_id, visibility_timeout)
     
@@ -251,6 +325,29 @@ class RedisCacheMessageQueue(IMessageQueue):
             return True
         
         return await self._execute_redis_operation("nack", _nack_operation, message, consumer_id, requeue)
+    
+    async def cleanup_expired_processing_messages(self, queue_name: str) -> int:
+        """만료된 처리 중 메시지들을 큐로 복원"""
+        async def _cleanup_operation(client, q_name):
+            processing_key_base = self.processing_key_pattern.format(queue_name=q_name)
+            message_key_base = self.message_key_pattern.format(message_id="")
+            message_key_base = message_key_base.rstrip(":")
+            priority_queue_base = self.priority_queue_pattern.format(queue_name=q_name, priority="")
+            priority_queue_base = priority_queue_base.rstrip(":")
+            
+            # Lua 스크립트로 만료된 메시지 복원
+            restored_count = await client.eval(
+                self._cleanup_expired_processing_script,
+                0,  # 키 개수 (ARGV만 사용)
+                processing_key_base,      # ARGV[1]: mq:processing:{queue_name}
+                message_key_base,         # ARGV[2]: mq:message
+                priority_queue_base       # ARGV[3]: mq:priority:{queue_name}
+            )
+            
+            return restored_count or 0
+        
+        result = await self._execute_redis_operation("cleanup_expired", _cleanup_operation, queue_name)
+        return result if result is not None else 0
     
     async def process_delayed_messages(self) -> int:
         """지연 실행 시간이 된 메시지들을 큐로 이동"""
@@ -404,6 +501,67 @@ class MessageQueueManager:
         except Exception as e:
             Logger.error(f"소비자 중지 중 오류: {e}")
     
+    async def graceful_shutdown(self, timeout_seconds: int = 30):
+        """우아한 종료 - 처리 중인 메시지 완료 후 종료"""
+        Logger.info(f"MessageQueueManager graceful shutdown 시작 (timeout: {timeout_seconds}초)")
+        
+        try:
+            # 1. 모든 컨슈머에게 새로운 메시지 수신 중단 신호
+            shutdown_tasks = []
+            for consumer_key, consumer in self.consumers.items():
+                shutdown_tasks.append(consumer.graceful_stop(timeout_seconds))
+            
+            # 2. 모든 컨슈머가 graceful stop 완료될 때까지 대기
+            if shutdown_tasks:
+                await asyncio.gather(*shutdown_tasks, return_exceptions=True)
+            
+            # 3. 각 컨슈머별로 처리 중이던 메시지 복원
+            await self._restore_processing_messages_by_consumers()
+            
+            # 4. 컨슈머 정리
+            self.consumers.clear()
+            Logger.info("MessageQueueManager graceful shutdown 완료")
+            
+        except Exception as e:
+            Logger.error(f"MessageQueueManager graceful shutdown 중 오류: {e}")
+            # 강제 정리
+            await self.stop_all_consumers()
+    
+    async def _restore_processing_messages_by_consumers(self):
+        """각 컨슈머가 처리 중이던 메시지들을 큐로 복원"""
+        try:
+            restored_total = 0
+            
+            # 컨슈머별로 처리 중이던 메시지 복원
+            processed_queues = set()
+            for consumer_key, consumer in self.consumers.items():
+                queue_name = consumer.queue_name
+                consumer_id = consumer.consumer_id
+                
+                if queue_name not in processed_queues:
+                    restored_count = await self._restore_messages_for_queue(queue_name)
+                    restored_total += restored_count
+                    processed_queues.add(queue_name)
+                    
+                    if restored_count > 0:
+                        Logger.info(f"큐 '{queue_name}'에서 {restored_count}개 메시지 복원")
+            
+            if restored_total > 0:
+                Logger.info(f"총 {restored_total}개 처리 중 메시지 복원 완료")
+            else:
+                Logger.info("복원할 처리 중 메시지 없음")
+                
+        except Exception as e:
+            Logger.error(f"처리 중 메시지 복원 중 오류: {e}")
+    
+    async def _restore_messages_for_queue(self, queue_name: str) -> int:
+        """특정 큐의 처리 중 메시지들을 복원"""
+        try:
+            return await self.message_queue.cleanup_expired_processing_messages(queue_name)
+        except Exception as e:
+            Logger.error(f"큐 '{queue_name}' 메시지 복원 중 오류: {e}")
+            return 0
+    
     async def start_delayed_message_processor(self):
         """지연 메시지 처리기 시작"""
         async def process_delayed():
@@ -417,6 +575,33 @@ class MessageQueueManager:
         
         asyncio.create_task(process_delayed())
         Logger.info("지연 메시지 처리기 시작")
+    
+    async def start_expired_message_cleanup(self):
+        """만료된 처리 중 메시지 정리기 시작"""
+        async def cleanup_expired():
+            while True:
+                try:
+                    # 모든 큐에 대해 만료된 메시지 정리
+                    total_restored = 0
+                    processed_queues = set()
+                    
+                    for consumer_key in list(self.consumers.keys()):
+                        queue_name = consumer_key.split(':')[0]
+                        if queue_name not in processed_queues:
+                            restored = await self.message_queue.cleanup_expired_processing_messages(queue_name)
+                            total_restored += restored
+                            processed_queues.add(queue_name)
+                    
+                    if total_restored > 0:
+                        Logger.info(f"만료된 메시지 {total_restored}개 복원 완료")
+                    
+                    await asyncio.sleep(30)  # 30초마다 확인
+                except Exception as e:
+                    Logger.error(f"만료된 메시지 정리기 오류: {e}")
+                    await asyncio.sleep(60)
+        
+        asyncio.create_task(cleanup_expired())
+        Logger.info("만료된 메시지 정리기 시작")
 
 
 class MessageConsumer:
@@ -452,13 +637,51 @@ class MessageConsumer:
         
         Logger.info(f"메시지 소비자 중지: {self.queue_name}:{self.consumer_id}")
     
+    async def graceful_stop(self, timeout_seconds: int = 30):
+        """우아한 중지 - 현재 처리 중인 메시지 완료 후 중지"""
+        Logger.info(f"메시지 소비자 graceful stop 시작: {self.queue_name}:{self.consumer_id}")
+        
+        try:
+            # 1. 새로운 메시지 수신 중단
+            self.running = False
+            
+            # 2. 현재 처리 중인 메시지 완료까지 대기 (timeout 설정)
+            if self.task and not self.task.done():
+                try:
+                    await asyncio.wait_for(self.task, timeout=timeout_seconds)
+                    Logger.info(f"소비자 {self.consumer_id} 정상 종료 완료")
+                except asyncio.TimeoutError:
+                    Logger.warn(f"소비자 {self.consumer_id} timeout ({timeout_seconds}초) - 강제 종료")
+                    self.task.cancel()
+                    try:
+                        await self.task
+                    except asyncio.CancelledError:
+                        pass
+                except Exception as e:
+                    Logger.error(f"소비자 {self.consumer_id} graceful stop 중 오류: {e}")
+            
+            Logger.info(f"메시지 소비자 graceful stop 완료: {self.queue_name}:{self.consumer_id}")
+            
+        except Exception as e:
+            Logger.error(f"메시지 소비자 graceful stop 실패: {self.queue_name}:{self.consumer_id} - {e}")
+            # 실패 시 강제 중지
+            await self.stop()
+    
     async def _consume_loop(self):
         """메시지 소비 루프"""
+        Logger.info(f"메시지 소비 루프 시작: {self.queue_name}:{self.consumer_id}")
+        loop_count = 0
+        
         while self.running:
             try:
+                loop_count += 1
+                if loop_count % 10 == 1:  # 10번마다 한 번씩 로그
+                    Logger.debug(f"메시지 소비 루프 실행 중: {self.queue_name}:{self.consumer_id} (루프 {loop_count})")
+                
                 message = await self.message_queue.dequeue(self.queue_name, self.consumer_id)
                 
                 if message:
+                    Logger.info(f"메시지 수신: {message.id} from {self.queue_name}")
                     success = False
                     try:
                         # 핸들러 실행
@@ -469,8 +692,10 @@ class MessageConsumer:
                         
                         if success:
                             await self.message_queue.ack(message, self.consumer_id)
+                            Logger.debug(f"메시지 처리 완료: {message.id}")
                         else:
                             await self.message_queue.nack(message, self.consumer_id)
+                            Logger.warn(f"메시지 처리 실패: {message.id}")
                             
                     except Exception as e:
                         Logger.error(f"메시지 처리 중 오류: {message.id} - {e}")
@@ -480,5 +705,7 @@ class MessageConsumer:
                     await asyncio.sleep(1)
                     
             except Exception as e:
-                Logger.error(f"메시지 소비 루프 오류: {e}")
+                Logger.error(f"메시지 소비 루프 오류: {self.queue_name}:{self.consumer_id} - {e}")
                 await asyncio.sleep(5)
+        
+        Logger.info(f"메시지 소비 루프 종료: {self.queue_name}:{self.consumer_id}")

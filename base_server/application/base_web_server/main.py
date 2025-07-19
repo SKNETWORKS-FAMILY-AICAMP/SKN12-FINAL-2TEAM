@@ -581,11 +581,27 @@ async def lifespan(app: FastAPI):
     # QueueService 종료 (큐 처리 완료 후)
     try:
         if QueueService._initialized:
-            await QueueService.shutdown()
+            Logger.info("QueueService graceful shutdown 시작...")
+            
+            # 우아한 종료 시도 (처리 중인 메시지 완료 대기)
+            success = await QueueService.graceful_shutdown(timeout_seconds=30)
+            
+            if success:
+                Logger.info("QueueService graceful shutdown 성공")
+            else:
+                Logger.warn("QueueService graceful shutdown 실패 - 강제 종료")
+                await QueueService.shutdown()
+            
             ServiceContainer.set_queue_service_initialized(False)
-            Logger.info("QueueService 종료")
+            Logger.info("QueueService 종료 완료")
     except Exception as e:
         Logger.error(f"QueueService 종료 오류: {e}")
+        # 예외 발생 시에도 강제 종료 시도
+        try:
+            await QueueService.shutdown()
+            ServiceContainer.set_queue_service_initialized(False)
+        except Exception as force_e:
+            Logger.error(f"QueueService 강제 종료도 실패: {force_e}")
     
     # LockService 종료 (분산락 해제)
     try:

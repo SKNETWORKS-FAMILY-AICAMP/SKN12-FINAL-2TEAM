@@ -791,6 +791,16 @@ class EventQueueManager:
             
         except Exception as e:
             Logger.error(f"이벤트 구독자 중지 중 오류: {e}")
+    
+    async def shutdown(self):
+        """EventQueueManager 종료"""
+        try:
+            Logger.info("EventQueueManager 정리 시작")
+            await self.stop_all_subscribers()
+            Logger.info("EventQueueManager 정리 완료")
+            
+        except Exception as e:
+            Logger.error(f"EventQueueManager 종료 중 오류: {e}")
 
 
 # 전역 이벤트큐 매니저 인스턴스

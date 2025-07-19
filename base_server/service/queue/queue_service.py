@@ -537,6 +537,78 @@ class QueueService:
         except Exception as e:
             Logger.error(f"이벤트큐 통계 조회 실패: {e}")
             return {}
+    
+    # ==================== 종료 관련 메서드 ====================
+    
+    @classmethod
+    async def graceful_shutdown(cls, timeout_seconds: int = 30) -> bool:
+        """우아한 종료 - 처리 중인 메시지 완료 후 종료"""
+        if not cls._initialized:
+            Logger.info("QueueService가 초기화되지 않음 - 종료 건너뜀")
+            return True
+        
+        Logger.info(f"QueueService graceful shutdown 시작 (timeout: {timeout_seconds}초)")
+        
+        try:
+            instance = cls.get_instance()
+            
+            # 1. 메시지큐 매니저 graceful shutdown
+            if instance.message_queue_manager:
+                Logger.info("MessageQueueManager graceful shutdown 시작")
+                await instance.message_queue_manager.graceful_shutdown(timeout_seconds)
+                Logger.info("MessageQueueManager graceful shutdown 완료")
+            
+            # 2. 이벤트큐 매니저 정리
+            if instance.event_queue_manager:
+                Logger.info("EventQueueManager 정리 시작")
+                await instance.event_queue_manager.shutdown()
+                Logger.info("EventQueueManager 정리 완료")
+            
+            # 3. 아웃박스 서비스 정리
+            if instance.outbox_service:
+                Logger.info("OutboxService 정리 시작")
+                # 아웃박스 서비스는 DB 연결만 사용하므로 특별한 정리 불필요
+                Logger.info("OutboxService 정리 완료")
+            
+            # 4. 통계 초기화
+            instance.stats = {
+                "messages_processed": 0,
+                "events_published": 0,
+                "outbox_events_processed": 0,
+                "errors": 0
+            }
+            
+            Logger.info("QueueService graceful shutdown 완료")
+            return True
+            
+        except Exception as e:
+            Logger.error(f"QueueService graceful shutdown 실패: {e}")
+            return False
+    
+    @classmethod
+    async def shutdown(cls):
+        """강제 종료 (기존 메서드)"""
+        try:
+            # graceful_shutdown으로 먼저 시도
+            success = await cls.graceful_shutdown(timeout_seconds=10)
+            
+            if not success:
+                Logger.warn("Graceful shutdown 실패 - 강제 종료 진행")
+                instance = cls.get_instance()
+                
+                # 강제 정리
+                if instance.message_queue_manager:
+                    await instance.message_queue_manager.stop_all_consumers()
+                
+                if instance.event_queue_manager:
+                    await instance.event_queue_manager.shutdown()
+            
+            cls._initialized = False
+            Logger.info("QueueService 강제 종료 완료")
+            
+        except Exception as e:
+            Logger.error(f"QueueService 강제 종료 실패: {e}")
+            cls._initialized = False
 
 
 # 전역 함수들
