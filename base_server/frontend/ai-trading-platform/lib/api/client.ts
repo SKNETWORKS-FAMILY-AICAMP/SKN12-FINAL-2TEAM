@@ -22,11 +22,14 @@ class ApiClient {
     // Request interceptor
     this.client.interceptors.request.use(
       (config) => {
-        const state = store.getState()
-        const token = state.auth.token
+        // accessToken을 localStorage에서 읽음 (클라이언트 환경에서만)
+        let token = "";
+        if (typeof window !== "undefined") {
+          token = localStorage.getItem("accessToken") || "";
+        }
 
         if (token) {
-          config.headers.Authorization = `Bearer ${token}`
+          config.headers.Authorization = `Bearer ${token}`;
         }
 
         // accessToken, sequence 자동 주입 (BaseRequest 호환)
@@ -38,15 +41,15 @@ class ApiClient {
         ) {
           config.data = {
             ...config.data,
-            accessToken: token || "",
+            accessToken: token,
             sequence: Date.now(),
-          }
+          };
         }
 
-        return config
+        return config;
       },
       (error) => Promise.reject(error),
-    )
+    );
 
     // Response interceptor
     this.client.interceptors.response.use(

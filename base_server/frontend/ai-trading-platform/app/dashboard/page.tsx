@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { BarChart2, PieChart, Activity } from "lucide-react"
 import { PortfolioValueCard } from "@/components/dashboard/PortfolioValueCard";
@@ -17,6 +17,18 @@ import { Header } from "@/components/layout/header";
 export default function DashboardPage() {
   // sidebarOpen and setSidebarOpen should be managed in parent layout, not here
   const router = useRouter();
+  const [checked, setChecked] = useState(false);
+
+  useEffect(() => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+    if (!token) {
+      window.location.href = "/auth/login";
+    } else {
+      setChecked(true);
+    }
+  }, [router]);
+
+  if (!checked) return null;
 
   const handleNavigate = (key: string) => {
     switch (key) {

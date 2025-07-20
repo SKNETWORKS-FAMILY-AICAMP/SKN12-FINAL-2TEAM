@@ -23,13 +23,12 @@ export default function LoginPage() {
     setIsLoading(true)
 
     try {
-      // payload 생성 및 콘솔 출력
+      // payload 생성
       const payload = {
         platform_type: 1, // int로 고정
         account_id: accountId,
         password: password,
       };
-      console.log("로그인 요청 payload:", payload);
 
       const res = await axios.post("http://127.0.0.1:8000/api/account/login", payload);
       let data = res.data;
@@ -43,22 +42,24 @@ export default function LoginPage() {
           return;
         }
       }
-      console.log('로그인 응답:', data);
       if (data.errorCode === 0 || data.errorCode === "0") {
         // accessToken, refreshToken, user_id 저장
         if (data.accessToken) localStorage.setItem('accessToken', data.accessToken)
         if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken)
         if (data.user_id) localStorage.setItem('userId', data.user_id)
-        router.push("/onboarding")
+        const completed = data?.profile_completed || data?.data?.profile_completed;
+        if (completed) {
+          window.location.href = "/dashboard";
+        } else {
+          window.location.href = "/onboarding";
+        }
         return;
       } else {
         const errorCode = data.errorCode;
         const message = data.message;
-        console.log('로그인 실패 errorCode:', errorCode, 'message:', message);
         setError(message || `로그인 실패: 에러코드 ${errorCode}`);
       }
     } catch (err: any) {
-      console.error("로그인 에러:", err);
       const errorCode = err?.response?.data?.errorCode;
       const message = err?.response?.data?.message;
       setError(message || "네트워크 오류가 발생했습니다.");

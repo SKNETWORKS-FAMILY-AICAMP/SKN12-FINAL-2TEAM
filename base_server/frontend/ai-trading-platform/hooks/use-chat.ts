@@ -2,117 +2,56 @@
 
 import { useState, useCallback, useEffect } from "react"
 import { authManager } from "@/lib/auth"
-import { createChatRoom, sendChatMessage, getChatMessages, getPersonaList } from "@/lib/api/chat"
+import { useAppDispatch, useAppSelector } from "@/lib/store/hooks"
+import { sendMessage as sendMessageAction, createConversation, setCurrentConversation } from "@/lib/store/slices/chat-slice"
 
 export function useChat() {
-  const [rooms, setRooms] = useState<Array<{ room_id: string; room_name: string; ai_persona: string }>>([])
-  const [currentRoomId, setCurrentRoomId] = useState<string | null>(null)
-  const [messages, setMessages] = useState<Array<{ sender: string; message: string; sent_at: string }>>([])
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [personas, setPersonas] = useState<Array<{ persona_id: string; name: string; description: string; avatar_url: string }>>([])
-  const [selectedPersona, setSelectedPersona] = useState<string | null>(null)
+  const dispatch = useAppDispatch()
+  const { conversations, currentConversationId, availableTools, isLoading, error } = useAppSelector((state) => state.chat)
+  
+  const currentConversation = conversations.find(c => c.id === currentConversationId)
+  const messages = currentConversation?.messages || []
 
-  // Fetch persona list on mount
+  // Fetch persona list on mount - 현재는 Redux store에서 관리하므로 불필요
   useEffect(() => {
-    const fetchPersonas = async () => {
-      try {
-        const token = authManager.getToken()
-        if (!token) return
-        const res = await getPersonaList(token)
-        const list = res.data?.personas?.slice(0, 3) || []
-        setPersonas(list)
-        if (list.length > 0) setSelectedPersona(list[0].persona_id)
-      } catch (e) {
-        // ignore
-      }
-    }
-    fetchPersonas()
+    // Redux store에서 이미 availableTools로 관리됨
   }, [])
 
-  // Fetch messages when currentRoomId changes
+  // Fetch messages when currentConversationId changes - Redux store에서 관리됨
   useEffect(() => {
-    const fetchMessages = async () => {
-      if (!currentRoomId) return
-      setIsLoading(true)
-      setError(null)
-      try {
-        const token = authManager.getToken()
-        if (!token) throw new Error("로그인이 필요합니다.")
-        const res = await getChatMessages(token, currentRoomId)
-        setMessages(
-          (res.data?.messages || []).map((m: any) => ({
-            sender: m.sender,
-            message: m.message,
-            sent_at: m.sent_at,
-          }))
-        )
-      } catch (e: any) {
-        setError(e.message || "메시지 불러오기 실패")
-      } finally {
-        setIsLoading(false)
-      }
-    }
-    fetchMessages()
-  }, [currentRoomId])
+    // Redux store에서 이미 메시지가 관리되므로 불필요
+  }, [currentConversationId])
 
   // Create a new chat room (with persona)
   const createRoom = useCallback(async (roomName: string, aiPersona?: string) => {
-    setIsLoading(true)
-    setError(null)
     try {
-      const token = authManager.getToken()
-      if (!token) throw new Error("로그인이 필요합니다.")
-      const persona = aiPersona || selectedPersona || (personas[0]?.persona_id ?? "GPT4O")
-      const res = await createChatRoom(token, roomName, persona)
-      const room = {
-        room_id: res.data.room_id,
-        room_name: res.data.room_name,
-        ai_persona: res.data.ai_persona,
-      }
-      setRooms((prev) => [room, ...prev])
-      setCurrentRoomId(room.room_id)
-      setMessages([])
+      await dispatch(createConversation(roomName))
     } catch (e: any) {
-      setError(e.message || "채팅방 생성 실패")
-    } finally {
-      setIsLoading(false)
+      console.error("채팅방 생성 실패:", e)
     }
-  }, [selectedPersona, personas])
+  }, [dispatch])
 
   // Send a message in the current room
   const sendMessage = useCallback(async (message: string) => {
-    if (!currentRoomId) return
-    setIsLoading(true)
-    setError(null)
+    if (!currentConversationId) return
     try {
-      const token = authManager.getToken()
-      if (!token) throw new Error("로그인이 필요합니다.")
-      const res = await sendChatMessage(token, currentRoomId, message)
-      // Append user message and AI response
-      setMessages((prev) => [
-        ...prev,
-        { sender: "user", message, sent_at: new Date().toISOString() },
-        { sender: "ai", message: res.data.ai_response.message, sent_at: res.data.ai_response.sent_at },
-      ])
+      await dispatch(sendMessageAction({ content: message }))
     } catch (e: any) {
-      setError(e.message || "메시지 전송 실패")
-    } finally {
-      setIsLoading(false)
+      console.error("메시지 전송 실패:", e)
     }
-  }, [currentRoomId])
+  }, [currentConversationId, dispatch])
 
   return {
-    rooms,
-    currentRoomId,
-    setCurrentRoomId,
-    messages,
+    rooms: conversations.map(c => ({ room_id: c.id, room_name: c.title, ai_persona: "GPT4O" })),
+    currentRoomId: currentConversationId,
+    setCurrentRoomId: (id: string) => dispatch(setCurrentConversation(id)),
+    messages: messages.map(m => ({ sender: m.role, message: m.content, sent_at: new Date(m.timestamp).toISOString() })),
     isLoading,
     error,
     createRoom,
     sendMessage,
-    personas,
-    selectedPersona,
-    setSelectedPersona,
+    personas: availableTools.map(t => ({ persona_id: t.id, name: t.name, description: t.description, avatar_url: "" })),
+    selectedPersona: null,
+    setSelectedPersona: () => {},
   }
 }
