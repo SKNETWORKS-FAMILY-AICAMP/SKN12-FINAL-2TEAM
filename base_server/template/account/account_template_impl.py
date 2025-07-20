@@ -97,10 +97,9 @@ class AccountTemplateImpl(AccountTemplate):
         Logger.info(f"Login request received: {request.account_id}")
         
         try:
-            # 데이터베이스 서비스 가져오기
             db_service = ServiceContainer.get_database_service()
             
-            # 1. 먼저 DB에서 저장된 해시값 및 프로필 완료 상태 조회
+            # 1. 사용자 정보 및 프로필 완료 상태 조회
             user_query = """
             SELECT a.account_db_key, a.password_hash, a.nickname, a.account_level, a.account_status,
                    COALESCE(p.profile_completed, 0) as profile_completed
@@ -116,9 +115,9 @@ class AccountTemplateImpl(AccountTemplate):
                 return response
                 
             user_data = user_result[0]
-            stored_hash = user_data.get('password_hash', '')
             
             # 2. 비밀번호 검증
+            stored_hash = user_data.get('password_hash', '')
             if not self._verify_password(request.password, stored_hash):
                 response.errorCode = 1001  # 로그인 실패
                 Logger.info(f"Login failed: invalid credentials for {request.account_id}")
@@ -133,19 +132,22 @@ class AccountTemplateImpl(AccountTemplate):
             # 4. 로그인 성공 처리
             account_db_key = user_data.get('account_db_key')
             
-            # 5. 샤드 정보 조회
+            # 5. 샤드 정보 조회 및 자동 할당
             shard_query = """
             SELECT shard_id FROM table_user_shard_mapping 
             WHERE account_db_key = %s
             """
             shard_result = await db_service.execute_global_query(shard_query, (account_db_key,))
             
-            shard_id = 1  # 기본값
             if shard_result:
                 shard_id = shard_result[0].get('shard_id', 1)
             else:
-                # 샤드가 없으면 자동 할당
-                shard_id = (account_db_key % 2) + 1
+                # 활성 샤드 수 조회 후 자동 할당
+                active_shard_query = "SELECT COUNT(*) as count FROM table_shard_config WHERE status = 'active'"
+                active_result = await db_service.execute_global_query(active_shard_query)
+                active_count = active_result[0].get('count', 2) if active_result else 2
+                
+                shard_id = (account_db_key % active_count) + 1
                 insert_shard = """
                 INSERT INTO table_user_shard_mapping (account_db_key, shard_id)
                 VALUES (%s, %s)
@@ -153,18 +155,17 @@ class AccountTemplateImpl(AccountTemplate):
                 await db_service.execute_global_query(insert_shard, (account_db_key, shard_id))
             
             # 6. 로그인 시간 업데이트
-            update_login = """
-            UPDATE table_accountid SET login_time = NOW() 
-            WHERE account_db_key = %s
-            """
-            await db_service.execute_global_query(update_login, (account_db_key,))
+            await db_service.execute_global_query(
+                "UPDATE table_accountid SET login_time = NOW(), login_count = login_count + 1 WHERE account_db_key = %s",
+                (account_db_key,)
+            )
             
             # 7. 성공 응답 설정
             response.errorCode = 0
             response.nickname = user_data.get('nickname', '')
             response.profile_completed = bool(user_data.get('profile_completed', 0))
             
-            # account_info 설정 (내부 세션 생성용, 클라이언트 응답에서는 제거됨)
+            # account_info 설정 (내부 세션 생성용)
             response.account_info = {
                 "account_db_key": account_db_key,
                 "platform_type": request.platform_type,
@@ -237,7 +238,7 @@ class AccountTemplateImpl(AccountTemplate):
                     account_db_key = signup_result.get('account_db_key', 0)
                     
                     response.errorCode = 0
-                    response.user_id = str(account_db_key)
+                    response.user_id = request.account_id
                     response.message = "회원가입 완료"
                     response.next_step = "LOGIN"  # 개발용: 이메일 인증 건너뛰고 바로 로그인 가능
                     Logger.info(f"Signup successful: account_db_key={account_db_key} (ready for login)")
