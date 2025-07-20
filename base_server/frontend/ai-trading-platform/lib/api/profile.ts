@@ -10,4 +10,4 @@ export const profileService = {
   async updateProfile(data: any) {
     return apiClient.post('/api/account/profile/update', data);
   },
-}; 
+};

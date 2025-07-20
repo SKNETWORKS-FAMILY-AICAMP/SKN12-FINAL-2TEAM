@@ -10,7 +10,6 @@ import { WinRateCard } from "@/components/dashboard/WinRateCard";
 import { MarketOverviewCard } from "@/components/dashboard/MarketOverviewCard";
 import { PortfolioBreakdownCard } from "@/components/dashboard/PortfolioBreakdownCard";
 import { AISignalCard } from "@/components/dashboard/AISignalCard";
-import { DashboardActions } from "@/components/dashboard/DashboardActions";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { Header } from "@/components/layout/header";
 
@@ -73,33 +72,24 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-[#0a0a0a] via-[#18181c] to-[#23243a] text-white flex">
-      {/* AppSidebar should be rendered in the parent layout, not here */}
-      <main className="flex-1 flex flex-col items-center px-4 md:px-12 py-16 bg-transparent min-h-screen">
-        <h1 className="text-4xl md:text-5xl font-bold mb-10 tracking-tight text-white text-balance">
+    <div className="h-screen w-full bg-gradient-to-br from-[#0a0a0a] via-[#18181c] to-[#23243a] text-white flex overflow-hidden">
+      <main className="flex-1 flex flex-col items-center px-6 md:px-12 py-8 bg-transparent overflow-hidden">
+        <h1 className="text-4xl md:text-6xl font-bold mb-8 tracking-tight text-white text-balance">
           Professional <span className="bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">AI Trading Dashboard</span>
         </h1>
-        <div className="dashboard w-full max-w-5xl mb-12">
+        <div className="dashboard w-full max-w-6xl mb-8">
           <div className="dashboard-grid">
             <PortfolioValueCard value="$847,296" change="+18.4%" />
             <ActivePositionsCard value={12} change="+3" />
             <MonthlyReturnCard value="24.7%" change="+5.2%" />
             <WinRateCard value="87%" change="+12%" />
-            {/* Chart Visualization (optional, keep if needed) */}
-            <div className="chart-visualization">
-              <div className="chart-line"></div>
-            </div>
           </div>
         </div>
-        <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+        <div className="w-full max-w-6xl grid grid-cols-1 md:grid-cols-3 gap-6">
           <MarketOverviewCard markets={marketData} />
           <PortfolioBreakdownCard items={portfolioItems} />
           <AISignalCard signals={aiSignals} />
         </div>
-        <DashboardActions
-          onStartTrading={() => alert("Start Trading!")}
-          onViewDemo={() => alert("View Demo!")}
-        />
       </main>
     </div>
   );

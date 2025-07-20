@@ -8,6 +8,7 @@ import { sendMessage as sendMessageAction, createConversation, setCurrentConvers
 export function useChat() {
   const dispatch = useAppDispatch()
   const { conversations, currentConversationId, availableTools, isLoading, error } = useAppSelector((state) => state.chat)
+  const [selectedPersona, setSelectedPersona] = useState<string | null>(availableTools[0]?.id || null)
   
   const currentConversation = conversations.find(c => c.id === currentConversationId)
   const messages = currentConversation?.messages || []
@@ -25,11 +26,12 @@ export function useChat() {
   // Create a new chat room (with persona)
   const createRoom = useCallback(async (roomName: string, aiPersona?: string) => {
     try {
+      const persona = aiPersona || selectedPersona || availableTools[0]?.id || "GPT4O"
       await dispatch(createConversation(roomName))
     } catch (e: any) {
       console.error("채팅방 생성 실패:", e)
     }
-  }, [dispatch])
+  }, [dispatch, selectedPersona, availableTools])
 
   // Send a message in the current room
   const sendMessage = useCallback(async (message: string) => {
@@ -42,7 +44,7 @@ export function useChat() {
   }, [currentConversationId, dispatch])
 
   return {
-    rooms: conversations.map(c => ({ room_id: c.id, room_name: c.title, ai_persona: "GPT4O" })),
+    rooms: conversations.map(c => ({ room_id: c.id, room_name: c.title, ai_persona: selectedPersona || "GPT4O" })),
     currentRoomId: currentConversationId,
     setCurrentRoomId: (id: string) => dispatch(setCurrentConversation(id)),
     messages: messages.map(m => ({ sender: m.role, message: m.content, sent_at: new Date(m.timestamp).toISOString() })),
@@ -51,7 +53,7 @@ export function useChat() {
     createRoom,
     sendMessage,
     personas: availableTools.map(t => ({ persona_id: t.id, name: t.name, description: t.description, avatar_url: "" })),
-    selectedPersona: null,
-    setSelectedPersona: () => {},
+    selectedPersona,
+    setSelectedPersona,
   }
 }

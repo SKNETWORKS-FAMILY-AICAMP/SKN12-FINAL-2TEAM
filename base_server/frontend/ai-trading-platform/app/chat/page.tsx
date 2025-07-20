@@ -5,6 +5,35 @@ import { Plus, MessageCircle, FolderOpen, Zap, Search, Settings, ArrowUp, Menu, 
 import { useRouter } from "next/navigation";
 import { useChat } from "@/hooks/use-chat";
 
+// 타이핑 애니메이션 컴포넌트
+function TypingMessage({ text }: { text: string }) {
+  const [displayed, setDisplayed] = useState("");
+  const idx = useRef(0);
+  useEffect(() => {
+    setDisplayed("");
+    idx.current = 0;
+    if (!text) return;
+    const interval = setInterval(() => {
+      setDisplayed((prev) => prev + text[idx.current]);
+      idx.current++;
+      if (idx.current >= text.length) clearInterval(interval);
+    }, 18);
+    return () => clearInterval(interval);
+  }, [text]);
+  return <span>{displayed}</span>;
+}
+
+// 메시지 버블 컴포넌트
+function ChatBubble({ msg, isUser, isTyping }: { msg: any, isUser: boolean, isTyping?: boolean }) {
+  return (
+    <div className={`flex ${isUser ? "justify-end" : "justify-start"} animate-fadein`}>
+      <div className={`px-4 py-2 rounded-xl max-w-xs break-words text-sm shadow ${isUser ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-100"}`}>
+        {isTyping ? <TypingMessage text={msg.message} /> : msg.message}
+      </div>
+    </div>
+  );
+}
+
 export default function ChatPage() {
   const {
     rooms,
@@ -23,6 +52,7 @@ export default function ChatPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const router = useRouter();
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Persona selection modal state
   const [showPersonaModal, setShowPersonaModal] = useState(false);
@@ -38,6 +68,9 @@ export default function ChatPage() {
     if (message.trim() && !isLoading) {
       await sendMessage(message);
       setMessage("");
+      if (inputRef.current) {
+        inputRef.current.focus();
+      }
     }
   };
 
@@ -57,6 +90,18 @@ export default function ChatPage() {
   const handleSelectChat = (roomId: string) => {
     setCurrentRoomId(roomId);
   };
+
+  // 입력창 엔터/쉬프트+엔터 처리
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit(e);
+    }
+  };
+
+  // 메시지 렌더링
+  // 마지막 메시지가 AI이고 isLoading이면 타이핑 애니메이션 적용
+  const lastMsgIdx = messages.length - 1;
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-[#0a0a23] via-[#18181c] to-[#23243a] text-white flex">
@@ -181,20 +226,32 @@ export default function ChatPage() {
         </div>
         {/* Chat Content */}
         <div className="flex-1 flex flex-col items-center justify-center p-8 w-full">
-          <div className="w-full max-w-2xl">
+          <div className="w-full max-w-2xl h-full flex flex-col">
             <div className="mb-8 text-center">
               <h1 className="text-4xl font-light mb-2 bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
                 {rooms.find((r) => r.room_id === currentRoomId)?.room_name || "채팅을 선택하세요"}
               </h1>
             </div>
-            <div className="flex flex-col gap-3 mb-8 max-h-[400px] min-h-[200px] overflow-y-auto bg-transparent p-2 rounded-lg scrollbar-hide">
+            {/* 채팅 메시지 영역: 항상 아래 정렬 */}
+            <div className="flex-1 flex flex-col justify-end gap-3 mb-4 max-h-[400px] min-h-[200px] overflow-y-auto bg-transparent p-2 rounded-lg scrollbar-hide">
               {messages.map((msg, idx) => (
-                <div key={idx} className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
-                  <div className={`px-4 py-2 rounded-xl max-w-xs break-words text-sm shadow ${msg.sender === "user" ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-100"}`}>
-                    {msg.message}
+                <ChatBubble
+                  key={idx}
+                  msg={msg}
+                  isUser={msg.sender === "user"}
+                  isTyping={msg.sender === "assistant" && idx === messages.length - 1 && isLoading}
+                />
+              ))}
+              {/* 로딩 인디케이터 */}
+              {isLoading && (
+                <div className="flex justify-start animate-fadein">
+                  <div className="px-4 py-2 rounded-xl max-w-xs break-words text-sm shadow bg-gray-800 text-gray-100 flex items-center gap-1">
+                    <span className="animate-bounce">.</span>
+                    <span className="animate-bounce delay-150">.</span>
+                    <span className="animate-bounce delay-300">.</span>
                   </div>
                 </div>
-              ))}
+              )}
               <div ref={messagesEndRef} />
             </div>
             {error && <div className="text-red-400 text-sm text-center mb-2">{error}</div>}
@@ -229,10 +286,10 @@ export default function ChatPage() {
           {/* Footer */}
           <div className="flex items-center justify-between mt-4 text-xs text-gray-400">
             <div className="flex items-center gap-2">
-              <span>업그레이드하여 도구 연결하기</span>
+
             </div>
             <div className="flex items-center gap-2">
-              <span>Claude Sonnet 4</span>
+              <span>업그레이드하여 도구 연결하기</span>
               <button className="p-1 hover:bg-[#23243a] rounded">
                 <ArrowUp size={12} />
               </button>
