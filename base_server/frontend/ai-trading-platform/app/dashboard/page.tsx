@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/hooks/use-auth"
 import { BarChart2, PieChart, Activity } from "lucide-react"
 import { PortfolioValueCard } from "@/components/dashboard/PortfolioValueCard";
 import { ActivePositionsCard } from "@/components/dashboard/ActivePositionsCard";
@@ -14,20 +15,23 @@ import { AppSidebar } from "@/components/layout/AppSidebar";
 import { Header } from "@/components/layout/header";
 
 export default function DashboardPage() {
-  // sidebarOpen and setSidebarOpen should be managed in parent layout, not here
   const router = useRouter();
-  const [checked, setChecked] = useState(false);
+  const { user, isLoading } = useAuth();
 
   useEffect(() => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
-    if (!token) {
-      window.location.href = "/auth/login";
-    } else {
-      setChecked(true);
+    if (!isLoading && !user) {
+      router.push("/auth/login");
     }
-  }, [router]);
+  }, [user, isLoading, router]);
 
-  if (!checked) return null;
+  // 인증 상태 확인 중이거나, 유저가 없으면 로딩 화면이나 null을 반환
+  if (isLoading || !user) {
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <p>Loading...</p>
+      </div>
+    );
+  }
 
   const handleNavigate = (key: string) => {
     switch (key) {
@@ -93,4 +97,4 @@ export default function DashboardPage() {
       </main>
     </div>
   );
-}
+} 

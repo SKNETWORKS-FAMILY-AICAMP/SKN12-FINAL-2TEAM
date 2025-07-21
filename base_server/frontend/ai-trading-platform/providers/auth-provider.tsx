@@ -38,52 +38,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const login = async (email: string, password: string) => {
-    setIsLoading(true)
-    try {
-      // 로그인은 이미 app/auth/login/page.tsx에서 처리되므로
-      // 여기서는 세션만 확인하고 사용자 정보를 설정
-      const session = authManager.getSession()
-      if (session) {
-        setUser(session.user)
-        // 임시: 로그인 성공 시 무조건 온보딩 페이지로 이동
-        if (typeof window !== "undefined") {
-          window.location.href = "/onboarding"
-        }
-      } else {
-        throw new Error("Login failed")
-      }
-    } catch (error) {
-      throw new Error("Login failed")
-    } finally {
-      setIsLoading(false)
+    // 실제 로그인은 로그인 페이지에서 처리하므로, 여기서는 세션 설정만 담당
+    const session = authManager.getSession()
+    if (session) {
+      setUser(session.user)
+    } else {
+      // 이 경우는 직접 호출될 일이 거의 없지만, 방어 코드로 남겨둡니다.
+      throw new Error("Login failed: No session found after login attempt.")
     }
   }
 
   const logout = async () => {
-    try {
-      // 로그아웃은 세션만 클리어하면 됨
-      // API 호출은 필요하지 않음
-    } catch (error) {
-      console.error("Logout failed:", error)
-    } finally {
-      authManager.clearSession()
-      setUser(null)
-    }
+    authManager.clearSession()
+    setUser(null)
+    // 페이지를 새로고침하거나 로그인 페이지로 리다이렉트
+    window.location.href = "/auth/login"
   }
 
   const updateUser = (userData: Partial<AuthUser>) => {
-    if (user) {
+    const session = authManager.getSession()
+    if (user && session) {
       const updatedUser = { ...user, ...userData }
       setUser(updatedUser)
 
       // Update session
-      const session = authManager.getSession()
-      if (session) {
-        authManager.setSession({
-          ...session,
-          user: updatedUser,
-        })
-      }
+      authManager.setSession({
+        ...session,
+        user: updatedUser,
+      })
     }
   }
 
@@ -96,4 +78,4 @@ export function useAuth() {
     throw new Error("useAuth must be used within an AuthProvider")
   }
   return context
-}
+} 

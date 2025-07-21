@@ -5,7 +5,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Loader2, TrendingUp, Zap } from "lucide-react"
-import { useAuth } from "@/hooks/use-auth"
+import { authManager } from "@/lib/auth"
 import axios from "axios"
 
 export default function LoginPage() {
@@ -14,7 +14,6 @@ export default function LoginPage() {
   const [error, setError] = useState("")
   const [isLoading, setIsLoading] = useState(false)
 
-  const { login } = useAuth()
   const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -43,10 +42,20 @@ export default function LoginPage() {
         }
       }
       if (data.errorCode === 0 || data.errorCode === "0") {
-        // accessToken, refreshToken, user_id 저장
-        if (data.accessToken) localStorage.setItem('accessToken', data.accessToken)
-        if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken)
-        if (data.user_id) localStorage.setItem('userId', data.user_id)
+        // AuthManager를 사용하여 세션 정보 저장
+        authManager.setSession({
+          user: {
+            id: data.user_id,
+            email: accountId, // 응답에 이메일이 없으므로 accountId 사용
+            name: data.user_name || "사용자", // 응답에 이름이 없을 경우 대비
+            role: "user",
+            preferences: { theme: "dark", language: "ko", notifications: true }
+          },
+          token: data.accessToken,
+          refreshToken: data.refreshToken,
+          expiresAt: Date.now() + 1000 * 60 * 60 * 24, // 예시: 24시간 후 만료
+        })
+
         const completed = data?.profile_completed || data?.data?.profile_completed;
         if (completed) {
           window.location.href = "/dashboard";
@@ -221,4 +230,4 @@ export default function LoginPage() {
       </div>
     </div>
   )
-}
+} 

@@ -15,6 +15,7 @@ export interface AuthUser {
 export interface AuthSession {
   user: AuthUser
   token: string
+  refreshToken: string
   expiresAt: number
 }
 
@@ -33,6 +34,13 @@ export class AuthManager {
     this.session = session
     if (typeof window !== "undefined") {
       localStorage.setItem("auth-session", JSON.stringify(session))
+      // 다른 곳에서 토큰 직접 접근이 필요할 경우를 대비해 별도로 저장합니다.
+      // AuthManager를 통해 접근하는 것이 가장 좋습니다.
+      localStorage.setItem("accessToken", session.token)
+      localStorage.setItem("refreshToken", session.refreshToken)
+      if(session.user?.id) {
+        localStorage.setItem("userId", session.user.id)
+      }
     }
   }
 
@@ -66,8 +74,8 @@ export class AuthManager {
     this.session = null
     if (typeof window !== "undefined") {
       localStorage.removeItem("auth-session")
-      localStorage.removeItem("auth-token")
-      localStorage.removeItem("refresh-token")
+      localStorage.removeItem("accessToken")
+      localStorage.removeItem("refreshToken")
     }
   }
 
@@ -87,4 +95,4 @@ export class AuthManager {
   }
 }
 
-export const authManager = AuthManager.getInstance()
+export const authManager = AuthManager.getInstance() 
