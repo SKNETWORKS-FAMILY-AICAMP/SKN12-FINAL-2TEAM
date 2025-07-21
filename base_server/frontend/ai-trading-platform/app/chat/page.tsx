@@ -52,7 +52,7 @@ export default function ChatPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const router = useRouter();
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   // Persona selection modal state
   const [showPersonaModal, setShowPersonaModal] = useState(false);
@@ -233,14 +233,19 @@ export default function ChatPage() {
               </h1>
             </div>
             {/* 채팅 메시지 영역: 항상 아래 정렬 */}
-            <div className="flex-1 flex flex-col justify-end gap-3 mb-4 max-h-[400px] min-h-[200px] overflow-y-auto bg-transparent p-2 rounded-lg scrollbar-hide">
+            <div className="flex-1 flex flex-col justify-end gap-3 p-6 max-h-[60vh] min-h-[200px] overflow-y-auto bg-transparent scrollbar-hide">
               {messages.map((msg, idx) => (
-                <ChatBubble
-                  key={idx}
-                  msg={msg}
-                  isUser={msg.sender === "user"}
-                  isTyping={msg.sender === "assistant" && idx === messages.length - 1 && isLoading}
-                />
+                <div
+                  key={msg.id ?? idx}
+                  className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} my-1`}
+                >
+                  <div
+                    className={`px-4 py-2 rounded-xl max-w-xs break-words text-sm shadow
+                      ${msg.role === "user" ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-100"}`}
+                  >
+                    {msg.content}
+                  </div>
+                </div>
               ))}
               {/* 로딩 인디케이터 */}
               {isLoading && (
@@ -262,22 +267,24 @@ export default function ChatPage() {
           <div className="max-w-4xl mx-auto">
             <div className="relative">
               <input
+                ref={inputRef}
                 type="text"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                placeholder="오늘 어떤 도움을 드릴까요?"
-                className="w-full bg-[#18181c] border border-[#23243a] rounded-lg px-4 py-3 pr-12 text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 shadow"
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
                     handleSubmit(e);
                   }
                 }}
-                disabled={isLoading || !currentRoomId}
+                placeholder="메시지를 입력하세요..."
+                className="w-full bg-[#18181c] border border-[#23243a] rounded-lg px-4 py-3 pr-12 text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 shadow"
+                disabled={isLoading}
               />
               <button
                 onClick={handleSubmit}
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 bg-gradient-to-r from-blue-500 to-indigo-600 hover:opacity-90 rounded-lg transition-colors"
-                disabled={isLoading || !message.trim() || !currentRoomId}
+                disabled={isLoading || !message.trim()}
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 bg-gradient-to-r from-blue-500 to-indigo-600 hover:opacity-90 disabled:opacity-50 rounded-lg transition-all"
               >
                 <ArrowUp size={16} />
               </button>

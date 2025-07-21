@@ -7,11 +7,11 @@ import { Plus, MessageSquare, Clock } from "lucide-react"
 import { useChat } from "@/hooks/use-chat"
 
 export function ChatSidebar() {
-  const { conversations, currentConversation, createConversation } = useChat()
+  const { rooms, currentRoomId, setCurrentRoomId, createRoom } = useChat();
 
   const handleNewChat = () => {
-    createConversation("새로운 대화")
-  }
+    createRoom("새로운 대화");
+  };
 
   return (
     <Card className="h-full border-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl professional-shadow">
@@ -25,36 +25,37 @@ export function ChatSidebar() {
       </CardHeader>
 
       <CardContent className="space-y-2">
-        {conversations.map((conversation) => (
+        {rooms.map((room) => (
           <div
-            key={conversation.id}
+            key={room.room_id}
             className={`p-3 rounded-lg cursor-pointer transition-all duration-200 ${
-              currentConversation?.id === conversation.id
+              currentRoomId === room.room_id
                 ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md"
                 : "bg-gray-50 dark:bg-slate-700/50 hover:bg-gray-100 dark:hover:bg-slate-700"
             }`}
+            onClick={() => setCurrentRoomId(room.room_id)}
           >
             <div className="flex items-center gap-2 mb-2">
               <MessageSquare className="h-4 w-4 flex-shrink-0" />
-              <h3 className="font-medium text-sm truncate">{conversation.title}</h3>
+              <h3 className="font-medium text-sm truncate">{room.title || "채팅방"}</h3>
             </div>
 
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1 text-xs opacity-75">
                 <Clock className="h-3 w-3" />
-                <span>{new Date(conversation.updatedAt).toLocaleDateString("ko-KR")}</span>
+                <span>{room.updatedAt ? new Date(room.updatedAt).toLocaleDateString("ko-KR") : ""}</span>
               </div>
               <Badge
-                variant={currentConversation?.id === conversation.id ? "secondary" : "outline"}
+                variant={currentRoomId === room.room_id ? "secondary" : "outline"}
                 className="text-xs"
               >
-                {conversation.messages.length}
+                {room.messages ? room.messages.length : 0}
               </Badge>
             </div>
           </div>
         ))}
 
-        {conversations.length === 0 && (
+        {rooms.length === 0 && (
           <div className="text-center py-8 text-gray-500 dark:text-gray-400">
             <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
             <p className="text-sm">아직 대화가 없습니다</p>

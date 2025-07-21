@@ -20,7 +20,7 @@ interface AIToolsPanelProps {
 }
 
 export function AIToolsPanel({ selectedTool, onToolSelect }: AIToolsPanelProps) {
-  const { availableTools } = useChat()
+  const { personas } = useChat();
 
   return (
     <Card className="h-full border-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl professional-shadow">
@@ -32,19 +32,19 @@ export function AIToolsPanel({ selectedTool, onToolSelect }: AIToolsPanelProps) 
       </CardHeader>
 
       <CardContent className="space-y-4">
-        {availableTools.map((tool) => {
-          const IconComponent = toolIcons[tool.icon as keyof typeof toolIcons] || TrendingUp
-          const isSelected = selectedTool === tool.id
+        {personas.map((tool) => {
+          const IconComponent = toolIcons[tool.icon as keyof typeof toolIcons] || TrendingUp;
+          const isSelected = selectedTool === tool.persona_id;
 
           return (
             <div
-              key={tool.id}
+              key={tool.persona_id}
               className={`p-4 rounded-xl border transition-all duration-200 cursor-pointer ${
                 isSelected
                   ? "bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-blue-200 dark:border-blue-700"
                   : "bg-gray-50 dark:bg-slate-700/50 border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-slate-700"
               }`}
-              onClick={() => onToolSelect(isSelected ? null : tool.id)}
+              onClick={() => onToolSelect(isSelected ? null : tool.persona_id)}
             >
               <div className="flex items-start gap-3">
                 <div
@@ -78,7 +78,7 @@ export function AIToolsPanel({ selectedTool, onToolSelect }: AIToolsPanelProps) 
                 </div>
               </div>
             </div>
-          )
+          );
         })}
 
         <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
@@ -88,5 +88,5 @@ export function AIToolsPanel({ selectedTool, onToolSelect }: AIToolsPanelProps) 
         </div>
       </CardContent>
     </Card>
-  )
+  );
 }
