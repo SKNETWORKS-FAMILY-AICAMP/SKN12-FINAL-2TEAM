@@ -29,12 +29,8 @@ class ServiceContainer:
     _lock_service_initialized: bool = False
     _scheduler_service_initialized: bool = False
     _queue_service_initialized: bool = False
-<<<<<<< HEAD
-
-=======
     _websocket_service_initialized: bool = False
     
->>>>>>> origin/main
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
@@ -86,9 +82,6 @@ class ServiceContainer:
 
     # 서비스 초기화 플래그 설정/확인 메서드
     @classmethod
-<<<<<<< HEAD
-    def set_cache_service_initialized(cls, initialized: bool) -> None:
-=======
     def set_queue_service_initialized(cls, initialized: bool):
         """QueueService 초기화 상태 설정"""
         container = cls()
@@ -102,7 +95,6 @@ class ServiceContainer:
     
     @classmethod
     def set_cache_service_initialized(cls, initialized: bool):
->>>>>>> origin/main
         """CacheService 초기화 상태 설정"""
         cls()._cache_service_initialized = initialized
 
@@ -146,15 +138,12 @@ class ServiceContainer:
             "lock": container._lock_service_initialized,
             "scheduler": container._scheduler_service_initialized,
             "queue": container._queue_service_initialized,
-<<<<<<< HEAD
             "external": container._external_service is not None,
             "storage": container._storage_service is not None,
             "search": container._search_service is not None,
             "vectordb": container._vectordb_service is not None,
-            "ai_chat": container._ai_chat_service is not None
-=======
+            "ai_chat": container._ai_chat_service is not None,
             "websocket": container._websocket_service_initialized
->>>>>>> origin/main
         }
 
     @classmethod

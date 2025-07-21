@@ -44,13 +44,10 @@ from service.lock.lock_service import LockService
 from service.scheduler.scheduler_service import SchedulerService
 from service.outbox.outbox_pattern import OutboxService
 from service.queue.queue_service import QueueService, initialize_queue_service
-<<<<<<< HEAD
 from service.llm.AIChat_service import AIChatService
 from service.llm.llm_config import LlmConfig
-=======
 from service.core.service_monitor import service_monitor
 from service.websocket.websocket_service import WebSocketService
->>>>>>> origin/main
 
 # uvicorn base_server.application.base_web_server.main:app --reload --  logLevel=Debug
 
@@ -102,16 +99,6 @@ async def lifespan(app: FastAPI):
         
         # AppConfig 객체 생성
         app_config = AppConfig(**config_data)
-<<<<<<< HEAD
-        # 데이터베이스 서비스 초기화
-        try:
-            database_service = DatabaseService(app_config.databaseConfig)
-            await database_service.init_service()
-            Logger.info("데이터베이스 서비스 초기화 완료")
-        except Exception as e:
-            Logger.error(f"데이터베이스 서비스 초기화 실패: {e}")
-            Logger.info("데이터베이스 없이 계속 진행")
-=======
         
         # AWS 테스트 설정 확인
         Logger.info(f"AWS 테스트 설정: skipAwsTests={app_config.templateConfig.skipAwsTests}")
@@ -150,8 +137,7 @@ async def lifespan(app: FastAPI):
         if not ServiceContainer.is_initialized():
             Logger.error("❌ ServiceContainer 데이터베이스 상태 불일치")
             raise RuntimeError("ServiceContainer database state inconsistent")
->>>>>>> origin/main
-        
+
         # 캐시 서비스 초기화
         cache_client_pool = RedisCacheClientPool(
             host=app_config.cacheConfig.host,
@@ -191,17 +177,13 @@ async def lifespan(app: FastAPI):
             Logger.info("✅ 캐시 서비스 초기화 완료")
             ServiceContainer.set_cache_service_initialized(True)
         
-<<<<<<< HEAD
         # DB 성공 여부와 상관 없이 AIChatService는 무조건 생성·등록
         ai_service = AIChatService(app_config.llmConfig)
         ServiceContainer.init(database_service if database_service else None, ai_service)
         Logger.info("AIChatService 초기화 및 컨테이너 등록 완료")
 
-        # External 서비스 초기화
-=======
         # 🛡️ External 서비스 초기화 - 장애 허용
         external_init_success = False
->>>>>>> origin/main
         try:
             await ExternalService.init(app_config.externalConfig)
             Logger.info("✅ External 서비스 초기화 완료")

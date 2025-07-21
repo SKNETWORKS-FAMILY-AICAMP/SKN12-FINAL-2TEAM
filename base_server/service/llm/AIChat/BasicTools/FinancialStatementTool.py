@@ -82,7 +82,7 @@ class FinancialStatementTool(BaseFinanceTool):
         limit = params.limit
 
         url = f"{self.BASE_URL}/{self.statement_type}/{ticker}"
-        api_key = self.ai_chat_service.llm_config.API_Key.FMP_API_KEY
+        api_key = self.ai_chat_service.llm_config.API_Key.get("FMP_API_KEY")
         req_params = {
             "apikey": api_key,
             "limit": limit

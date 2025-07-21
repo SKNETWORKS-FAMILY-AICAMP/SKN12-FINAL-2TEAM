@@ -66,7 +66,7 @@ class MacroEconomicTool(BaseFinanceTool):
         try:
             input = MacroEconomicInput(**kwargs)
             print(f"[MacroEconomicTool] Processing: {input.series_ids}")
-            api_key = self.ai_chat_service.llm_config.API_Key.FRED_API_KEY
+            api_key = self.ai_chat_service.llm_config.API_Key.get("FRED_API_KEY")
             if not api_key:
                 return MacroEconomicOutput(agent="error", summary="FRED API 키가 없습니다.", series=[], data=None)
 

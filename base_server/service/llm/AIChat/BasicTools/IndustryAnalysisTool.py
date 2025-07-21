@@ -53,7 +53,7 @@ class IndustryAnalysisTool(BaseFinanceTool):
         except Exception as e:
             return IndustryAnalysisOutput(agent="error", summary=f"❌ 매개변수 오류: {e}")
 
-        api_key = self.ai_chat_service.llm_config.API_Key.FMP_API_KEY
+        api_key = self.ai_chat_service.llm_config.API_Key.get("FMP_API_KEY")
         if not api_key:
             return IndustryAnalysisOutput(agent="error", summary="❌ FMP_API_KEY가 설정돼 있지 않습니다.")
 
