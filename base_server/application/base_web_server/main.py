@@ -110,13 +110,26 @@ async def lifespan(app: FastAPI):
         max_db_retries = 3
         for db_attempt in range(max_db_retries):
             try:
+                cache_client_pool = RedisCacheClientPool(
+                    host=app_config.cacheConfig.host,
+                    port=app_config.cacheConfig.port,
+                    session_expire_time=app_config.cacheConfig.session_expire_seconds,
+                    app_id=app_config.templateConfig.appId,
+                    env=app_config.templateConfig.env,
+                    db=app_config.cacheConfig.db,
+                    password=app_config.cacheConfig.password,
+                    max_retries=app_config.cacheConfig.max_retries,
+                    connection_timeout=app_config.cacheConfig.connection_timeout
+                )
+                CacheService.Init(cache_client_pool)
                 database_service = DatabaseService(app_config.databaseConfig)
                 await database_service.init_service()
-                
+                aiChat_sevrvice = AIChatService(app_config.llmConfig)
+                 # 캐시 서비스 초기화
                 # 연결 테스트
                 test_result = await database_service.execute_global_query("SELECT 1 as health_check", ())
                 if test_result:
-                    ServiceContainer.init(database_service)
+                    ServiceContainer.init(database_service, aiChat_sevrvice)
                     Logger.info("✅ 데이터베이스 서비스 초기화 및 컨테이너 등록 완료")
                     db_init_success = True
                     break
@@ -137,20 +150,6 @@ async def lifespan(app: FastAPI):
         if not ServiceContainer.is_initialized():
             Logger.error("❌ ServiceContainer 데이터베이스 상태 불일치")
             raise RuntimeError("ServiceContainer database state inconsistent")
-
-        # 캐시 서비스 초기화
-        cache_client_pool = RedisCacheClientPool(
-            host=app_config.cacheConfig.host,
-            port=app_config.cacheConfig.port,
-            session_expire_time=app_config.cacheConfig.session_expire_seconds,
-            app_id=app_config.templateConfig.appId,
-            env=app_config.templateConfig.env,
-            db=app_config.cacheConfig.db,
-            password=app_config.cacheConfig.password,
-            max_retries=app_config.cacheConfig.max_retries,
-            connection_timeout=app_config.cacheConfig.connection_timeout
-        )
-        CacheService.Init(cache_client_pool)
         
         # Redis 연결 테스트 및 재시도
         max_redis_retries = 5
