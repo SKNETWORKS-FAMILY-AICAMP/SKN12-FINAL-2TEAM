@@ -44,7 +44,6 @@ from service.outbox.outbox_pattern import OutboxService
 from service.queue.queue_service import QueueService, initialize_queue_service
 from service.core.service_monitor import service_monitor
 from service.websocket.websocket_service import WebSocketService
-from service.websocket.websocket_config import WebSocketConfig
 
 # uvicorn base_server.application.base_web_server.main:app --reload --  logLevel=Debug
 
@@ -96,6 +95,11 @@ async def lifespan(app: FastAPI):
         
         # AppConfig 객체 생성
         app_config = AppConfig(**config_data)
+        
+        # AWS 테스트 설정 확인
+        Logger.info(f"AWS 테스트 설정: skipAwsTests={app_config.templateConfig.skipAwsTests}")
+        if app_config.templateConfig.skipAwsTests:
+            Logger.info("⚠️ AWS 서비스 테스트가 스킵됩니다 (S3, OpenSearch, Bedrock)")
         
         # 🛡️ 데이터베이스 서비스 초기화 - 장애 대응 강화
         db_init_success = False
@@ -201,46 +205,49 @@ async def lifespan(app: FastAPI):
                 Logger.info("Storage 서비스 초기화 완료")
                 
                 # 🔧 근본 해결: Pool 비동기 초기화 + 실제 동작 테스트
-                try:
-                    # 1. Pool 비동기 초기화를 명시적으로 수행
-                    client = await StorageService.get_client_async()
+                if not app_config.templateConfig.skipAwsTests:
+                    try:
+                        # 1. Pool 비동기 초기화를 명시적으로 수행
+                        client = await StorageService.get_client_async()
                     
-                    # 2. 기본 연결 테스트
-                    list_result = await StorageService.list_files("finance-app-bucket-1", "", max_keys=1)
-                    if not list_result["success"]:
-                        raise Exception(f"S3 기본 연결 실패: {list_result.get('error', 'Unknown')}")
+                        # 2. 기본 연결 테스트
+                        list_result = await StorageService.list_files("finance-app-bucket-1", "", max_keys=1)
+                        if not list_result["success"]:
+                            raise Exception(f"S3 기본 연결 실패: {list_result.get('error', 'Unknown')}")
+                        
+                        # 3. 실제 동작 테스트 (Pool이 이제 초기화됨)
+                        import time, uuid
+                        server_id = f"{os.getpid()}_{uuid.uuid4().hex[:8]}"
+                        test_filename = f"health_test_{server_id}_{int(time.time())}.txt"
+                        test_content = f"S3 test {server_id[:8]}"
+                        test_bucket = "finance-app-bucket-1"
+                        
+                        # 업로드 테스트
+                        from io import BytesIO
+                        file_obj = BytesIO(test_content.encode('utf-8'))
+                        upload_result = await StorageService.upload_file_obj(test_bucket, test_filename, file_obj)
+                        if not upload_result["success"]:
+                            raise Exception(f"S3 업로드 실패: {upload_result.get('error', 'Unknown')}")
+                        
+                        # 다운로드 테스트
+                        download_result = await StorageService.download_file_obj(test_bucket, test_filename)
+                        if not download_result["success"]:
+                            raise Exception(f"S3 다운로드 실패: {download_result.get('error', 'Unknown')}")
+                        
+                        # 내용 검증
+                        downloaded_content = download_result.get("content", b"").decode('utf-8')
+                        if downloaded_content != test_content:
+                            raise Exception(f"S3 내용 불일치: {test_content} != {downloaded_content}")
+                        
+                        # 삭제 테스트
+                        await StorageService.delete_file(test_bucket, test_filename)
                     
-                    # 3. 실제 동작 테스트 (Pool이 이제 초기화됨)
-                    import time, uuid, os
-                    server_id = f"{os.getpid()}_{uuid.uuid4().hex[:8]}"
-                    test_filename = f"health_test_{server_id}_{int(time.time())}.txt"
-                    test_content = f"S3 test {server_id[:8]}"
-                    test_bucket = "finance-app-bucket-1"
-                    
-                    # 업로드 테스트
-                    from io import BytesIO
-                    file_obj = BytesIO(test_content.encode('utf-8'))
-                    upload_result = await StorageService.upload_file_obj(test_bucket, test_filename, file_obj)
-                    if not upload_result["success"]:
-                        raise Exception(f"S3 업로드 실패: {upload_result.get('error', 'Unknown')}")
-                    
-                    # 다운로드 테스트
-                    download_result = await StorageService.download_file_obj(test_bucket, test_filename)
-                    if not download_result["success"]:
-                        raise Exception(f"S3 다운로드 실패: {download_result.get('error', 'Unknown')}")
-                    
-                    # 내용 검증
-                    downloaded_content = download_result.get("content", b"").decode('utf-8')
-                    if downloaded_content != test_content:
-                        raise Exception(f"S3 내용 불일치: {test_content} != {downloaded_content}")
-                    
-                    # 삭제 테스트
-                    await StorageService.delete_file(test_bucket, test_filename)
-                    
-                    Logger.info("✅ Storage 서비스 S3 실제 동작 테스트 성공 (업로드/다운로드/삭제)")
-                    
-                except Exception as e:
-                    Logger.warn(f"⚠️ Storage 서비스 S3 테스트 실패: {e}")
+                        Logger.info("✅ Storage 서비스 S3 실제 동작 테스트 성공 (업로드/다운로드/삭제)")
+                        
+                    except Exception as e:
+                        Logger.warn(f"⚠️ Storage 서비스 S3 테스트 실패: {e}")
+                else:
+                    Logger.info("⏭️ Storage 서비스 S3 테스트 스킵 (skipAwsTests=true)")
             else:
                 Logger.warn("Storage 서비스 초기화 실패")
         except Exception as e:
@@ -253,51 +260,54 @@ async def lifespan(app: FastAPI):
                 Logger.info("Search 서비스 초기화 완료")
                 
                 # 🔧 근본 해결: 전용 테스트 인덱스로 실제 동작 테스트
-                try:
-                    # 1. 기본 연결 테스트
-                    exists_result = await SearchService.index_exists("finance_search_local")
-                    if not exists_result["success"]:
-                        raise Exception(f"OpenSearch 기본 연결 실패: {exists_result.get('error', 'Unknown')}")
-                    
-                    # 2. 전용 테스트 인덱스 생성 및 실제 동작 테스트
-                    import time, uuid, os
-                    server_id = f"{os.getpid()}_{uuid.uuid4().hex[:8]}"
-                    test_index = f"health_test_{server_id[:8]}_{int(time.time())}"
-                    test_doc_id = "test_doc"
-                    
-                    # 테스트용 인덱스 생성 (유연한 스키마)
-                    create_result = await SearchService.create_test_index(test_index)
-                    if not create_result.get("success", True):  # create_index는 성공 시 다른 응답 구조
-                        Logger.debug(f"테스트 인덱스 생성 응답: {create_result}")
-                    
-                    # 간단한 테스트 문서
-                    test_document = {
-                        "content": f"health test {server_id[:8]}",
-                        "timestamp": int(time.time()),
-                        "server_id": server_id
-                    }
-                    
-                    # 인덱싱 테스트
-                    index_result = await SearchService.index_document(test_index, test_document, test_doc_id)
-                    if not index_result["success"]:
-                        raise Exception(f"OpenSearch 인덱싱 실패: {index_result.get('error', 'Unknown')}")
-                    
-                    # 검색 테스트 (인덱싱 완료 대기)
-                    await asyncio.sleep(1)
-                    search_result = await SearchService.search(test_index, {
-                        "query": {"match_all": {}}
-                    })
-                    
-                    # 테스트 인덱스 전체 삭제 (정리)
-                    await SearchService.delete_index(test_index)
-                    
-                    if search_result["success"] and search_result.get("documents"):
-                        Logger.info("✅ Search 서비스 OpenSearch 실제 동작 테스트 성공 (인덱스생성/인덱싱/검색/삭제)")
-                    else:
-                        Logger.warn("⚠️ OpenSearch 검색 결과 없음 (인덱싱은 성공)")
-                    
-                except Exception as e:
-                    Logger.warn(f"⚠️ Search 서비스 OpenSearch 테스트 실패: {e}")
+                if not app_config.templateConfig.skipAwsTests:
+                    try:
+                        # 1. 기본 연결 테스트
+                        exists_result = await SearchService.index_exists("finance_search_local")
+                        if not exists_result["success"]:
+                            raise Exception(f"OpenSearch 기본 연결 실패: {exists_result.get('error', 'Unknown')}")
+                        
+                        # 2. 전용 테스트 인덱스 생성 및 실제 동작 테스트
+                        import time, uuid
+                        server_id = f"{os.getpid()}_{uuid.uuid4().hex[:8]}"
+                        test_index = f"health_test_{server_id[:8]}_{int(time.time())}"
+                        test_doc_id = "test_doc"
+                        
+                        # 테스트용 인덱스 생성 (유연한 스키마)
+                        create_result = await SearchService.create_test_index(test_index)
+                        if not create_result.get("success", True):  # create_index는 성공 시 다른 응답 구조
+                            Logger.debug(f"테스트 인덱스 생성 응답: {create_result}")
+                        
+                        # 간단한 테스트 문서
+                        test_document = {
+                            "content": f"health test {server_id[:8]}",
+                            "timestamp": int(time.time()),
+                            "server_id": server_id
+                        }
+                        
+                        # 인덱싱 테스트
+                        index_result = await SearchService.index_document(test_index, test_document, test_doc_id)
+                        if not index_result["success"]:
+                            raise Exception(f"OpenSearch 인덱싱 실패: {index_result.get('error', 'Unknown')}")
+                        
+                        # 검색 테스트 (인덱싱 완료 대기)
+                        await asyncio.sleep(1)
+                        search_result = await SearchService.search(test_index, {
+                            "query": {"match_all": {}}
+                        })
+                        
+                        # 테스트 인덱스 전체 삭제 (정리)
+                        await SearchService.delete_index(test_index)
+                        
+                        if search_result["success"] and search_result.get("documents"):
+                            Logger.info("✅ Search 서비스 OpenSearch 실제 동작 테스트 성공 (인덱스생성/인덱싱/검색/삭제)")
+                        else:
+                            Logger.warn("⚠️ OpenSearch 검색 결과 없음 (인덱싱은 성공)")
+                        
+                    except Exception as e:
+                        Logger.warn(f"⚠️ Search 서비스 OpenSearch 테스트 실패: {e}")
+                else:
+                    Logger.info("⏭️ Search 서비스 OpenSearch 테스트 스킵 (skipAwsTests=true)")
             else:
                 Logger.warn("Search 서비스 초기화 실패")
         except Exception as e:
@@ -310,50 +320,52 @@ async def lifespan(app: FastAPI):
                 Logger.info("VectorDB 서비스 초기화 완료")
                 
                 # Bedrock 실제 동작 테스트 (최소 비용으로 임베딩/검색)
-                try:
-                    import time
-                    import uuid
-                    import os
-                    server_id = f"{os.getpid()}_{uuid.uuid4().hex[:8]}"
-                    
-                    # 💰 비용 최소화: 매우 짧은 텍스트 사용
-                    test_text = f"test{server_id[:4]}"  # 매우 짧은 텍스트 (8-10자)
-                    test_id = f"health_{server_id}"
-                    
-                    # 1. 임베딩 생성 테스트 (최소 텍스트)
-                    embed_result = await VectorDbService.embed_text(test_text)
-                    if not embed_result["success"]:
-                        raise Exception(f"Bedrock 임베딩 실패: {embed_result.get('error', 'Unknown')}")
-                    
-                    # 응답 구조 확인 (로그에서 "1024 dimensions" 확인됨)
-                    embeddings = embed_result.get("embedding") or embed_result.get("embeddings") or embed_result.get("vector")
-                    if not embeddings:
-                        # 응답 구조 디버깅을 위해 키 목록 확인
-                        available_keys = list(embed_result.keys()) if isinstance(embed_result, dict) else []
-                        Logger.debug(f"Bedrock 응답 키들: {available_keys}")
-                        raise Exception(f"Bedrock 임베딩 결과 없음 (사용 가능한 키: {available_keys})")
-                    
-                    # 2. 벡터 저장 테스트 (메모리에만 저장, 실제 DB 저장 안함)
-                    vector_length = len(embeddings) if isinstance(embeddings, (list, tuple)) else "unknown"
-                    
-                    # 3. 간단한 유사도 계산 테스트 (같은 텍스트로 재테스트)
-                    verify_result = await VectorDbService.embed_text(test_text)
-                    if verify_result["success"]:
-                        Logger.info(f"✅ VectorDB 서비스 Bedrock 실제 동작 테스트 성공 (벡터크기:{vector_length})")
-                    else:
-                        raise Exception("Bedrock 재검증 실패")
-                    
-                except Exception as conn_e:
-                    Logger.warn(f"⚠️ VectorDB 서비스 Bedrock 동작 테스트 실패: {conn_e}")
-                    # 기본 연결 테스트로 폴백 (더 짧은 텍스트)
+                if not app_config.templateConfig.skipAwsTests:
                     try:
-                        test_result = await VectorDbService.embed_text("hi")  # 2글자로 최소화
-                        if test_result["success"]:
-                            Logger.info("✅ VectorDB 서비스 Bedrock 기본 연결 성공")
+                        import time
+                        import uuid
+                        server_id = f"{os.getpid()}_{uuid.uuid4().hex[:8]}"
+                        
+                        # 💰 비용 최소화: 매우 짧은 텍스트 사용
+                        test_text = f"test{server_id[:4]}"  # 매우 짧은 텍스트 (8-10자)
+                        test_id = f"health_{server_id}"
+                        
+                        # 1. 임베딩 생성 테스트 (최소 텍스트)
+                        embed_result = await VectorDbService.embed_text(test_text)
+                        if not embed_result["success"]:
+                            raise Exception(f"Bedrock 임베딩 실패: {embed_result.get('error', 'Unknown')}")
+                        
+                        # 응답 구조 확인 (로그에서 "1024 dimensions" 확인됨)
+                        embeddings = embed_result.get("embedding") or embed_result.get("embeddings") or embed_result.get("vector")
+                        if not embeddings:
+                            # 응답 구조 디버깅을 위해 키 목록 확인
+                            available_keys = list(embed_result.keys()) if isinstance(embed_result, dict) else []
+                            Logger.debug(f"Bedrock 응답 키들: {available_keys}")
+                            raise Exception(f"Bedrock 임베딩 결과 없음 (사용 가능한 키: {available_keys})")
+                        
+                        # 2. 벡터 저장 테스트 (메모리에만 저장, 실제 DB 저장 안함)
+                        vector_length = len(embeddings) if isinstance(embeddings, (list, tuple)) else "unknown"
+                        
+                        # 3. 간단한 유사도 계산 테스트 (같은 텍스트로 재테스트)
+                        verify_result = await VectorDbService.embed_text(test_text)
+                        if verify_result["success"]:
+                            Logger.info(f"✅ VectorDB 서비스 Bedrock 실제 동작 테스트 성공 (벡터크기:{vector_length})")
                         else:
-                            Logger.warn(f"❌ VectorDB 서비스 Bedrock 기본 연결 실패: {test_result.get('error', 'Unknown')}")
-                    except Exception as basic_e:
-                        Logger.warn(f"❌ VectorDB 서비스 Bedrock 기본 연결 테스트 실패: {basic_e}")
+                            raise Exception("Bedrock 재검증 실패")
+                        
+                    except Exception as conn_e:
+                        Logger.warn(f"⚠️ VectorDB 서비스 Bedrock 동작 테스트 실패: {conn_e}")
+                        # 기본 연결 테스트로 폴백 (더 짧은 텍스트)
+                        try:
+                            test_result = await VectorDbService.embed_text("hi")  # 2글자로 최소화
+                            if test_result["success"]:
+                                Logger.info("✅ VectorDB 서비스 Bedrock 기본 연결 성공")
+                            else:
+                                Logger.warn(f"❌ VectorDB 서비스 Bedrock 기본 연결 실패: {test_result.get('error', 'Unknown')}")
+                        except Exception as basic_e:
+                            Logger.warn(f"❌ VectorDB 서비스 Bedrock 기본 연결 테스트 실패: {basic_e}")
+                else:
+                    Logger.info("⏭️ VectorDB 서비스 Bedrock 테스트 스킵 (skipAwsTests=true)")
             else:
                 Logger.warn("VectorDB 서비스 초기화 실패")
         except Exception as e:
@@ -420,13 +432,9 @@ async def lifespan(app: FastAPI):
         
         # WebSocket 서비스 초기화
         try:
-            websocket_config = WebSocketConfig()
-            # 개발 환경에서는 인증을 선택적으로 설정
-            if app_env in ["LOCAL", "DEBUG"]:
-                websocket_config.require_auth = False
-                Logger.info("WebSocket 인증 비활성화 (개발 환경)")
-            
-            if WebSocketService.init(websocket_config):
+            # config 파일에서 WebSocket 설정 사용
+            Logger.info(f"WebSocket 설정: require_auth={app_config.websocketConfig.require_auth}, use_redis_pubsub={app_config.websocketConfig.use_redis_pubsub}")
+            if WebSocketService.init(app_config.websocketConfig):
                 Logger.info("WebSocket 서비스 초기화 완료")
                 ServiceContainer.set_websocket_service_initialized(True)
                 
