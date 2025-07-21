@@ -15,8 +15,12 @@ class TemplateConfig(BaseModel):
     localPath: str = ""
     skipAwsTests: bool = False  # AWS 서비스 테스트 스킵 여부
 
+class ProviderConfig(BaseModel):
+    provider: str
+    api_key: str
+    model: str
+
 class AppConfig(BaseModel):
-    templateConfig: TemplateConfig
     databaseConfig: DatabaseConfig
     cacheConfig: CacheConfig
     externalConfig: ExternalConfig

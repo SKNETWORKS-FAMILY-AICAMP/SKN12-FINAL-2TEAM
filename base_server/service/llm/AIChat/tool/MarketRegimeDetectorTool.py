@@ -7,11 +7,11 @@
 
 from typing import Dict, Any, List, Optional
 import numpy as np
-from AIChat.BaseFinanceTool import BaseFinanceTool
+from service.llm.AIChat.BaseFinanceTool import BaseFinanceTool
 from pydantic import BaseModel, Field
-from AIChat.BasicTools.MacroEconomicTool import MacroEconomicTool
-from AIChat.BasicTools.TechnicalAnalysisTool import TechnicalAnalysisTool, TechnicalAnalysisInput
-from AIChat.BasicTools.MarketDataTool import MarketDataTool, MarketDataInput
+from service.llm.AIChat.BasicTools.MacroEconomicTool import MacroEconomicTool
+from service.llm.AIChat.BasicTools.TechnicalAnalysisTool import TechnicalAnalysisTool, TechnicalAnalysisInput
+from service.llm.AIChat.BasicTools.MarketDataTool import MarketDataTool, MarketDataInput
 
 class MarketRegimeDetectorInput(BaseModel):
     """
@@ -88,7 +88,9 @@ class MarketRegimeDetector:
         from scipy.stats import multivariate_normal # 다변량 정규분포 함수 import
         params = self.observation_params[state] # 선택된 상태의 평균과 공분산 가져오기
         # 다변량 정규분포 PDF 계산: 관측값이 해당 상태 분포에서 나올 likelihood 반환
-        return multivariate_normal.pdf(observation, mean=params['mean'], cov=params['cov'])
+        mean = np.asarray(params['mean'])
+        cov = np.asarray(params['cov'])
+        return multivariate_normal.pdf(observation, mean=mean, cov=cov)  # type: ignore
 
     # 베이지안 방식으로 상태 분류
     def bayesian_regime_classification(self, macro_data, technical_data, prev_state=None):
@@ -123,9 +125,17 @@ class MarketRegimeDetector:
         # posterior 계산
         posteriors = self.bayesian_regime_classification(macro_data, technical_data, prev_state)
         # posterior가 가장 높은 상태를 regime으로 선택
-        regime = max(posteriors, key=posteriors.get)
+        regime = max(posteriors, key=lambda k: posteriors[k])
         # regime, 각 상태 posterior 확률, 전이행렬 반환
         return regime, posteriors, self.transition_matrix.copy()
+
+class MarketRegimeDetectorTool(BaseFinanceTool):
+    def __init__(self, ai_chat_service):
+        from service.llm.AIChat_service import AIChatService
+        if not isinstance(ai_chat_service, AIChatService):
+            raise TypeError("Expected AIChatService instance")
+        self.ai_chat_service = ai_chat_service
+        self.detector = MarketRegimeDetector()
 
     def get_data(self, **kwargs) -> MarketRegimeDetectorOutput:
         print("[MarketRegimeDetectorTool] get_data 시작")
@@ -136,17 +146,16 @@ class MarketRegimeDetector:
         print("  [1] input_data:", input_data)
 
         # [2] MacroEconomicTool 호출 (series_ids를 키워드 인자로)
-        macro_tool = MacroEconomicTool()
+        macro_tool = MacroEconomicTool(self.ai_chat_service)
         macro_output = macro_tool.get_data(series_ids=input_data.series_ids)
-        macro_data = {s['series_id']: s['latest_value'] for s in macro_output.data if s.get('latest_value') is not None}
+        macro_data_list = macro_output.data if macro_output.data is not None else []
+        macro_data = {s['series_id']: s['latest_value'] for s in macro_data_list if s.get('latest_value') is not None}
         print("  [2] macro_data:", macro_data)
 
         # [3] TechnicalAnalysisTool 호출 (**키워드 인자 사용**)
-        ta_tool = TechnicalAnalysisTool()
+        ta_tool = TechnicalAnalysisTool(self.ai_chat_service)
         ta_input = TechnicalAnalysisInput(tickers=input_data.tickers)
-        # 반드시 **키워드 인자**로 넘긴다!
         ta_output = ta_tool.get_data(**ta_input.dict())
-        # ta_output.results는 리스트 형태일 수 있으니 첫 번째 결과만 가져옴
         if isinstance(ta_output.results, list):
             ta_result = ta_output.results[0]
         elif isinstance(ta_output.results, dict):
@@ -163,14 +172,14 @@ class MarketRegimeDetector:
         print("  [3] technical_data:", technical_data)
 
         # [4] MarketDataTool에서 VIX 추출 (키워드 인자 방식)
-        market_data_tool = MarketDataTool()
+        market_data_tool = MarketDataTool(self.ai_chat_service)
         market_input = MarketDataInput(
             tickers=input_data.tickers,
             start_date=input_data.start_date,
             end_date=input_data.end_date
         )
         market_data = market_data_tool.get_data(**market_input.dict())
-        technical_data['vix'] = market_data['vix']
+        technical_data['vix'] = market_data.vix
         print("  [4] technical_data (with VIX):", technical_data)
 
         # [5] prev_state

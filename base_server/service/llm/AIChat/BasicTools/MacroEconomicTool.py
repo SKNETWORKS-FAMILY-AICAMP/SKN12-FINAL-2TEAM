@@ -4,7 +4,7 @@ import os
 import time
 import random   
 from typing import List, Optional, Dict, Any
-from AIChat.BaseFinanceTool import BaseFinanceTool
+from service.llm.AIChat.BaseFinanceTool import BaseFinanceTool
 from pydantic import BaseModel, Field
 
 class MacroEconomicInput(BaseModel):
@@ -56,11 +56,17 @@ class MacroEconomicOutput:
 
 
 class MacroEconomicTool(BaseFinanceTool):
+    def __init__(self, ai_chat_service):
+        from service.llm.AIChat_service import AIChatService
+        if not isinstance(ai_chat_service, AIChatService):
+            raise TypeError("Expected AIChatService instance")
+        self.ai_chat_service = ai_chat_service
+
     def get_data(self, **kwargs) -> MacroEconomicOutput:
         try:
             input = MacroEconomicInput(**kwargs)
             print(f"[MacroEconomicTool] Processing: {input.series_ids}")
-            api_key = self.api_key or os.getenv("FRED_API_KEY")
+            api_key = self.ai_chat_service.llm_config.API_Key.FRED_API_KEY
             if not api_key:
                 return MacroEconomicOutput(agent="error", summary="FRED API 키가 없습니다.", series=[], data=None)
 

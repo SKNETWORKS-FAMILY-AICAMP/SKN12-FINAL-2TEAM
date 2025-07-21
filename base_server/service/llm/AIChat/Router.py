@@ -12,22 +12,22 @@ from langchain.tools import tool
 from langgraph.graph import StateGraph, MessagesState, END
 from langgraph.prebuilt import ToolNode
 from langchain_core.prompts import ChatPromptTemplate
+
 # ──────────────────────────── -1. 기본 모듈 임포트
-from AIChat.BasicTools.FinancialStatementTool import FinancialStatementTool, FinancialStatementParams
-from AIChat.BasicTools.MacroEconomicTool import MacroEconomicTool, MacroEconomicInput
-from AIChat.BasicTools.SectorAnalysisTool import SectorAnalysisTool, SectorAnalysisInput
-from AIChat.BasicTools.TechnicalAnalysisTool import TechnicalAnalysisTool, TechnicalAnalysisInput
-from AIChat.BasicTools.MarketDataTool import MarketDataTool, MarketDataInput
-from AIChat.BasicTools.NewsTool import NewsTool, NewsInput
-from AIChat.BasicTools.IndustryAnalysisTool import IndustryAnalysisTool, IndustryAnalysisInput
-from AIChat.tool.MarketRegimeDetectorTool import MarketRegimeDetector, MarketRegimeDetectorInput
-from AIChat.tool.KalmanRegimeFilterTool import KalmanRegimeFilterTool, KalmanRegimeFilterInput
+from service.llm.AIChat.BasicTools.FinancialStatementTool import FinancialStatementTool, FinancialStatementParams
+from service.llm.AIChat.BasicTools.MacroEconomicTool import MacroEconomicTool, MacroEconomicInput
+from service.llm.AIChat.BasicTools.SectorAnalysisTool import SectorAnalysisTool, SectorAnalysisInput
+from service.llm.AIChat.BasicTools.TechnicalAnalysisTool import TechnicalAnalysisTool, TechnicalAnalysisInput
+from service.llm.AIChat.BasicTools.MarketDataTool import MarketDataTool, MarketDataInput
+from service.llm.AIChat.BasicTools.NewsTool import NewsTool, NewsInput
+from service.llm.AIChat.BasicTools.IndustryAnalysisTool import IndustryAnalysisTool, IndustryAnalysisInput
+from service.llm.AIChat.tool.MarketRegimeDetectorTool import MarketRegimeDetector, MarketRegimeDetectorInput
+from service.llm.AIChat.tool.KalmanRegimeFilterTool import KalmanRegimeFilterTool, KalmanRegimeFilterInput
 
 # ──────────────────────────── 0. 환경 변수
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-if not (OPENAI_API_KEY and OPENAI_API_KEY.startswith("sk-")):
-    raise ValueError("❌ 유효한 OPENAI_API_KEY가 없습니다.")
+
 # 한국(서울) 기준 오늘 날짜·시간
 now_seoul = datetime.now(ZoneInfo("Asia/Seoul"))
 today = now_seoul.date() 
@@ -36,77 +36,101 @@ today = now_seoul.date()
 @tool(args_schema=FinancialStatementParams)
 def income_statement_tool(**params):
     """기업의 손익계산서를 조회합니다 (매출, 순이익, EPS 등)."""
-    agent = FinancialStatementTool("income-statement")
+    from service.service_container import ServiceContainer
+    ai = ServiceContainer.get_ai_chat_service()
+    agent = FinancialStatementTool(ai, "income-statement")
     return agent.get_data(**params)
 
 @tool(args_schema=FinancialStatementParams)
 def balance_sheet_tool(**params):
     """기업의 대차대조표를 조회합니다 (자산, 부채, 자본 등)."""
-    agent = FinancialStatementTool("balance-sheet-statement")
+    from service.service_container import ServiceContainer
+    ai = ServiceContainer.get_ai_chat_service()
+    agent = FinancialStatementTool(ai, "balance-sheet-statement")
     return agent.get_data(**params)
 
 @tool(args_schema=FinancialStatementParams)
 def cashflow_statement_tool(**params):
     """기업의 현금흐름표를 조회합니다 (영업/투자/재무 현금흐름)."""
-    agent = FinancialStatementTool("cash-flow-statement")
+    from service.service_container import ServiceContainer
+    ai = ServiceContainer.get_ai_chat_service()
+    agent = FinancialStatementTool(ai, "cash-flow-statement")
     return agent.get_data(**params)
 
 @tool(args_schema=FinancialStatementParams)
 def ratios_tool(**params):
     """기업의 주요 재무비율을 조회합니다 (PER, ROE, 유동비율 등)."""
-    agent = FinancialStatementTool("ratios")
+    from service.service_container import ServiceContainer
+    ai = ServiceContainer.get_ai_chat_service()
+    agent = FinancialStatementTool(ai, "ratios")
     return agent.get_data(**params)
 
 @tool(args_schema=FinancialStatementParams)
 def key_metrics_tool(**params):
     """기업의 핵심 지표를 조회합니다 (시가총액, 마진율, 배당수익률 등)."""
-    agent = FinancialStatementTool("key-metrics")
+    from service.service_container import ServiceContainer
+    ai = ServiceContainer.get_ai_chat_service()
+    agent = FinancialStatementTool(ai, "key-metrics")
     return agent.get_data(**params)
 
 @tool(args_schema=FinancialStatementParams)
 def financial_growth_tool(**params):
     """기업의 성장률 지표를 조회합니다 (매출 성장률, EPS 성장률 등)."""
-    agent = FinancialStatementTool("financial-growth")
+    from service.service_container import ServiceContainer
+    ai = ServiceContainer.get_ai_chat_service()
+    agent = FinancialStatementTool(ai, "financial-growth")
     return agent.get_data(**params)
 
 @tool(args_schema=FinancialStatementParams)
 def enterprise_value_tool(**params):
     """기업의 기업가치 지표를 조회합니다 (EV, Net Debt 등)."""
-    agent = FinancialStatementTool("enterprise-values")
+    from service.service_container import ServiceContainer
+    ai = ServiceContainer.get_ai_chat_service()
+    agent = FinancialStatementTool(ai, "enterprise-values")
     return agent.get_data(**params)
 
 @tool(args_schema=NewsInput)
 def news(**params):
     """특정 키워드에 대한 최신 뉴스를 조회합니다."""
-    agent = NewsTool()
+    from service.service_container import ServiceContainer
+    ai = ServiceContainer.get_ai_chat_service()
+    agent = NewsTool(ai)
     result = agent.get_data(**params)
     return result.summary
 
 @tool(args_schema=TechnicalAnalysisInput)
 def technical_analysis(**params):
     """종목들의 기술적 지표 (RSI, MACD, EMA)를 분석합니다."""
-    agent = TechnicalAnalysisTool()
+    from service.service_container import ServiceContainer
+    ai = ServiceContainer.get_ai_chat_service()
+    agent = TechnicalAnalysisTool(ai)
     results = agent.get_data(**params)
-    return "\n".join([r.summary for r in results.results])
+    return "\n".join([r if isinstance(r, str) else r.summary for r in results.results])
 
 @tool(args_schema=MarketDataInput)
 def market_data(**params):
     """주가, 시세, 일별 수익률, 기대수익률, 변동성, 공분산, 최신 VIX 등 시장 데이터를 반환합니다."""
-    agent = MarketDataTool()
+    from service.service_container import ServiceContainer
+    ai = ServiceContainer.get_ai_chat_service()
+    agent = MarketDataTool(ai)
     results = agent.get_data(**params)
     return results.summary
 
 @tool(args_schema=MacroEconomicInput)
 def macro_economic(**params):
     """거시경제 지표 (금리, CPI 등)를 조회합니다."""
-    agent = MacroEconomicTool()
+    from service.service_container import ServiceContainer
+    ai = ServiceContainer.get_ai_chat_service()
+    agent = MacroEconomicTool(ai)
     result = agent.get_data(**params)
     return result.summary
 
 @tool(args_schema=SectorAnalysisInput)
 def sector_analysis(**params):
     """섹터 대표 종목의 시가총액, 배당, 가격을 조회합니다."""
-    agent = SectorAnalysisTool()
+    from service.service_container import ServiceContainer
+    ai = ServiceContainer.get_ai_chat_service()
+    agent = SectorAnalysisTool(ai)
     result = agent.get_data(**params)
     return result.summary
 
@@ -114,7 +138,9 @@ def sector_analysis(**params):
 def industry_analysis(**params):
     """산업별 주요 상장 기업, 시가총액, 평균 주가, 평균 배당, 국가 정보를 요약해 보여줍니다.
     (예: Semiconductors, Software - Infrastructure 등)"""
-    agent = IndustryAnalysisTool()
+    from service.service_container import ServiceContainer
+    ai = ServiceContainer.get_ai_chat_service()
+    agent = IndustryAnalysisTool(ai)
     result = agent.get_data(**params)
     return result.summary
 
@@ -128,7 +154,9 @@ def MarketRegimeDetectortool(**params):
 @tool(args_schema=KalmanRegimeFilterInput)
 def KalmanRegimeFiltertool(**params):
     """칼만 필터를 사용해서 종목의 진입 시점과 청산 시점을 예측합니다."""
-    agent = KalmanRegimeFilterTool()
+    from service.service_container import ServiceContainer
+    ai = ServiceContainer.get_ai_chat_service()
+    agent = KalmanRegimeFilterTool(ai)
     result = agent.get_data(**params)
     return result.summary
 

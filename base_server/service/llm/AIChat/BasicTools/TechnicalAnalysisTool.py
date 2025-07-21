@@ -3,7 +3,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy import false
 import yfinance as yf
 import ta
-from AIChat.BaseFinanceTool import BaseFinanceTool
+from service.llm.AIChat.BaseFinanceTool import BaseFinanceTool
+from ta.momentum import RSIIndicator
+from ta.trend import MACD, EMAIndicator
+import pandas as pd
 
 class TechnicalAnalysisInput(BaseModel):
     tickers: List[str] = Field(
@@ -40,6 +43,13 @@ class TechnicalAnalysisOutput:
         self.results = results  # 여러 종목의 기술적 분석 결과들
 
 class TechnicalAnalysisTool(BaseFinanceTool):
+    def __init__(self, ai_chat_service):
+        # 지연 임포트로 순환 참조 방지
+        from service.llm.AIChat_service import AIChatService
+        if not isinstance(ai_chat_service, AIChatService):
+            raise TypeError("Expected AIChatService instance")
+        self.ai_chat_service = ai_chat_service
+
     def get_data(self, **params) -> TechnicalAnalysisOutput:
         # params: dict로 들어오므로 모델로 변환
         try:
@@ -75,9 +85,11 @@ class TechnicalAnalysisTool(BaseFinanceTool):
                             summary=f"{ticker}의 가격 데이터에 'Close' 또는 'Adj Close' 컬럼이 없습니다."
                         ))
                         continue
-                    rsi = ta.momentum.RSIIndicator(close).rsi().iloc[-1]
-                    macd = ta.trend.MACD(close).macd().iloc[-1]
-                    ema = ta.trend.EMAIndicator(close, window=20).ema_indicator().iloc[-1]
+                    if not isinstance(close, pd.Series):
+                        close = pd.Series(close)
+                    rsi = RSIIndicator(close).rsi().iloc[-1]
+                    macd = MACD(close).macd().iloc[-1]
+                    ema = EMAIndicator(close, window=20).ema_indicator().iloc[-1]
 
                     summary = (
                         f"{ticker}의 기술적 분석: RSI={rsi:.2f}, MACD={macd:.2f}, 20일 EMA={ema:.2f}입니다."

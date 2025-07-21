@@ -1,8 +1,7 @@
 import requests
-from AIChat.BaseFinanceTool import BaseFinanceTool
+from service.llm.AIChat.BaseFinanceTool import BaseFinanceTool
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
-
 
 class FinancialStatementParams(BaseModel):
     ticker: str = Field(..., description="조회할 미국 주식의 종목 코드 (예: AAPL)")
@@ -43,15 +42,16 @@ class FinancialStatementTool(BaseFinanceTool):
         "enterprise-values": "기업가치"
     }
     BASE_URL = "https://financialmodelingprep.com/api/v3"
-
-    def __init__(self, statement_type: str, api_key_name: str = "FMP_API_KEY"):
-        super().__init__(key_name=api_key_name)
-        if not self.api_key:
-            raise ValueError("❌ FMP_API_KEY가 설정돼 있지 않습니다.")
-
+    
+    def __init__(self, ai_chat_service, statement_type: str):
+        # 지연 임포트
+        from service.llm.AIChat_service import AIChatService
+        if not isinstance(ai_chat_service, AIChatService):
+            raise TypeError("Expected AIChatService instance")
+        self.ai_chat_service = ai_chat_service
         statement_type = statement_type.lower()
         if statement_type not in self.SUPPORTED_TYPES:
-            raise ValueError(f"❌ 지원하지 않는 유형입니다: {statement_type}")
+            raise ValueError(f"Unsupported type: {statement_type}")
         self.statement_type = statement_type
 
     @staticmethod
@@ -82,8 +82,9 @@ class FinancialStatementTool(BaseFinanceTool):
         limit = params.limit
 
         url = f"{self.BASE_URL}/{self.statement_type}/{ticker}"
+        api_key = self.ai_chat_service.llm_config.API_Key.FMP_API_KEY
         req_params = {
-            "apikey": self.api_key,
+            "apikey": api_key,
             "limit": limit
         }
 

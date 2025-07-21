@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import yfinance as yf
 import pandas as pd
+import numpy as np
 from typing import List, Dict, Optional, Any, Type
 from pydantic import BaseModel, Field
 from datetime import date, timedelta, datetime
 
-from AIChat.BaseFinanceTool import BaseFinanceTool  # 👈 프로젝트 내부 베이스 툴
+from service.llm.AIChat.BaseFinanceTool import BaseFinanceTool  # 👈 프로젝트 내부 베이스 툴
 
 # ────────────────────────────────
 # 1. 헬퍼
@@ -84,10 +85,18 @@ class MarketDataOutput(BaseModel):
 # 3. 메인 툴
 # ────────────────────────────────
 class MarketDataTool(BaseFinanceTool):
-    """다중 자산 가격·리스크·VIX 조회"""
+    """
+    다중 자산 가격·리스크·VIX 조회
+    """
     name        = "market_data"
     description = "주식·ETF·채권·원자재·VIX 시계열과 리스크 지표를 반환"
     args_schema: Type[BaseModel] = MarketDataInput
+
+    def __init__(self, ai_chat_service):
+        from service.llm.AIChat_service import AIChatService
+        if not isinstance(ai_chat_service, AIChatService):
+            raise TypeError("Expected AIChatService instance")
+        self.ai_chat_service = ai_chat_service
 
     # LangChain function‑calling entry
     def _run(self, **kwargs) -> str:
@@ -111,10 +120,18 @@ class MarketDataTool(BaseFinanceTool):
             progress=False,
         )
 
+        if raw is None:
+            return MarketDataOutput(
+                price_data={}, latest_prices={}, latest_returns={}, latest_date=None,
+                selected_prices={}, selected_returns={}, selected_date=None,
+                expected_returns={}, volatility={}, covariance_matrix=None, vix=None,
+                summary="yfinance 데이터 다운로드 실패"
+            )
+
         price_data: Dict[str, pd.DataFrame] = {}
         for t in inp.tickers:
             df = raw[t].copy() if isinstance(raw.columns, pd.MultiIndex) else raw.copy()
-            if df.empty:
+            if not isinstance(df, pd.DataFrame) or df.empty:
                 continue
             close_col = _pick_price_col(df)
             df = df.reset_index()                       # Date 인덱스를 컬럼으로
@@ -123,8 +140,8 @@ class MarketDataTool(BaseFinanceTool):
                 df = df.rename(columns={close_col: "Adj Close"})
 
             # 🔑 NaN 처리 개선: 첫 행 Daily Return 0.0, 종가 NaN 행만 제거
-            df = df[["Date", "Adj Close", "Daily Return"]]
-            df["Daily Return"] = df["Daily Return"].fillna(0.0)
+            if "Daily Return" in df.columns:
+                df["Daily Return"] = df["Daily Return"].fillna(0.0)
             df = df.dropna(subset=["Adj Close"])
 
             if not df.empty:
@@ -154,8 +171,14 @@ class MarketDataTool(BaseFinanceTool):
             if row is not None:
                 selected_prices[t]  = float(row["Adj Close"])
                 selected_returns[t] = float(row["Daily Return"])
-                if selected_date_global is None:
-                    selected_date_global = row["Date"].strftime("%Y-%m-%d")
+                date_val = row["Date"]
+                if isinstance(date_val, pd.Index):
+                    date_val = str(date_val.tolist()[0])
+                elif isinstance(date_val, (list, tuple, pd.Series, np.ndarray)):
+                    date_val = str(date_val[0])
+                else:
+                    date_val = str(date_val)
+                selected_date_global = pd.to_datetime(date_val).strftime("%Y-%m-%d")
 
         # ── 요약 문자열 ──────────────────────────────────
         summary_lines = [
@@ -203,33 +226,57 @@ class MarketDataTool(BaseFinanceTool):
     def _covariance_matrix(self, tickers, start, end):
         data = yf.download(tickers, start=start, end=end,
                            group_by="ticker", progress=False, auto_adjust=True)
+        if data is None:
+            return None
         returns = {}
         for t in tickers:
             df = data[t] if isinstance(data.columns, pd.MultiIndex) else data
-            price_col = _pick_price_col(df)
-            returns[t] = df[price_col].pct_change().dropna()
+            if isinstance(df, pd.DataFrame):
+                price_col = _pick_price_col(df)
+                series = pd.Series(df[price_col]) if not isinstance(df[price_col], pd.Series) else df[price_col]
+            else:
+                # df가 Series면 바로 사용
+                price_col = df.name if hasattr(df, "name") else None
+                series = pd.Series(df) if not isinstance(df, pd.Series) else df
+            returns[t] = series.pct_change().dropna()
         return pd.DataFrame(returns).cov()
 
     def _expected_returns(self, tickers, start, end, freq="daily"):
         data = yf.download(tickers, start=start, end=end,
                            group_by="ticker", progress=False, auto_adjust=True)
+        if data is None:
+            return {}
         scale = {"daily": 1, "monthly": 21, "annual": 252}[freq]
         exp = {}
         for t in tickers:
             df = data[t] if isinstance(data.columns, pd.MultiIndex) else data
-            price_col = _pick_price_col(df)
-            exp[t] = df[price_col].pct_change().dropna().mean() * scale
+            if isinstance(df, pd.DataFrame):
+                price_col = _pick_price_col(df)
+                series = pd.Series(df[price_col]) if not isinstance(df[price_col], pd.Series) else df[price_col]
+            else:
+                # df가 Series면 바로 사용
+                price_col = df.name if hasattr(df, "name") else None
+                series = pd.Series(df) if not isinstance(df, pd.Series) else df
+            exp[t] = series.pct_change().dropna().mean() * scale
         return exp
 
     def _volatility(self, tickers, start, end, freq="daily"):
         data = yf.download(tickers, start=start, end=end,
                            group_by="ticker", progress=False, auto_adjust=True)
+        if data is None:
+            return {}
         scale = {"daily": 1, "monthly": 21 ** 0.5, "annual": 252 ** 0.5}[freq]
         vol = {}
         for t in tickers:
             df = data[t] if isinstance(data.columns, pd.MultiIndex) else data
-            price_col = _pick_price_col(df)
-            vol[t] = df[price_col].pct_change().dropna().std() * scale
+            if isinstance(df, pd.DataFrame):
+                price_col = _pick_price_col(df)
+                series = pd.Series(df[price_col]) if not isinstance(df[price_col], pd.Series) else df[price_col]
+            else:
+                # df가 Series면 바로 사용
+                price_col = df.name if hasattr(df, "name") else None
+                series = pd.Series(df) if not isinstance(df, pd.Series) else df
+            vol[t] = series.pct_change().dropna().std() * scale
         return vol
 
     def _latest_vix(self) -> Optional[float]:

@@ -10,7 +10,7 @@ from langchain_openai import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
 from langchain_community.chat_message_histories import RedisChatMessageHistory
 from langchain_core.prompts import ChatPromptTemplate
-from AIChat.Router import run_question           # LangGraph 툴 실행
+from base_server.service.llm.AIChat.Router import run_question           # LangGraph 툴 실행
 
 # ── 환경
 REDIS_URL  = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -114,5 +114,7 @@ async def _full_answer(sid: str, question: str, tool_out):
     )
     answer = (prompt | llm).invoke({}).content
     memory.chat_memory.add_user_message(question)
+    if isinstance(answer, list):
+        answer = "\n".join(str(x) for x in answer)
     memory.chat_memory.add_ai_message(answer)
     return answer

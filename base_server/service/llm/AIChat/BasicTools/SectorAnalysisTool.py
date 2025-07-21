@@ -2,7 +2,7 @@
 import requests
 import os
 from typing import List, Optional, Dict, Any
-from AIChat.BaseFinanceTool import BaseFinanceTool
+from service.llm.AIChat.BaseFinanceTool import BaseFinanceTool
 from pydantic import BaseModel, Field
 
 class SectorAnalysisInput(BaseModel):
@@ -37,13 +37,20 @@ class SectorAnalysisOutput:
 class SectorAnalysisTool(BaseFinanceTool):
     BASE_URL = "https://financialmodelingprep.com/api/v3/stock-screener"
 
+    def __init__(self, ai_chat_service):
+        # 지연 임포트로 순환 참조 방지
+        from service.llm.AIChat_service import AIChatService
+        if not isinstance(ai_chat_service, AIChatService):
+            raise TypeError("Expected AIChatService instance")
+        self.ai_chat_service = ai_chat_service
+
     def get_data(self, **kwargs) -> SectorAnalysisOutput:
         try:
             params = SectorAnalysisInput(**kwargs)
         except Exception as e:
             return SectorAnalysisOutput(agent="error", summary=f"❌ 매개변수 오류: {e}")
 
-        api_key = self.api_key or os.getenv("FMP_API_KEY")
+        api_key = self.ai_chat_service.llm_config.API_Key.FMP_API_KEY
         if not api_key:
             return SectorAnalysisOutput(agent="error", summary="❌ FMP_API_KEY가 설정돼 있지 않습니다.")
 
