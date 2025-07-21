@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic import BaseModel
 from service.db.database_config import DatabaseConfig
 from service.cache.cache_config import CacheConfig
@@ -21,6 +22,7 @@ class ProviderConfig(BaseModel):
     model: str
 
 class AppConfig(BaseModel):
+    templateConfig: TemplateConfig
     databaseConfig: DatabaseConfig
     cacheConfig: CacheConfig
     externalConfig: ExternalConfig
