@@ -12,6 +12,7 @@ from service.lock.lock_service import LockService
 from service.scheduler.scheduler_service import SchedulerService  
 from service.queue.queue_service import QueueService
 from service.core.logger import Logger
+from service.core.service_monitor import service_monitor
 from datetime import datetime
 import time
 import asyncio
@@ -55,6 +56,13 @@ class AdminTemplateImpl(AdminTemplate):
                 service_status = await self._check_services_health()
                 services["services"] = service_status
                 if service_status["status"] != "healthy":
+                    overall_status = "degraded" if overall_status == "healthy" else "unhealthy"
+            
+            # 런타임 모니터링 정보 추가
+            if request.check_type in ["all", "monitoring"]:
+                monitoring_status = await self._get_monitoring_status()
+                services["monitoring"] = monitoring_status
+                if monitoring_status["status"] != "healthy":
                     overall_status = "degraded" if overall_status == "healthy" else "unhealthy"
             
             return HealthCheckResponse(
@@ -310,6 +318,49 @@ class AdminTemplateImpl(AdminTemplate):
         except Exception as e:
             Logger.error(f"Session count query failed: {e}")
             return 0
+    
+    async def _get_monitoring_status(self) -> dict:
+        """런타임 모니터링 상태 조회"""
+        try:
+            # 모니터링 시스템 상태 요약
+            health_summary = service_monitor.get_health_summary()
+            all_services = service_monitor.get_all_service_health()
+            
+            # 개별 서비스 상태
+            service_details = {}
+            for service_name, health in all_services.items():
+                service_details[service_name] = {
+                    "status": health.status.value,
+                    "last_check": health.last_check.isoformat(),
+                    "response_time_ms": health.response_time_ms,
+                    "consecutive_failures": health.consecutive_failures,
+                    "error_message": health.error_message,
+                    "last_success": health.last_success.isoformat() if health.last_success else None
+                }
+            
+            # 전체 상태 결정
+            overall_status = health_summary.get("overall_status", "unknown")
+            
+            return {
+                "status": overall_status,
+                "monitoring_active": health_summary.get("monitoring_active", False),
+                "summary": {
+                    "total_services": health_summary.get("total_services", 0),
+                    "healthy": health_summary.get("healthy", 0),
+                    "degraded": health_summary.get("degraded", 0),
+                    "unhealthy": health_summary.get("unhealthy", 0)
+                },
+                "services": service_details,
+                "last_check": health_summary.get("last_check").isoformat() if health_summary.get("last_check") else None
+            }
+        except Exception as e:
+            return {
+                "status": "unhealthy",
+                "monitoring_active": False,
+                "error": f"Monitoring status error: {str(e)}",
+                "services": {},
+                "summary": {"total_services": 0, "healthy": 0, "degraded": 0, "unhealthy": 0}
+            }
     
     async def on_queue_stats_req(self, client_session: ClientSession, request: QueueStatsRequest) -> QueueStatsResponse:
         """큐 통계 요청 처리"""

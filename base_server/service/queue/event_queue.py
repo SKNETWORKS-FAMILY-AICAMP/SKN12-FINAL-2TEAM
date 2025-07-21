@@ -13,7 +13,6 @@ from abc import ABC, abstractmethod
 
 from service.core.logger import Logger
 from service.cache.redis_cache_client import RedisCacheClient
-from service.lock.distributed_lock import DistributedLockManager
 
 
 class EventType(Enum):
@@ -198,6 +197,26 @@ class RedisCacheEventQueue(IEventQueue):
             Logger.error(f"이벤트 구독 해제 실패: {subscription_id} - {e}")
             return False
     
+    async def unsubscribe_all(self):
+        """모든 구독 해제"""
+        try:
+            # 모든 구독을 비활성화
+            for subscription in self.subscriptions.values():
+                subscription.active = False
+            
+            # 구독 정보 모두 제거
+            subscription_ids = list(self.subscriptions.keys())
+            for subscription_id in subscription_ids:
+                await self.unsubscribe(subscription_id)
+            
+            # 활성 구독자 목록 초기화
+            self.active_subscribers.clear()
+            
+            Logger.info("모든 구독 해제 완료")
+            
+        except Exception as e:
+            Logger.error(f"모든 구독 해제 중 오류: {e}")
+    
     async def _process_subscriber_events(self, subscription: Subscription):
         """구독자별 이벤트 처리"""
         subscriber_queue_key = self.subscriber_key_pattern.format(
@@ -310,338 +329,6 @@ class RedisCacheEventQueue(IEventQueue):
             return {}
 
 
-class RedisEventQueue(IEventQueue):
-    """Redis 기반 이벤트큐 구현 (Pub/Sub + Stream)"""
-    
-    def __init__(self, redis_client: RedisCacheClient, lock_manager: DistributedLockManager):
-        self.redis_client = redis_client
-        self.lock_manager = lock_manager
-        
-        # Redis 키 패턴
-        self.event_stream_pattern = "eq:stream:{event_type}"
-        self.subscription_key = "eq:subscriptions"
-        self.subscriber_key_pattern = "eq:subscriber:{subscriber_id}"
-        self.event_history_pattern = "eq:history:{event_type}"
-        
-        # 구독자 정보
-        self.subscriptions: Dict[str, Subscription] = {}
-        self.active_subscribers: Set[str] = set()
-        
-        # 이벤트 처리 통계
-        self.event_stats = {
-            "published": 0,
-            "delivered": 0,
-            "failed": 0
-        }
-    
-    async def publish(self, event: Event) -> bool:
-        """이벤트 발행 (Redis Stream + Pub/Sub)"""
-        try:
-            event.id = event.id or str(uuid.uuid4())
-            event.timestamp = event.timestamp or datetime.now()
-            
-            # 이벤트 데이터 직렬화
-            event_data = {
-                "id": event.id,
-                "event_type": event.event_type.value,
-                "source": event.source,
-                "data": json.dumps(event.data),
-                "timestamp": event.timestamp.isoformat(),
-                "correlation_id": event.correlation_id or "",
-                "version": event.version,
-                "metadata": json.dumps(event.metadata or {})
-            }
-            
-            # 1. Redis Stream에 이벤트 저장 (이력 관리) - 추후 구현
-            # stream_key = self.event_stream_pattern.format(event_type=event.event_type.value)
-            # await self.redis_client.stream_add(stream_key, event_data)
-            
-            # 2. 이벤트 히스토리 저장 (최근 1000개만 유지)
-            history_key = self.event_history_pattern.format(event_type=event.event_type.value)
-            await self.redis_client.list_push_left(history_key, json.dumps(event_data))
-            await self.redis_client.list_trim(history_key, 0, 999)  # 최근 1000개만 유지
-            
-            # 3. 실시간 구독자들에게 Pub/Sub으로 즉시 전달 - 추후 구현
-            # channel = f"events:{event.event_type.value}"
-            # await self.redis_client.publish(channel, json.dumps(event_data))
-            
-            # 4. 구독자별 개별 큐에도 전달 (보장된 전달)
-            await self._deliver_to_subscribers(event)
-            
-            self.event_stats["published"] += 1
-            Logger.info(f"이벤트 발행 완료: {event.id} ({event.event_type.value})")
-            
-            return True
-            
-        except Exception as e:
-            Logger.error(f"이벤트 발행 실패: {event.id} - {e}")
-            self.event_stats["failed"] += 1
-            return False
-    
-    async def subscribe(self, subscription: Subscription) -> bool:
-        """이벤트 구독 (Redis Stream Consumer Group 활용)"""
-        try:
-            subscription.id = subscription.id or str(uuid.uuid4())
-            
-            # 구독 정보 저장
-            self.subscriptions[subscription.id] = subscription
-            self.active_subscribers.add(subscription.subscriber_id)
-            
-            # Redis에 구독 정보 저장
-            subscription_data = {
-                "id": subscription.id,
-                "subscriber_id": subscription.subscriber_id,
-                "event_types": json.dumps([et.value for et in subscription.event_types]),
-                "filter_conditions": json.dumps(subscription.filter_conditions or {}),
-                "active": str(subscription.active),
-                "created_at": datetime.now().isoformat()
-            }
-            
-            await self.redis_client.set_hash_field(
-                self.subscription_key,
-                subscription.id,
-                json.dumps(subscription_data)
-            )
-            
-            # 각 이벤트 타입별로 Consumer Group 생성
-            for event_type in subscription.event_types:
-                stream_key = self.event_stream_pattern.format(event_type=event_type.value)
-                consumer_group = f"group:{subscription.subscriber_id}"
-                
-                try:
-                    # Consumer Group 생성 (이미 존재하면 무시)
-                    # Redis Stream의 경우 별도 구현이 필요하므로 우선 패스
-                    pass
-                except:
-                    # Group이 이미 존재하는 경우 무시
-                    pass
-            
-            # 구독자별 전용 큐 생성
-            subscriber_queue_key = self.subscriber_key_pattern.format(
-                subscriber_id=subscription.subscriber_id
-            )
-            
-            # 구독자 처리 태스크 시작
-            asyncio.create_task(self._process_subscriber_events(subscription))
-            
-            Logger.info(f"이벤트 구독 등록: {subscription.subscriber_id} ({len(subscription.event_types)}개 타입)")
-            return True
-            
-        except Exception as e:
-            Logger.error(f"이벤트 구독 실패: {subscription.subscriber_id} - {e}")
-            return False
-    
-    async def unsubscribe(self, subscription_id: str) -> bool:
-        """구독 해제"""
-        try:
-            if subscription_id not in self.subscriptions:
-                Logger.warn(f"구독을 찾을 수 없음: {subscription_id}")
-                return False
-            
-            subscription = self.subscriptions[subscription_id]
-            
-            # 구독 정보 제거
-            del self.subscriptions[subscription_id]
-            if subscription.subscriber_id in self.active_subscribers:
-                self.active_subscribers.remove(subscription.subscriber_id)
-            
-            # Redis에서 구독 정보 제거
-            await self.redis_client.hash_delete(self.subscription_key, subscription_id)
-            
-            # 구독자 큐 정리
-            subscriber_queue_key = self.subscriber_key_pattern.format(
-                subscriber_id=subscription.subscriber_id
-            )
-            await self.redis_client.delete_key(subscriber_queue_key)
-            
-            Logger.info(f"이벤트 구독 해제: {subscription.subscriber_id}")
-            return True
-            
-        except Exception as e:
-            Logger.error(f"구독 해제 실패: {subscription_id} - {e}")
-            return False
-    
-    async def _deliver_to_subscribers(self, event: Event):
-        """구독자들에게 이벤트 전달"""
-        try:
-            for subscription in self.subscriptions.values():
-                if not subscription.active:
-                    continue
-                
-                # 이벤트 타입 필터링
-                if event.event_type not in subscription.event_types:
-                    continue
-                
-                # 조건 필터링
-                if subscription.filter_conditions:
-                    if not self._match_filter_conditions(event, subscription.filter_conditions):
-                        continue
-                
-                # 구독자 큐에 이벤트 추가
-                subscriber_queue_key = self.subscriber_key_pattern.format(
-                    subscriber_id=subscription.subscriber_id
-                )
-                
-                event_payload = {
-                    "subscription_id": subscription.id,
-                    "event": {
-                        "id": event.id,
-                        "event_type": event.event_type.value,
-                        "source": event.source,
-                        "data": event.data,
-                        "timestamp": event.timestamp.isoformat(),
-                        "correlation_id": event.correlation_id,
-                        "version": event.version,
-                        "metadata": event.metadata
-                    }
-                }
-                
-                await self.redis_client.list_push_right(
-                    subscriber_queue_key,
-                    json.dumps(event_payload)
-                )
-                
-                # 큐 크기 제한 (최대 10000개)
-                await self.redis_client.list_trim(subscriber_queue_key, -10000, -1)
-                
-        except Exception as e:
-            Logger.error(f"구독자 이벤트 전달 실패: {e}")
-    
-    async def _process_subscriber_events(self, subscription: Subscription):
-        """구독자별 이벤트 처리"""
-        subscriber_queue_key = self.subscriber_key_pattern.format(
-            subscriber_id=subscription.subscriber_id
-        )
-        
-        while subscription.active and subscription.id in self.subscriptions:
-            try:
-                # Redis 클라이언트 연결 확인
-                if not hasattr(self.redis_client, '_client') or self.redis_client._client is None:
-                    Logger.warn(f"Redis client connection lost for subscriber {subscription.subscriber_id}, reconnecting...")
-                    await asyncio.sleep(5)
-                    continue
-                
-                # 큐에서 이벤트 가져오기 (blocking pop은 추후 구현)
-                event_data = await self.redis_client.list_pop_left(subscriber_queue_key)
-                
-                if not event_data:
-                    # 메시지가 없으면 짧은 시간 대기
-                    await asyncio.sleep(1)
-                    continue
-                
-                event_payload = json.loads(event_data)
-                event_info = event_payload["event"]
-                
-                # Event 객체 재구성
-                event = Event(
-                    id=event_info["id"],
-                    event_type=EventType(event_info["event_type"]),
-                    source=event_info["source"],
-                    data=event_info["data"],
-                    timestamp=datetime.fromisoformat(event_info["timestamp"]),
-                    correlation_id=event_info.get("correlation_id"),
-                    version=event_info.get("version", "1.0"),
-                    metadata=event_info.get("metadata")
-                )
-                
-                # 콜백 실행
-                try:
-                    success = False
-                    if asyncio.iscoroutinefunction(subscription.callback):
-                        success = await subscription.callback(event)
-                    else:
-                        success = subscription.callback(event)
-                    
-                    if success:
-                        self.event_stats["delivered"] += 1
-                        Logger.debug(f"이벤트 처리 완료: {event.id} -> {subscription.subscriber_id}")
-                    else:
-                        Logger.warn(f"이벤트 처리 실패: {event.id} -> {subscription.subscriber_id}")
-                        
-                except Exception as e:
-                    Logger.error(f"이벤트 콜백 실행 실패: {event.id} - {e}")
-                    
-            except Exception as e:
-                Logger.error(f"구독자 이벤트 처리 오류: {subscription.subscriber_id} - {e}")
-                await asyncio.sleep(1)
-    
-    def _match_filter_conditions(self, event: Event, conditions: Dict[str, Any]) -> bool:
-        """필터 조건 매칭"""
-        try:
-            for key, expected_value in conditions.items():
-                if key == "source":
-                    if event.source != expected_value:
-                        return False
-                elif key == "data":
-                    # 데이터 필드별 조건 확인
-                    for data_key, data_value in expected_value.items():
-                        if event.data.get(data_key) != data_value:
-                            return False
-                elif key == "correlation_id":
-                    if event.correlation_id != expected_value:
-                        return False
-            
-            return True
-            
-        except Exception as e:
-            Logger.error(f"필터 조건 매칭 실패: {e}")
-            return False
-    
-    async def get_event_history(self, event_type: EventType, limit: int = 100) -> List[Event]:
-        """이벤트 히스토리 조회"""
-        try:
-            history_key = self.event_history_pattern.format(event_type=event_type.value)
-            event_data_list = await self.redis_client.list_range(history_key, 0, limit - 1)
-            
-            events = []
-            for event_data_str in event_data_list:
-                event_data = json.loads(event_data_str)
-                event = Event(
-                    id=event_data["id"],
-                    event_type=EventType(event_data["event_type"]),
-                    source=event_data["source"],
-                    data=json.loads(event_data["data"]),
-                    timestamp=datetime.fromisoformat(event_data["timestamp"]),
-                    correlation_id=event_data.get("correlation_id"),
-                    version=event_data.get("version", "1.0"),
-                    metadata=json.loads(event_data.get("metadata", "{}"))
-                )
-                events.append(event)
-            
-            return events
-            
-        except Exception as e:
-            Logger.error(f"이벤트 히스토리 조회 실패: {event_type.value} - {e}")
-            return []
-    
-    async def get_subscription_stats(self) -> Dict[str, Any]:
-        """구독 통계 조회"""
-        try:
-            stats = {
-                "total_subscriptions": len(self.subscriptions),
-                "active_subscribers": len(self.active_subscribers),
-                "event_stats": self.event_stats.copy(),
-                "subscribers": {}
-            }
-            
-            for subscription in self.subscriptions.values():
-                subscriber_queue_key = self.subscriber_key_pattern.format(
-                    subscriber_id=subscription.subscriber_id
-                )
-                queue_length = await self.redis_client.list_length(subscriber_queue_key)
-                
-                stats["subscribers"][subscription.subscriber_id] = {
-                    "event_types": [et.value for et in subscription.event_types],
-                    "pending_events": queue_length,
-                    "active": subscription.active
-                }
-            
-            return stats
-            
-        except Exception as e:
-            Logger.error(f"구독 통계 조회 실패: {e}")
-            return {}
-
 
 class EventQueueManager:
     """이벤트큐 매니저"""
@@ -744,6 +431,26 @@ class EventQueueManager:
     async def get_stats(self) -> Dict[str, Any]:
         """통계 조회"""
         return await self.event_queue.get_subscription_stats()
+    
+    async def stop_all_subscribers(self):
+        """모든 구독자 중지"""
+        try:
+            # 모든 구독을 중지
+            await self.event_queue.unsubscribe_all()
+            Logger.info("모든 이벤트 구독자 중지 완료")
+            
+        except Exception as e:
+            Logger.error(f"이벤트 구독자 중지 중 오류: {e}")
+    
+    async def shutdown(self):
+        """EventQueueManager 종료"""
+        try:
+            Logger.info("EventQueueManager 정리 시작")
+            await self.stop_all_subscribers()
+            Logger.info("EventQueueManager 정리 완료")
+            
+        except Exception as e:
+            Logger.error(f"EventQueueManager 종료 중 오류: {e}")
 
 
 # 전역 이벤트큐 매니저 인스턴스

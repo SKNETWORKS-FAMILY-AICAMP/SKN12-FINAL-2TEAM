@@ -39,12 +39,21 @@ class StorageService:
     
     @classmethod
     def get_client(cls):
-        """Storage 클라이언트 가져오기"""
+        """Storage 클라이언트 가져오기 (동기)"""
         if not cls._initialized:
             raise RuntimeError("StorageService not initialized")
         if not cls._client_pool:
             raise RuntimeError("StorageService client pool not available")
         return cls._client_pool.new()
+    
+    @classmethod
+    async def get_client_async(cls):
+        """Storage 클라이언트 가져오기 (비동기) - Pool 자동 초기화"""
+        if not cls._initialized:
+            raise RuntimeError("StorageService not initialized")
+        if not cls._client_pool:
+            raise RuntimeError("StorageService client pool not available")
+        return await cls._client_pool.get_client()
     
     # === 파일 업로드 ===
     @classmethod

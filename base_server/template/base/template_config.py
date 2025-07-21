@@ -7,11 +7,13 @@ from service.search.search_config import SearchConfig
 from service.vectordb.vectordb_config import VectorDbConfig
 from service.llm.llm_config import LlmConfig
 from service.net.net_config import NetConfig
+from service.websocket.websocket_config import WebSocketConfig
 
 class TemplateConfig(BaseModel):
     appId: str
     env: str
     localPath: str = ""
+    skipAwsTests: bool = False  # AWS 서비스 테스트 스킵 여부
 
 class ProviderConfig(BaseModel):
     provider: str
@@ -26,4 +28,5 @@ class AppConfig(BaseModel):
     searchConfig: SearchConfig
     vectordbConfig: VectorDbConfig
     llmConfig: LlmConfig
-    templateConfig: TemplateConfig
+    netConfig: NetConfig
+    websocketConfig: WebSocketConfig

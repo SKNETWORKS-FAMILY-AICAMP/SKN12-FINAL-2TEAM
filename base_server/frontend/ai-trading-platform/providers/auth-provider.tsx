@@ -3,7 +3,6 @@
 import type React from "react"
 import { createContext, useContext, useEffect, useState } from "react"
 import { authManager, type AuthUser, type AuthSession } from "@/lib/auth"
-import { authApi } from "@/lib/api/auth"
 
 interface AuthContextType {
   user: AuthUser | null
@@ -41,23 +40,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string) => {
     setIsLoading(true)
     try {
-      const response = await authApi.login(email, password)
-      const { user: userData, token } = response.data
-
-      const session: AuthSession = {
-        user: userData,
-        token,
-        expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
+      // 로그인은 이미 app/auth/login/page.tsx에서 처리되므로
+      // 여기서는 세션만 확인하고 사용자 정보를 설정
+      const session = authManager.getSession()
+      if (session) {
+        setUser(session.user)
+        // 임시: 로그인 성공 시 무조건 온보딩 페이지로 이동
+        if (typeof window !== "undefined") {
+          window.location.href = "/onboarding"
+        }
+      } else {
+        throw new Error("Login failed")
       }
-
-      authManager.setSession(session)
-      setUser(userData)
-
-      // 임시: 로그인 성공 시 무조건 온보딩 페이지로 이동
-      if (typeof window !== "undefined") {
-        window.location.href = "/onboarding"
-      }
-      // TODO: 나중에 userData.login_count === 0 일 때만 /onboarding, 아니면 /dashboard로 분기
     } catch (error) {
       throw new Error("Login failed")
     } finally {
@@ -67,9 +61,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
-      await authApi.logout()
+      // 로그아웃은 세션만 클리어하면 됨
+      // API 호출은 필요하지 않음
     } catch (error) {
-      console.error("Logout API call failed:", error)
+      console.error("Logout failed:", error)
     } finally {
       authManager.clearSession()
       setUser(null)

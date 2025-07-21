@@ -1,39 +1,59 @@
 "use client"
 
+import { useState, useCallback, useEffect } from "react"
+import { authManager } from "@/lib/auth"
 import { useAppDispatch, useAppSelector } from "@/lib/store/hooks"
-import { sendMessage, setSelectedTool, createConversation } from "@/lib/store/slices/chat-slice"
+import { sendMessage as sendMessageAction, createConversation, setCurrentConversation } from "@/lib/store/slices/chat-slice"
 
 export function useChat() {
   const dispatch = useAppDispatch()
-  const { conversations, currentConversationId, availableTools, selectedTool, isLoading, isStreaming, error } =
-    useAppSelector((state) => state.chat)
-
-  const currentConversation = conversations.find((c) => c.id === currentConversationId)
+  const { conversations, currentConversationId, availableTools, isLoading, error } = useAppSelector((state) => state.chat)
+  const [selectedPersona, setSelectedPersona] = useState<string | null>(availableTools[0]?.id || null)
+  
+  const currentConversation = conversations.find(c => c.id === currentConversationId)
   const messages = currentConversation?.messages || []
 
-  const sendChatMessage = async (content: string, tool?: string) => {
-    await dispatch(sendMessage({ content, tool }))
-  }
+  // Fetch persona list on mount - 현재는 Redux store에서 관리하므로 불필요
+  useEffect(() => {
+    // Redux store에서 이미 availableTools로 관리됨
+  }, [])
 
-  const selectTool = (toolId: string | null) => {
-    dispatch(setSelectedTool(toolId))
-  }
+  // Fetch messages when currentConversationId changes - Redux store에서 관리됨
+  useEffect(() => {
+    // Redux store에서 이미 메시지가 관리되므로 불필요
+  }, [currentConversationId])
 
-  const createNewConversation = async (title: string) => {
-    await dispatch(createConversation(title))
-  }
+  // Create a new chat room (with persona)
+  const createRoom = useCallback(async (roomName: string, aiPersona?: string) => {
+    try {
+      const persona = aiPersona || selectedPersona || availableTools[0]?.id || "GPT4O"
+      await dispatch(createConversation(roomName))
+    } catch (e: any) {
+      console.error("채팅방 생성 실패:", e)
+    }
+  }, [dispatch, selectedPersona, availableTools])
+
+  // Send a message in the current room
+  const sendMessage = useCallback(async (message: string) => {
+    if (!currentConversationId) return
+    try {
+      await dispatch(sendMessageAction({ content: message }))
+    } catch (e: any) {
+      console.error("메시지 전송 실패:", e)
+    }
+  }, [currentConversationId, dispatch])
 
   return {
-    conversations,
-    currentConversation,
-    messages,
-    availableTools,
-    selectedTool,
+    rooms: conversations.map(c => ({ room_id: c.id, room_name: c.title, ai_persona: selectedPersona || "GPT4O" })),
+    currentRoomId: currentConversationId,
+    setCurrentRoomId: (id: string) => dispatch(setCurrentConversation(id)),
+    messages: messages.map(m => ({ sender: m.role, message: m.content, sent_at: new Date(m.timestamp).toISOString() })),
     isLoading,
-    isStreaming,
     error,
-    sendMessage: sendChatMessage,
-    selectTool,
-    createConversation: createNewConversation,
+    createRoom,
+    sendMessage,
+    personas: availableTools.map(t => ({ persona_id: t.id, name: t.name, description: t.description, avatar_url: "" })),
+    selectedPersona,
+    setSelectedPersona,
   }
 }

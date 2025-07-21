@@ -1,75 +1,50 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import axios from "axios";
+import { profileService } from "@/lib/api/profile";
 
-const steps = [
+const steps: Array<{
+  key: string;
+  question: string;
+  options?: { value: string; label: string; desc: string }[];
+  type: "select" | "input";
+}> = [
   {
-    question: "투자 경험이 어느 정도인가요?",
+    key: "investment_experience",
+    question: "당신의 투자 경험은 어느 정도인가요?",
     options: [
-      { value: "BEGINNER", label: "초보자", desc: "투자를 처음 시작합니다." },
-      { value: "INTERMEDIATE", label: "중급자", desc: "몇 년간 투자 경험이 있습니다." },
-      { value: "EXPERT", label: "고급자", desc: "전문적인 투자 지식을 보유하고 있습니다." },
+      { value: "초급", label: "초급", desc: "투자를 처음 시작합니다." },
+      { value: "중급", label: "중급", desc: "몇 년간 투자 경험이 있습니다." },
+      { value: "고급", label: "고급", desc: "전문적인 투자 지식을 보유하고 있습니다." },
     ],
-    key: "knowledge"
+    type: "select",
   },
   {
-    question: "투자 스타일을 선택해 주세요.",
+    key: "risk_tolerance",
+    question: "당신의 투자 성향은 무엇인가요?",
     options: [
-      { value: "AGGRESSIVE", label: "공격적", desc: "높은 수익을 추구하며 위험을 감수합니다." },
-      { value: "MODERATE", label: "중립적", desc: "수익과 위험의 균형을 추구합니다." },
-      { value: "CONSERVATIVE", label: "보수적", desc: "안정성과 자산 보존을 중시합니다." },
+      { value: "보수적", label: "보수적", desc: "안정성과 자산 보존을 중시합니다." },
+      { value: "보통", label: "보통", desc: "수익과 위험의 균형을 추구합니다." },
+      { value: "공격적", label: "공격적", desc: "높은 수익을 추구하며 위험을 감수합니다." },
     ],
-    key: "style"
+    type: "select",
   },
   {
-    question: "투자 목표를 선택해 주세요.",
+    key: "investment_goal",
+    question: "당신의 투자 목표는 무엇인가요?",
     options: [
-      { value: "GROWTH", label: "성장", desc: "자산의 장기적 성장을 목표로 합니다." },
-      { value: "INCOME", label: "수익", desc: "지속적인 현금 흐름을 원합니다." },
-      { value: "PRESERVATION", label: "자산보존", desc: "자산의 보존과 안전을 중시합니다." },
+      { value: "장기투자", label: "장기투자", desc: "자산의 장기적 성장을 목표로 합니다." },
+      { value: "단기수익", label: "단기수익", desc: "단기적인 수익을 추구합니다." },
+      { value: "안정성", label: "안정성", desc: "자산의 보존과 안전을 중시합니다." },
     ],
-    key: "goal"
+    type: "select",
   },
   {
-    question: "주식 투자 경험 기간을 선택해 주세요.",
-    options: [
-      { value: "NONE", label: "없음", desc: "투자 경험이 없습니다." },
-      { value: "1YEAR", label: "1년 미만", desc: "1년 미만의 경험이 있습니다." },
-      { value: "1-3YEAR", label: "1~3년", desc: "1~3년의 경험이 있습니다." },
-      { value: "3YEAR", label: "3년 이상", desc: "3년 이상의 경험이 있습니다." },
-    ],
-    key: "experience"
-  },
-  {
-    question: "이름을 선택해 주세요.",
-    options: [
-      { value: "홍길동", label: "홍길동", desc: "예시 이름 1" },
-      { value: "김철수", label: "김철수", desc: "예시 이름 2" },
-      { value: "이영희", label: "이영희", desc: "예시 이름 3" },
-      { value: "기타", label: "기타", desc: "기타 이름" },
-    ],
-    key: "name"
-  },
-  {
-    question: "나이를 선택해 주세요.",
-    options: [
-      { value: "10대", label: "10대", desc: "10~19세" },
-      { value: "20대", label: "20대", desc: "20~29세" },
-      { value: "30대", label: "30대", desc: "30~39세" },
-      { value: "40대", label: "40대", desc: "40~49세" },
-      { value: "50대 이상", label: "50대 이상", desc: "50세 이상" },
-    ],
-    key: "age"
-  },
-  {
-    question: "성별을 선택해 주세요.",
-    options: [
-      { value: "M", label: "남성", desc: "" },
-      { value: "F", label: "여성", desc: "" },
-      { value: "OTHER", label: "기타", desc: "" },
-    ],
-    key: "gender"
+    key: "monthly_budget",
+    question: "월 투자 예산을 입력해 주세요 (숫자만)",
+    type: "input",
   },
 ];
 
@@ -77,19 +52,30 @@ export default function OnboardingPage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({
-    knowledge: "",
-    style: "",
-    goal: "",
-    experience: "",
-    name: "",
-    age: "",
-    gender: "",
+    investment_experience: "",
+    risk_tolerance: "",
+    investment_goal: "",
+    monthly_budget: "",
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    // 토큰 확인만 하고 로그는 출력하지 않음
+    if (typeof window !== "undefined") {
+      const accessToken = localStorage.getItem("accessToken");
+      if (!accessToken) {
+        window.location.href = "/auth/login";
+      }
+    }
+  }, []);
+
   const handleOption = (key: string, value: string) => {
-    setAnswers({ ...answers, [key]: value });
+    setAnswers((prev) => ({ ...prev, [key]: value }));
+  };
+  const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.replace(/[^0-9.]/g, "");
+    setAnswers((prev) => ({ ...prev, monthly_budget: value }));
   };
   const handleNext = () => {
     if (step < steps.length - 1) setStep(step + 1);
@@ -102,18 +88,62 @@ export default function OnboardingPage() {
     setIsLoading(true);
     setError("");
     try {
-      // TODO: 실제 API 연동
-      setTimeout(() => {
-        router.push("/dashboard");
-      }, 800);
-    } catch (err) {
-      setError("제출에 실패했습니다. 다시 시도해 주세요.");
+      const experienceMap: Record<string, string> = {
+        "초급": "BEGINNER",
+        "중급": "INTERMEDIATE",
+        "고급": "EXPERT",
+      };
+      const riskMap: Record<string, string> = {
+        "보수적": "CONSERVATIVE",
+        "보통": "MODERATE",
+        "공격적": "AGGRESSIVE",
+      };
+      const goalMap: Record<string, string> = {
+        "장기투자": "GROWTH",
+        "단기수익": "INCOME",
+        "안정성": "PRESERVATION",
+      };
+      const payload = {
+        investment_experience: experienceMap[answers.investment_experience],
+        risk_tolerance: riskMap[answers.risk_tolerance],
+        investment_goal: goalMap[answers.investment_goal],
+        monthly_budget: parseFloat(answers.monthly_budget),
+      };
+      
+      // 명시적 타입 지정
+      const res: any = await profileService.setupProfile(payload);
+      
+      // 응답이 문자열인 경우 JSON 파싱
+      let parsedRes = res;
+      if (typeof res === 'string') {
+        try {
+          parsedRes = JSON.parse(res);
+        } catch (parseError) {
+          console.error("[온보딩] JSON 파싱 에러:", parseError);
+        }
+      }
+      
+      // 응답 구조에 따라 profile 위치를 체크
+      const profile = parsedRes?.profile || parsedRes?.data?.profile;
+      const errorCode = parsedRes?.errorCode;
+      const message = parsedRes?.message;
+      
+      // 성공 조건: errorCode가 0이고 profile이 존재하거나, profile이 존재하는 경우
+      if (errorCode === 0 || profile) {
+        // 강제로 리다이렉트
+        window.location.href = "/dashboard";
+      } else {
+        const errorMessage = message || parsedRes?.data?.message || "프로필 설정에 실패했습니다.";
+        setError(errorMessage);
+      }
+    } catch (err: any) {
+      const errorMessage = err?.response?.data?.message || "제출에 실패했습니다. 다시 시도해 주세요.";
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // 진행률 계산
   const progress = Math.round(((step + 1) / steps.length) * 100);
 
   return (
@@ -136,7 +166,7 @@ export default function OnboardingPage() {
       <div
         style={{
           width: "100%",
-          maxWidth: 480,
+          maxWidth: 420,
           background:
             "linear-gradient(135deg, rgba(102, 126, 234, 0.08) 0%, rgba(118, 75, 162, 0.08) 100%)," +
             "linear-gradient(45deg, rgba(255, 255, 255, 0.02) 0%, transparent 50%)",
@@ -160,11 +190,9 @@ export default function OnboardingPage() {
           </div>
         </div>
         <form onSubmit={handleSubmit}>
-          {/* 질문 */}
           <h2 style={{ fontSize: 22, fontWeight: 700, color: "#fff", marginBottom: 24, textAlign: "center" }}>{steps[step].question}</h2>
-          {/* 객관식 선택지 */}
           <div style={{ marginBottom: 32 }}>
-            {steps[step].options.map((opt: any) => (
+            {steps[step].type === "select" && steps[step].options && steps[step].options.map((opt) => (
               <button
                 type="button"
                 key={opt.value}
@@ -198,9 +226,32 @@ export default function OnboardingPage() {
                 )}
               </button>
             ))}
+            {steps[step].type === "input" && (
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={answers.monthly_budget}
+                onChange={handleInput}
+                placeholder="예: 1000000"
+                style={{
+                  width: "100%",
+                  padding: "16px 18px",
+                  borderRadius: 10,
+                  background: "rgba(30,35,50,0.95)",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  color: "#fff",
+                  fontSize: 16,
+                  marginBottom: 8,
+                  outline: "none",
+                  boxShadow: "none",
+                  transition: "border 0.2s",
+                }}
+                required
+              />
+            )}
           </div>
           {error && <div style={{ color: "#f87171", fontSize: 14, marginBottom: 8 }}>{error}</div>}
-          {/* 버튼 */}
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: 32 }}>
             <button
               type="button"
@@ -224,19 +275,31 @@ export default function OnboardingPage() {
               <button
                 type="button"
                 onClick={handleNext}
-                disabled={!answers[steps[step].key]}
+                disabled={steps[step].type === "input" ? !answers.monthly_budget : !answers[steps[step].key]}
                 style={{
                   padding: "14px 36px",
                   borderRadius: 8,
                   fontWeight: 600,
                   fontSize: 15,
-                  background: !answers[steps[step].key]
-                    ? "rgba(255,255,255,0.05)"
-                    : "linear-gradient(90deg, #667eea 0%, #764ba2 100%)",
-                  color: !answers[steps[step].key] ? "#888" : "#fff",
+                  background:
+                    steps[step].type === "input"
+                      ? (!answers.monthly_budget
+                          ? "rgba(255,255,255,0.05)"
+                          : "linear-gradient(90deg, #667eea 0%, #764ba2 100%)")
+                      : "linear-gradient(90deg, #667eea 0%, #764ba2 100%)",
+                  color:
+                    steps[step].type === "input"
+                      ? (!answers.monthly_budget ? "#888" : "#fff")
+                      : "#fff",
                   border: "none",
-                  cursor: !answers[steps[step].key] ? "not-allowed" : "pointer",
-                  boxShadow: !answers[steps[step].key] ? "none" : "0 2px 12px #667eea33",
+                  cursor:
+                    steps[step].type === "input"
+                      ? (!answers.monthly_budget ? "not-allowed" : "pointer")
+                      : "pointer",
+                  boxShadow:
+                    steps[step].type === "input"
+                      ? (!answers.monthly_budget ? "none" : "0 2px 12px #667eea33")
+                      : "0 2px 12px #667eea33",
                   transition: "all 0.2s",
                 }}
               >
@@ -245,21 +308,27 @@ export default function OnboardingPage() {
             ) : (
               <button
                 type="submit"
-                disabled={isLoading || !answers.name || !answers.age || !answers.gender}
+                disabled={isLoading || !answers.investment_experience || !answers.risk_tolerance || !answers.investment_goal || !answers.monthly_budget}
                 style={{
                   padding: "14px 36px",
                   borderRadius: 8,
                   fontWeight: 600,
                   fontSize: 15,
-                  background: isLoading || !answers.name || !answers.age || !answers.gender
-                    ? "rgba(255,255,255,0.05)"
-                    : "linear-gradient(90deg, #667eea 0%, #764ba2 100%)",
-                  color: isLoading || !answers.name || !answers.age || !answers.gender ? "#888" : "#fff",
+                  background: (
+                    isLoading || !answers.investment_experience || !answers.risk_tolerance || !answers.investment_goal || !answers.monthly_budget
+                  ) ? "rgba(255,255,255,0.05)" : "linear-gradient(90deg, #667eea 0%, #764ba2 100%)",
+                  color: (
+                    isLoading || !answers.investment_experience || !answers.risk_tolerance || !answers.investment_goal || !answers.monthly_budget
+                  ) ? "#888" : "#fff",
                   border: "none",
-                  cursor: isLoading || !answers.name || !answers.age || !answers.gender ? "not-allowed" : "pointer",
-                  boxShadow: isLoading || !answers.name || !answers.age || !answers.gender ? "none" : "0 2px 12px #667eea33",
+                  cursor: (
+                    isLoading || !answers.investment_experience || !answers.risk_tolerance || !answers.investment_goal || !answers.monthly_budget
+                  ) ? "not-allowed" : "pointer",
+                  boxShadow: (
+                    isLoading || !answers.investment_experience || !answers.risk_tolerance || !answers.investment_goal || !answers.monthly_budget
+                  ) ? "none" : "0 2px 12px #667eea33",
                   transition: "all 0.2s",
-                }}
+                } as React.CSSProperties}
               >
                 {isLoading ? "제출 중..." : "설문 완료"}
               </button>

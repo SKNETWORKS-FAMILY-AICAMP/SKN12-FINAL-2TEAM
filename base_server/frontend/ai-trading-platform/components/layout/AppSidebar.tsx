@@ -1,4 +1,6 @@
 import React from "react";
+import { useAuth } from "@/hooks/use-auth";
+import { useRouter } from "next/navigation";
 
 interface AppSidebarProps {
   open: boolean;
@@ -15,6 +17,14 @@ const menu = [
 ];
 
 export function AppSidebar({ open, onClose, onNavigate }: AppSidebarProps) {
+  const { logout } = useAuth();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    await logout();
+    router.push("/");
+  };
+
   return (
     <>
       {/* Overlay */}
@@ -48,6 +58,12 @@ export function AppSidebar({ open, onClose, onNavigate }: AppSidebarProps) {
             onClick={onClose}
           >
             닫기
+          </button>
+          <button
+            className="text-red-400 hover:text-red-600 text-sm mt-2"
+            onClick={handleLogout}
+          >
+            로그아웃
           </button>
         </div>
       </aside>

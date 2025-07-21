@@ -1,5 +1,4 @@
 import { createSlice, createAsyncThunk, type PayloadAction } from "@reduxjs/toolkit"
-import { authApi } from "@/lib/api/auth"
 
 interface User {
   id: string
@@ -31,18 +30,26 @@ const initialState: AuthState = {
 export const loginAsync = createAsyncThunk(
   "auth/login",
   async ({ email, password }: { email: string; password: string }) => {
-    const response = await authApi.login(email, password)
-    return response.data
+    // 로그인은 이미 app/auth/login/page.tsx에서 처리됨
+    // 여기서는 더미 데이터 반환
+    return {
+      user: { id: "1", email, name: "User", role: "user", preferences: { theme: "dark", language: "ko", notifications: true } },
+      token: "dummy-token"
+    }
   },
 )
 
 export const logoutAsync = createAsyncThunk("auth/logout", async () => {
-  await authApi.logout()
+  // 로그아웃은 세션 클리어만 수행
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("accessToken")
+    localStorage.removeItem("refreshToken")
+  }
 })
 
 export const refreshTokenAsync = createAsyncThunk("auth/refreshToken", async () => {
-  const response = await authApi.refreshToken()
-  return response.data
+  // 토큰 갱신은 현재 구현되지 않음
+  throw new Error("Token refresh not implemented")
 })
 
 export const authSlice = createSlice({
