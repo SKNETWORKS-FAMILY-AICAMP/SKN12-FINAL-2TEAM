@@ -236,7 +236,13 @@ export default function ChatPage() {
             {/* 채팅 메시지 영역: 항상 아래 정렬 */}
             <div className="flex-1 flex flex-col justify-end gap-3 p-6 max-h-[60vh] min-h-[200px] overflow-y-auto bg-transparent scrollbar-hide">
               {messages.map((msg) => (
-                <ChatMessage key={msg.id} message={msg} />
+                <ChatMessage
+                  key={msg.id}
+                  message={{
+                    ...msg,
+                    role: msg.role === "user" ? "user" : "assistant"
+                  }}
+                />
               ))}
               {/* 로딩 인디케이터 */}
               {isLoading && (
