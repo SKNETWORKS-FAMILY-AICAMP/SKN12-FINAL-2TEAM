@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { Plus, MessageCircle, FolderOpen, Zap, Search, Settings, ArrowUp, Menu, ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useChat } from "@/hooks/use-chat";
+import ChatMessage from "@/components/chat/chat-message";
 
 // 타이핑 애니메이션 컴포넌트
 function TypingMessage({ text }: { text: string }) {
@@ -234,18 +235,14 @@ export default function ChatPage() {
             </div>
             {/* 채팅 메시지 영역: 항상 아래 정렬 */}
             <div className="flex-1 flex flex-col justify-end gap-3 p-6 max-h-[60vh] min-h-[200px] overflow-y-auto bg-transparent scrollbar-hide">
-              {messages.map((msg, idx) => (
-                <div
-                  key={msg.id ?? idx}
-                  className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} my-1`}
-                >
-                  <div
-                    className={`px-4 py-2 rounded-xl max-w-xs break-words text-sm shadow
-                      ${msg.role === "user" ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-100"}`}
-                  >
-                    {msg.content}
-                  </div>
-                </div>
+              {messages.map((msg) => (
+                <ChatMessage
+                  key={msg.id}
+                  message={{
+                    ...msg,
+                    role: msg.role === "user" ? "user" : "assistant"
+                  }}
+                />
               ))}
               {/* 로딩 인디케이터 */}
               {isLoading && (

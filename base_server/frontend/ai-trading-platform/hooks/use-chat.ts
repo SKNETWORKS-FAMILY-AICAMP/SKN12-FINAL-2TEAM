@@ -99,6 +99,7 @@ export function useChat() {
       }
       const messageObj = parsed.message;
       if (messageObj && messageObj.content) {
+        console.log('[AI MESSAGE IN]', messageObj);
         setMessages(prev => [
           ...prev,
           {
