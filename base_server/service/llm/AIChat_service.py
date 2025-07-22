@@ -10,7 +10,7 @@ from service.service_container import ServiceContainer
 from service.cache.cache_service import CacheService
 from service.llm.AIChat.Router import run_question
 from service.llm.llm_config import LlmConfig
-
+from markdown import markdown
 class AIChatService:
     """AI 채팅 서비스 - LLM 응답 생성에만 집중"""
     def __init__(self, llm_config: LlmConfig):
@@ -113,7 +113,7 @@ class AIChatService:
             memory.buffer +
             [("user", f'{question}\n\n🛠 도구 결과:\n{joined}')]
         )
-        answer = (prompt | self.llm).invoke({}).content
+        answer = markdown((prompt | self.llm).invoke({}).content)
         memory.chat_memory.add_user_message(question)
         if isinstance(answer, list):
             answer = "\n".join(str(x) for x in answer)
