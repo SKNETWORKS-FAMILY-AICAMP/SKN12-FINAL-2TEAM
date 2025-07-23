@@ -24,12 +24,11 @@ from service.llm.AIChat.tool.MarketRegimeDetectorTool import MarketRegimeDetecto
 from service.llm.AIChat.tool.KalmanRegimeFilterTool import KalmanRegimeFilterTool, KalmanRegimeFilterInput
 
 class AIChatRouter:
-    def __init__(self, ai_chat_service : any):
-        from service.llm.AIChat_service import AIChatService
-        if not isinstance(ai_chat_service, AIChatService):
-            raise TypeError("Expected AIChatService instance")
-        self.ai_chat_service = ai_chat_service
-        self.OPENAI_API_KEY = ai_chat_service.llm_config.providers[ai_chat_service.llm_config.default_provider].api_key
+    def __init__(self):
+        from service.service_container import ServiceContainer
+        ai = ServiceContainer.get_ai_chat_service()
+        self.ai_chat_service = ai
+        self.OPENAI_API_KEY = ai.llm_config.providers[ai.llm_config.default_provider].api_key
         now_seoul = datetime.now(ZoneInfo("Asia/Seoul"))
         self.today = now_seoul.date()
         self.SYSTEM_PROMPT = {
