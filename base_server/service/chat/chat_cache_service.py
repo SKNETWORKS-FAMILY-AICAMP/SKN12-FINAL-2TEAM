@@ -8,7 +8,7 @@ from langchain_core.prompts import ChatPromptTemplate
 
 from service.service_container import ServiceContainer
 from service.cache.cache_service import CacheService
-from service.llm.AIChat.Router import run_question
+from service.llm.AIChat.Router import AIChatRouter
 
 class AIChatService:
     """AI 채팅 서비스 - LLM 응답 생성에만 집중"""
@@ -47,7 +47,8 @@ class AIChatService:
             raise HTTPException(400, "message empty")
         sid = session_id or str(uuid.uuid4())
         loop = asyncio.get_event_loop()
-        tool_out = await loop.run_in_executor(None, run_question, message)
+        router = AIChatRouter()
+        tool_out = await loop.run_in_executor(None, router.run_question, message)
         answer = await self._full_answer(sid, message, tool_out)
         return {"session_id": sid, "reply": answer}
 
@@ -67,9 +68,10 @@ class AIChatService:
                 if not q:
                     await ws.send_text(json.dumps({"error": "empty message"}))
                     continue
-
+                router = AIChatRouter()
+                # 툴 실행
                 tool_out = await asyncio.get_running_loop().run_in_executor(
-                    None, run_question, q
+                    None, router.run_question, q
                 )
                 joined = "\n".join(tool_out) if isinstance(tool_out, list) else str(tool_out)
 
