@@ -1,36 +1,10 @@
-# ws_cli.py  ──────────────────────────────────────────
-import asyncio, json, uuid, websockets
-
-SESSION_ID = str(uuid.uuid4())          # 같은 방 유지
-URI        = "ws://localhost:8000/stream"
-
-async def ask_once(question: str):
-    """질문 1회 → 토큰 스트림 출력"""
-    async with websockets.connect(URI) as ws:
-        # ① 전송
-        await ws.send(json.dumps({
-            "session_id": SESSION_ID,
-            "message": question.strip()
-        }))
-
-        # ② 수신 (토큰 단위)
-        full = ""
-        async for msg in ws:
-            if msg == "[DONE]":          # 서버가 끝낸 뒤 자동 close
-                break
-            print(msg, end="", flush=True)
-            full += msg
-        print("\n🤖 답변 완료\n")
-        return full
+import asyncio
+import redis.asyncio as redis 
 
 async def main():
-    try:
-        while True:
-            q = input("🙋 질문> ").strip()
-            if q:
-                await ask_once(q)
-    except KeyboardInterrupt:
-        print("\n🛑 종료")
+    # self.redis 대신 새로 연결해도 되고, 메서드 안이면 self.redis 바로 사용해도 됩니다.
+    r = redis.Redis(host="localhost", port=6379, decode_responses=True)
+    info = await r.info("server")          # 서버 섹션만 가져오기
+    print("Redis server version =", info["redis_version"])
 
-if __name__ == "__main__":
-    asyncio.run(main())
+asyncio.run(main())

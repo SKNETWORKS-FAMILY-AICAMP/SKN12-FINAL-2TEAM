@@ -12,10 +12,14 @@ from service.service_container import ServiceContainer
 from datetime import datetime
 from service.llm.AIChat_service import AIChatService
 import uuid
+import json
+import redis.asyncio as redis  # 비동기 Redis 클라이언트
+
 class ChatTemplateImpl(BaseTemplate):
     def __init__(self, llm_config=None):
         super().__init__()
         # 서비스 컨테이너에 미리 등록된 AIChatService 인스턴스를 가져옵니다.
+        self.redis = redis.from_url("redis://localhost:6379")  # decode_responses 빼고
         self.ai_service: AIChatService = ServiceContainer.get_ai_chat_service()
 
     # 채팅방 목록 조회
@@ -52,23 +56,30 @@ class ChatTemplateImpl(BaseTemplate):
         response = ChatRoomCreateResponse()
         Logger.info(f"Chat room create request: persona={request.ai_persona}")
         try:
-            result = await ServiceContainer.get_database_service().call_shard_procedure(
-                client_session.session.shard_id, "fp_create_chat_room",
-                (client_session.session.account_db_key, request.ai_persona, request.title)
-            )
-            if not result or result[0].get("result") != "SUCCESS":
-                response.errorCode = 6002
-                return response
+            # 1. 방 ID 생성
+            room_id = str(uuid.uuid4())
+            now = datetime.now().isoformat()
 
-            room_id = result[0]["room_id"]
-            response.room = ChatRoom(
-                room_id=str(room_id),
-                title=request.title,
-                ai_persona=request.ai_persona,
-                created_at=str(datetime.now()),
-                last_message_at=str(datetime.now()),
-                message_count=1
-            )
+            # 2. 방 정보 dict 생성
+            room_data = {
+                "room_id": str(room_id),
+                "title": str(request.title or ""),
+                "ai_persona": str(request.ai_persona or ""),
+                "created_at": str(now),
+                "last_message_at": str(now),
+                "message_count": str(1)
+            }
+            room_key = f"room:{room_id}"
+            Logger.info(f"Creating chat room: {room_data}")
+            # 3. Redis에 방 정보 저장 (해시 or JSON)
+            await self.redis.hset(room_key, mapping=room_data)
+
+            # 4. 유저별 방 목록에 추가
+            user_key = f"rooms:{client_session.session.account_id}"
+            await self.redis.sadd(user_key, room_id)
+
+            # 5. 응답 객체 생성
+            response.room = ChatRoom(**room_data)
             response.errorCode = 0
         except Exception as e:
             Logger.error(f"Chat room create error: {e}")

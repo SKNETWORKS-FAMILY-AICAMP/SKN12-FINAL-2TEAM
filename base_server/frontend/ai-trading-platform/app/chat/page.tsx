@@ -52,17 +52,29 @@ export default function ChatPage() {
   const [message, setMessage] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const router = useRouter();
+  const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const [autoScroll, setAutoScroll] = useState(true);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   // Persona selection modal state
   const [showPersonaModal, setShowPersonaModal] = useState(false);
 
+  // 스크롤 이벤트 핸들러
+  const handleScroll = () => {
+    if (!chatContainerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
+    // 맨 아래에서 20px 이내면 autoScroll 유지
+    setAutoScroll(scrollHeight - scrollTop - clientHeight < 20);
+  };
+
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    if (autoScroll && messagesEndRef.current) {
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+      }, 0);
     }
-  }, [messages, currentRoomId]);
+  }, [messages, currentRoomId, autoScroll]);
 
   const handleSubmit = async (e: React.FormEvent | React.KeyboardEvent) => {
     e.preventDefault();
@@ -234,7 +246,11 @@ export default function ChatPage() {
               </h1>
             </div>
             {/* 채팅 메시지 영역: 항상 아래 정렬 */}
-            <div className="flex-1 flex flex-col justify-end gap-3 p-6 max-h-[60vh] min-h-[200px] overflow-y-auto bg-transparent scrollbar-hide">
+            <div
+              ref={chatContainerRef}
+              onScroll={handleScroll}
+              className="flex-1 flex flex-col justify-end gap-3 p-6 max-h-[60vh] min-h-[200px] overflow-y-auto bg-transparent scrollbar-hide"
+            >
               {messages.map((msg) => (
                 <ChatMessage
                   key={msg.id}
