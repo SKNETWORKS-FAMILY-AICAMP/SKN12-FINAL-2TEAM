@@ -1,11 +1,7 @@
 from abc import ABC, abstractmethod
-import os
-from dotenv import load_dotenv
-
 class BaseFinanceTool(ABC):
-    def __init__(self, key_name: str = None):
-        load_dotenv()
-        self.api_key = os.getenv(key_name) if key_name else None
+    def __init__(self):
+        pass
 
     @abstractmethod
     def get_data(self, **kwargs):

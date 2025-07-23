@@ -69,7 +69,6 @@ class ServiceContainer:
     @classmethod
     def get_ai_chat_service(cls):
         """AIChatService 인스턴스 반환"""
-        from service.llm.AIChat_service import AIChatService
         container = cls()
         if container._ai_chat_service is None:
             raise RuntimeError("AIChatService not initialized in ServiceContainer")

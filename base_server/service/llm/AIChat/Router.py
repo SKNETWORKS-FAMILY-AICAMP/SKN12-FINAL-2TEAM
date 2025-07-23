@@ -105,7 +105,9 @@ class AIChatRouter:
         # 툴 정의 + LLM 준비
         self.TOOLS = self._define_tools()
         self.llm = ChatOpenAI(
-            model="gpt-4o-mini", api_key=self.OPENAI_API_KEY, temperature=0
+            model=self.ai_chat_service.llm_config.providers[
+        self.ai_chat_service.llm_config.default_provider
+    ].model, api_key=self.OPENAI_API_KEY, temperature=0
         )
         self.llm_with_tools = self.llm.bind_tools(self.TOOLS)
 
