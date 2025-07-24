@@ -14,27 +14,28 @@ from service.llm.AIChat_service import AIChatService
 import uuid
 import json
 import redis.asyncio as redis  # 비동기 Redis 클라이언트
+from service.cache.cache_service import CacheService
 
 class ChatTemplateImpl(BaseTemplate):
     def __init__(self, llm_config=None):
         super().__init__()
         # 서비스 컨테이너에 미리 등록된 AIChatService 인스턴스를 가져옵니다.
-        self.redis = redis.from_url("redis://localhost:6379")  # decode_responses 빼고
         self.ai_service: AIChatService = ServiceContainer.get_ai_chat_service()
 
     # 채팅방 목록 조회 (Redis)
-    async def on_chat_room_list_req(self, client_session, request: ChatRoomListRequest):
+    async def on_chat_room_list_req(self, client_session, request):
         response = ChatRoomListResponse()
-        Logger.info(f"Chat room list request: page={request.page}")
         try:
             user_key = f"rooms:{client_session.session.account_id}"
-            room_ids = await self.redis.smembers(user_key)
             rooms = []
-            for room_id in room_ids:
-                room_key = f"room:{room_id}"
-                room_data = await self.redis.hgetall(room_key)
-                if room_data:
-                    rooms.append(ChatRoom(**room_data))
+            async with CacheService.get_client() as redis:
+                room_ids = await redis._client.smembers(redis._get_key(user_key))
+                for room_id in room_ids:
+                    room_key = f"room:{room_id}"
+                    raw = await redis.get_string(room_key)
+                    if raw:
+                        room_data = json.loads(raw)
+                        rooms.append(ChatRoom(**room_data))
             response.rooms = rooms
             response.total_count = len(rooms)
             response.errorCode = 0
@@ -66,11 +67,13 @@ class ChatTemplateImpl(BaseTemplate):
             room_key = f"room:{room_id}"
             Logger.info(f"Creating chat room: {room_data}")
             # 3. Redis에 방 정보 저장 (해시 or JSON)
-            await self.redis.hset(room_key, mapping=room_data)
+            async with CacheService.get_client() as redis:
+                await redis.set_string(room_key, json.dumps(room_data))
 
             # 4. 유저별 방 목록에 추가
             user_key = f"rooms:{client_session.session.account_id}"
-            await self.redis.sadd(user_key, room_id)
+            async with CacheService.get_client() as redis:
+                await redis.set_add(user_key, room_id)
 
             # 5. 응답 객체 생성
             response.room = ChatRoom(**room_data)
@@ -120,7 +123,9 @@ class ChatTemplateImpl(BaseTemplate):
         Logger.info(f"Chat message list: room_id={request.room_id}")
         try:
             msg_key = f"messages:{request.room_id}"
-            messages_raw = await self.redis.lrange(msg_key, 0, -1)
+            messages_raw = []
+            async with CacheService.get_client() as redis:
+                messages_raw = await redis.lrange(msg_key, 0, -1)
             messages = [json.loads(m) for m in messages_raw]
             response.messages = [ChatMessage(**m) for m in messages]
             response.has_more = len(response.messages) >= request.limit
@@ -139,8 +144,9 @@ class ChatTemplateImpl(BaseTemplate):
         try:
             user_key = f"rooms:{client_session.session.account_id}"
             room_key = f"room:{request.room_id}"
-            await self.redis.srem(user_key, request.room_id)
-            await self.redis.delete(room_key)
+            async with CacheService.get_client() as redis:
+                await redis.set_remove(user_key, request.room_id)
+                await redis.delete(room_key)
             response.errorCode = 0
             response.message = "삭제 성공"
         except Exception as e:
