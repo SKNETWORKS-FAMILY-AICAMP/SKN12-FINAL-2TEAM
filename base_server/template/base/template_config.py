@@ -8,6 +8,7 @@ from service.search.search_config import SearchConfig
 from service.vectordb.vectordb_config import VectorDbConfig
 from service.llm.llm_config import LlmConfig
 from service.net.net_config import NetConfig
+from service.net.fastapi_config import FastApiConfig
 from service.websocket.websocket_config import WebSocketConfig
 
 class TemplateConfig(BaseModel):

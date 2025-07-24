@@ -47,6 +47,7 @@ from service.llm.AIChat_service import AIChatService
 from service.llm.llm_config import LlmConfig
 from service.core.service_monitor import service_monitor
 from service.websocket.websocket_service import WebSocketService
+from service.net.fastapi_middleware import FastAPIMiddlewareService
 
 # uvicorn base_server.application.base_web_server.main:app --reload --  logLevel=Debug
 
@@ -453,6 +454,19 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             Logger.error(f"WebSocket 서비스 초기화 실패: {e}")
             Logger.info("WebSocket 서비스 없이 계속 진행")
+        
+        # FastAPI 미들웨어 서비스 초기화
+        try:
+            if app_config.netConfig.fastApiConfig:
+                if FastAPIMiddlewareService.init(app_config.netConfig):
+                    Logger.info("FastAPI 미들웨어 서비스 초기화 완료")
+                else:
+                    Logger.warn("FastAPI 미들웨어 서비스 초기화 실패")
+            else:
+                Logger.info("FastAPI 미들웨어 설정이 없습니다 - 기본 동작으로 실행")
+        except Exception as e:
+            Logger.error(f"FastAPI 미들웨어 서비스 초기화 실패: {e}")
+            Logger.info("FastAPI 미들웨어 없이 계속 진행")
         
     except Exception as e:
         Logger.error(f"❌ Config 파일 로드 실패: {config_file} - {e}")
@@ -1142,6 +1156,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# FastAPI 미들웨어 설정 (타임아웃 및 크기 제한)
+try:
+    if FastAPIMiddlewareService.is_initialized():
+        # 설정 파일에서 읽은 config로 미들웨어 설정
+        FastAPIMiddlewareService.setup_middlewares(app, app_config.netConfig)
+        Logger.info("🎉 FastAPI 미들웨어 적용 완료 - hang up 오류 해결됨")
+    else:
+        Logger.warn("⚠️ FastAPIMiddlewareService가 초기화되지 않음 - 타임아웃 보호 없이 실행")
+except Exception as e:
+    Logger.error(f"❌ FastAPI 미들웨어 적용 실패: {e}")
+    Logger.warn("⚠️ 미들웨어 없이 서버 실행")
 
 # 라우터 등록
 from .routers import account, admin, tutorial, dashboard, portfolio, chat, autotrade, market, settings, notification, crawler, websocket
