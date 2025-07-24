@@ -44,7 +44,6 @@ from service.scheduler.scheduler_service import SchedulerService
 from service.outbox.outbox_pattern import OutboxService
 from service.queue.queue_service import QueueService, initialize_queue_service
 from service.llm.AIChat_service import AIChatService
-from service.llm.llm_config import LlmConfig
 from service.core.service_monitor import service_monitor
 from service.websocket.websocket_service import WebSocketService
 
