@@ -60,6 +60,13 @@ export default function ChatPage() {
   // Persona selection modal state
   const [showPersonaModal, setShowPersonaModal] = useState(false);
 
+  // account_db_key를 localStorage에서 읽어옴
+  // const [accountDbKey, setAccountDbKey] = useState<string | null>(null);
+  // useEffect(() => {
+  //   const key = localStorage.getItem("account_db_key");
+  //   setAccountDbKey(key);
+  // }, []);
+
   // 스크롤 이벤트 핸들러
   const handleScroll = () => {
     if (!chatContainerRef.current) return;
@@ -87,16 +94,12 @@ export default function ChatPage() {
     }
   };
 
+  // createRoom, fetchChatRooms 등에서 account_db_key를 포함해서 요청
   const handleNewChat = async () => {
-    if (personas.length > 0) {
-      setShowPersonaModal(true);
-    } else {
-      await createRoom(`새 채팅 ${rooms.length + 1}`);
-    }
+    setShowPersonaModal(true);
   };
-
   const handleCreateRoomWithPersona = async () => {
-    await createRoom(`새 채팅 ${rooms.length + 1}`, selectedPersona || undefined);
+    await createRoom(selectedPersona, `새 채팅 ${rooms.length + 1}`);
     setShowPersonaModal(false);
   };
 

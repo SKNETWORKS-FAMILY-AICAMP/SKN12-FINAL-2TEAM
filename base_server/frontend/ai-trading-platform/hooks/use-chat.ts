@@ -26,12 +26,12 @@ export function useChat() {
 
   // 채팅방 목록 불러오기
   const loadRooms = useCallback(async () => {
-    const accessToken = localStorage.getItem("accessToken") || "";
     try {
-      const res = await fetchChatRooms(accessToken);
-      setRooms(res.data.rooms || []);
-      if (res.data.rooms && res.data.rooms.length > 0) {
-        setCurrentRoomId(res.data.rooms[0].room_id);
+      const res = await fetchChatRooms();
+      const rooms = (res as any).rooms || [];
+      setRooms(rooms);
+      if (rooms.length > 0) {
+        setCurrentRoomId(rooms[0].room_id);
       }
     } catch (e) {
       setError("채팅방 목록 불러오기 실패");
@@ -40,10 +40,16 @@ export function useChat() {
 
   // 채팅방 생성
   const createRoom = useCallback(async (aiPersona: string, title = "") => {
-    const accessToken = localStorage.getItem("accessToken") || "";
     try {
-      await apiCreateChatRoom(accessToken, aiPersona, title);
-      await loadRooms();
+      const res = await apiCreateChatRoom(aiPersona, title);
+      // errorCode가 0이면 optimistic update
+      const data = typeof res === "string" ? JSON.parse(res) : res;
+      if (data && data.errorCode === 0 && data.room) {
+        setRooms(prev => [data.room, ...prev]);
+        setCurrentRoomId(data.room.room_id);
+      } else {
+        await loadRooms(); // fallback
+      }
     } catch (e) {
       setError("채팅방 생성 실패");
     }
@@ -51,10 +57,9 @@ export function useChat() {
 
   // 메시지 목록 불러오기
   const loadMessages = useCallback(async (roomId: string) => {
-    const accessToken = localStorage.getItem("accessToken") || "";
     try {
-      const res = await fetchChatMessages(accessToken, roomId);
-      setMessages(res.data.messages || []);
+      const res = await fetchChatMessages(roomId);
+      setMessages((res as any).messages || []);
     } catch (e) {
       setError("메시지 불러오기 실패");
     }
@@ -62,7 +67,6 @@ export function useChat() {
 
   // 메시지 전송
   const sendMessage = useCallback(async (content: string, personaOverride?: string) => {
-    const accessToken = localStorage.getItem("accessToken") || "";
     const roomIdToUse = currentRoomId || "test_room";
     const persona = personaOverride || selectedPersona || "GPT4O";
     setIsLoading(true);
@@ -71,14 +75,11 @@ export function useChat() {
       { id: Date.now().toString(), content, role: "user" }
     ]);
     try {
-      let res = await apiSendChatMessage(accessToken, roomIdToUse, content, persona);
+      let res = await apiSendChatMessage(roomIdToUse, content, persona);
       let parsed: any = res;
-      // 1. AxiosResponse의 data가 object면 바로 사용
       if (parsed && parsed.data && typeof parsed.data === "object") {
         parsed = parsed.data;
-      }
-      // 2. AxiosResponse의 data가 string이면 파싱
-      else if (parsed && parsed.data && typeof parsed.data === "string") {
+      } else if (parsed && parsed.data && typeof parsed.data === "string") {
         try {
           parsed = JSON.parse(parsed.data);
         } catch (err) {
@@ -86,9 +87,7 @@ export function useChat() {
           setError("메시지 전송 실패");
           return;
         }
-      }
-      // 3. 전체가 string이면 파싱
-      else if (typeof parsed === "string") {
+      } else if (typeof parsed === "string") {
         try {
           parsed = JSON.parse(parsed);
         } catch (err) {
@@ -99,7 +98,6 @@ export function useChat() {
       }
       const messageObj = parsed.message;
       if (messageObj && messageObj.content) {
-        console.log('[AI MESSAGE IN]', messageObj);
         setMessages(prev => [
           ...prev,
           {
@@ -118,9 +116,8 @@ export function useChat() {
 
   // 채팅방 삭제
   const deleteRoom = useCallback(async (roomId: string) => {
-    const accessToken = localStorage.getItem("accessToken") || "";
     try {
-      await apiDeleteChatRoom(accessToken, roomId);
+      await apiDeleteChatRoom(roomId);
       await loadRooms();
     } catch (e) {
       setError("채팅방 삭제 실패");
