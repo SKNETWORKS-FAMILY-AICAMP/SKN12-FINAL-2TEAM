@@ -5,8 +5,7 @@ import asyncio
 from datetime import datetime
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
-from base_server.service.llm import llm_config
+from service.llm import llm_config
 
 # 프로젝트 루트를 Python 경로에 추가
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
