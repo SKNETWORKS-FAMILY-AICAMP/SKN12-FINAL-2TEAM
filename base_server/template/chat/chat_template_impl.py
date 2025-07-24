@@ -22,27 +22,21 @@ class ChatTemplateImpl(BaseTemplate):
         self.redis = redis.from_url("redis://localhost:6379")  # decode_responses 빼고
         self.ai_service: AIChatService = ServiceContainer.get_ai_chat_service()
 
-    # 채팅방 목록 조회
+    # 채팅방 목록 조회 (Redis)
     async def on_chat_room_list_req(self, client_session, request: ChatRoomListRequest):
         response = ChatRoomListResponse()
         Logger.info(f"Chat room list request: page={request.page}")
         try:
-            rows, meta = await ServiceContainer.get_database_service().call_shard_procedure(
-                client_session.session.shard_id, "fp_get_chat_rooms",
-                (client_session.session.account_db_key, request.page, request.limit)
-            )
-            # rows: List[dict], meta: dict
-            response.rooms = [
-                ChatRoom(
-                    room_id=str(r["room_id"]),
-                    title=r["title"],
-                    ai_persona=r["ai_persona"],
-                    created_at=str(r["created_at"]),
-                    last_message_at=str(r["last_message_at"]),
-                    message_count=r["message_count"]
-                ) for r in rows
-            ]
-            response.total_count = meta.get("total_count", len(response.rooms))
+            user_key = f"rooms:{client_session.session.account_id}"
+            room_ids = await self.redis.smembers(user_key)
+            rooms = []
+            for room_id in room_ids:
+                room_key = f"room:{room_id}"
+                room_data = await self.redis.hgetall(room_key)
+                if room_data:
+                    rooms.append(ChatRoom(**room_data))
+            response.rooms = rooms
+            response.total_count = len(rooms)
             response.errorCode = 0
         except Exception as e:
             Logger.error(f"Chat room list error: {e}")
@@ -120,27 +114,15 @@ class ChatTemplateImpl(BaseTemplate):
         response.errorCode = 0
         return response
 
-    # 채팅 메시지 목록 조회
+    # 채팅 메시지 목록 조회 (Redis)
     async def on_chat_message_list_req(self, client_session, request: ChatMessageListRequest):
         response = ChatMessageListResponse()
         Logger.info(f"Chat message list: room_id={request.room_id}")
         try:
-            rows = await ServiceContainer.get_database_service().call_shard_procedure(
-                client_session.session.shard_id, "fp_get_chat_messages",
-                (client_session.session.account_db_key,
-                 request.room_id, request.page, request.limit, None)
-            )
-            response.messages = [
-                ChatMessage(
-                    message_id=str(m["message_id"]),
-                    room_id=str(m["room_id"]),
-                    sender_type=m["sender_type"],
-                    content=m["content"],
-                    metadata=m.get("metadata"),
-                    timestamp=str(m["timestamp"]),
-                    is_streaming=False
-                ) for m in rows
-            ]
+            msg_key = f"messages:{request.room_id}"
+            messages_raw = await self.redis.lrange(msg_key, 0, -1)
+            messages = [json.loads(m) for m in messages_raw]
+            response.messages = [ChatMessage(**m) for m in messages]
             response.has_more = len(response.messages) >= request.limit
             response.errorCode = 0
         except Exception as e:
@@ -150,24 +132,19 @@ class ChatTemplateImpl(BaseTemplate):
             response.errorCode = 1000
         return response
 
-    # 채팅방 삭제
+    # 채팅방 삭제 (Redis)
     async def on_chat_room_delete_req(self, client_session, request: ChatRoomDeleteRequest):
         response = ChatRoomDeleteResponse()
         Logger.info(f"Chat room delete: room_id={request.room_id}")
         try:
-            result = await ServiceContainer.get_database_service().call_shard_procedure(
-                client_session.session.shard_id, "fp_delete_chat_room",
-                (request.room_id, client_session.session.account_db_key)
-            )
-            if not result or result[0].get("result") != "SUCCESS":
-                response.errorCode = 6004
-                response.message = "삭제 실패"
-                return response
-
+            user_key = f"rooms:{client_session.session.account_id}"
+            room_key = f"room:{request.room_id}"
+            await self.redis.srem(user_key, request.room_id)
+            await self.redis.delete(room_key)
             response.errorCode = 0
-            response.message   = "삭제 성공"
+            response.message = "삭제 성공"
         except Exception as e:
             Logger.error(f"Chat room delete error: {e}")
             response.errorCode = 1000
-            response.message   = "삭제 오류"
+            response.message = "삭제 오류"
         return response

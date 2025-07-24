@@ -205,7 +205,7 @@ export default function ChatPage() {
                   }`}
                   onClick={() => handleSelectChat(item.room_id)}
                 >
-                  {item.room_name}
+                  {item.title || "채팅방"}
                 </div>
               ))}
             </div>
@@ -242,7 +242,7 @@ export default function ChatPage() {
           <div className="w-full max-w-2xl h-full flex flex-col">
             <div className="mb-8 text-center">
               <h1 className="text-4xl font-light mb-2 bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
-                {rooms.find((r) => r.room_id === currentRoomId)?.room_name || "채팅을 선택하세요"}
+                {rooms.find((r) => r.room_id === currentRoomId)?.title || "채팅을 선택하세요"}
               </h1>
             </div>
             {/* 채팅 메시지 영역: 항상 아래 정렬 */}
