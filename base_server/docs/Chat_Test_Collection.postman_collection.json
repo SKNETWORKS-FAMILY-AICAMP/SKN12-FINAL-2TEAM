@@ -1,0 +1,544 @@
+{
+  "info": {
+    "name": "Base Server Chat Test Collection",
+    "description": "AI 챗봇 시스템 테스트 전용 컬렉션 - 회원가입부터 채팅까지 완전한 시나리오",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "1.0.0"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string",
+      "description": "Base server URL"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string",
+      "description": "JWT access token from login"
+    },
+    {
+      "key": "room_id",
+      "value": "",
+      "type": "string", 
+      "description": "Chat room ID from room creation"
+    },
+    {
+      "key": "test_user_id",
+      "value": "chattest_{{$randomInt}}",
+      "type": "string",
+      "description": "Random test user ID"
+    },
+    {
+      "key": "test_email",
+      "value": "chattest_{{$randomInt}}@example.com",
+      "type": "string",
+      "description": "Random test email"
+    },
+    {
+      "key": "sequence",
+      "value": "1",
+      "type": "string",
+      "description": "Request sequence number"
+    }
+  ],
+  "item": [
+    {
+      "name": "🚀 Step 1: 회원가입",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('회원가입 성공 확인', function () {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response.errorCode).to.eql(0);",
+              "    console.log('✅ 회원가입 완료:', pm.collectionVariables.get('test_user_id'));",
+              "});",
+              "",
+              "// 다음 요청을 위해 sequence 증가",
+              "let currentSeq = parseInt(pm.collectionVariables.get('sequence'));",
+              "pm.collectionVariables.set('sequence', (currentSeq + 1).toString());"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"accessToken\": \"\",\n  \"sequence\": {{sequence}},\n  \"platform_type\": \"native\",\n  \"account_id\": \"{{test_user_id}}\",\n  \"password\": \"Test1234!\",\n  \"email\": \"{{test_email}}\",\n  \"nickname\": \"테스트유저_{{$randomInt}}\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/account/signup",
+          "host": ["{{base_url}}"],
+          "path": ["api", "account", "signup"]
+        },
+        "description": "새 사용자 계정을 생성합니다."
+      }
+    },
+    {
+      "name": "🔑 Step 2: 로그인",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('로그인 성공 확인', function () {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response.errorCode).to.eql(0);",
+              "    pm.expect(response.accessToken).to.exist;",
+              "    ",
+              "    // accessToken 저장",
+              "    pm.collectionVariables.set('access_token', response.accessToken);",
+              "    console.log('✅ 로그인 완료, 토큰 저장됨');",
+              "});",
+              "",
+              "// 다음 요청을 위해 sequence 증가",
+              "let currentSeq = parseInt(pm.collectionVariables.get('sequence'));",
+              "pm.collectionVariables.set('sequence', (currentSeq + 1).toString());"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"accessToken\": \"\",\n  \"sequence\": {{sequence}},\n  \"platform_type\": \"native\",\n  \"account_id\": \"{{test_user_id}}\",\n  \"password\": \"Test1234!\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/account/login",
+          "host": ["{{base_url}}"],
+          "path": ["api", "account", "login"]
+        },
+        "description": "사용자 로그인하여 accessToken을 획득합니다."
+      }
+    },
+    {
+      "name": "💬 Step 3: 챗봇 세션 생성",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('챗봇 세션 생성 성공', function () {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response.errorCode).to.eql(0);",
+              "    pm.expect(response.room).to.exist;",
+              "    pm.expect(response.room.room_id).to.exist;",
+              "    ",
+              "    // room_id 저장",
+              "    pm.collectionVariables.set('room_id', response.room.room_id);",
+              "    console.log('✅ 챗봇 세션 생성:', response.room.room_id);",
+              "    console.log('  - 제목:', response.room.title);",
+              "    console.log('  - AI 페르소나:', response.room.ai_persona);",
+              "});",
+              "",
+              "// 다음 요청을 위해 sequence 증가",
+              "let currentSeq = parseInt(pm.collectionVariables.get('sequence'));",
+              "pm.collectionVariables.set('sequence', (currentSeq + 1).toString());"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"accessToken\": \"{{access_token}}\",\n  \"sequence\": {{sequence}},\n  \"ai_persona\": \"GPT4O\",\n  \"title\": \"주식 투자 상담\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/chat/room/create",
+          "host": ["{{base_url}}"],
+          "path": ["api", "chat", "room", "create"]
+        },
+        "description": "새로운 AI 챗봇 세션을 생성합니다."
+      }
+    },
+    {
+      "name": "📤 Step 4: 첫 번째 메시지 전송",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('첫 번째 메시지 전송 성공', function () {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response.errorCode).to.eql(0);",
+              "    pm.expect(response.message).to.exist;",
+              "    pm.expect(response.message.sender_type).to.eql('AI');",
+              "    ",
+              "    console.log('✅ AI 응답 받음:');",
+              "    console.log('  - 메시지 ID:', response.message.message_id);",
+              "    console.log('  - 내용 길이:', response.message.content.length, '자');",
+              "    console.log('  - 응답 시간:', response.message.timestamp);",
+              "});",
+              "",
+              "// 다음 요청을 위해 sequence 증가",
+              "let currentSeq = parseInt(pm.collectionVariables.get('sequence'));",
+              "pm.collectionVariables.set('sequence', (currentSeq + 1).toString());"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"accessToken\": \"{{access_token}}\",\n  \"sequence\": {{sequence}},\n  \"room_id\": \"{{room_id}}\",\n  \"content\": \"안녕하세요! 삼성전자 주식에 대해 분석해주실 수 있나요?\",\n  \"persona\": \"GPT4O\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/chat/message/send",
+          "host": ["{{base_url}}"],
+          "path": ["api", "chat", "message", "send"]
+        },
+        "description": "AI 챗봇에게 첫 번째 질문을 전송합니다."
+      }
+    },
+    {
+      "name": "📤 Step 5: 두 번째 메시지 전송",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('두 번째 메시지 전송 성공', function () {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response.errorCode).to.eql(0);",
+              "    pm.expect(response.message).to.exist;",
+              "    pm.expect(response.message.sender_type).to.eql('AI');",
+              "    ",
+              "    console.log('✅ AI 두 번째 응답 받음:');",
+              "    console.log('  - 메시지 ID:', response.message.message_id);",
+              "    console.log('  - 내용 미리보기:', response.message.content.substring(0, 100) + '...');",
+              "});",
+              "",
+              "// 다음 요청을 위해 sequence 증가",
+              "let currentSeq = parseInt(pm.collectionVariables.get('sequence'));",
+              "pm.collectionVariables.set('sequence', (currentSeq + 1).toString());"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"accessToken\": \"{{access_token}}\",\n  \"sequence\": {{sequence}},\n  \"room_id\": \"{{room_id}}\",\n  \"content\": \"현재 매수 시점이 적절한가요? 목표가는 어느 정도로 보시나요?\",\n  \"persona\": \"GPT4O\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/chat/message/send",
+          "host": ["{{base_url}}"],
+          "path": ["api", "chat", "message", "send"]
+        },
+        "description": "AI 챗봇에게 추가 질문을 전송합니다."
+      }
+    },
+    {
+      "name": "📋 Step 6: 메시지 목록 조회",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('메시지 목록 조회 성공', function () {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response.errorCode).to.eql(0);",
+              "    pm.expect(response.messages).to.be.an('array');",
+              "    ",
+              "    console.log('✅ 메시지 목록 조회 완료:');",
+              "    console.log('  - 총 메시지 수:', response.messages.length);",
+              "    ",
+              "    response.messages.forEach((msg, index) => {",
+              "        console.log(`  ${index + 1}. [${msg.sender_type}] ${msg.content.substring(0, 50)}...`);",
+              "    });",
+              "});",
+              "",
+              "// 다음 요청을 위해 sequence 증가",
+              "let currentSeq = parseInt(pm.collectionVariables.get('sequence'));",
+              "pm.collectionVariables.set('sequence', (currentSeq + 1).toString());"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"accessToken\": \"{{access_token}}\",\n  \"sequence\": {{sequence}},\n  \"room_id\": \"{{room_id}}\",\n  \"page\": 1,\n  \"limit\": 50,\n  \"before_timestamp\": \"\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/chat/messages",
+          "host": ["{{base_url}}"],
+          "path": ["api", "chat", "messages"]
+        },
+        "description": "챗봇 세션의 모든 메시지 목록을 조회합니다."
+      }
+    },
+    {
+      "name": "📁 Step 7: 세션 목록 조회",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('세션 목록 조회 성공', function () {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response.errorCode).to.eql(0);",
+              "    pm.expect(response.rooms).to.be.an('array');",
+              "    pm.expect(response.total_count).to.be.greaterThan(0);",
+              "    ",
+              "    console.log('✅ 챗봇 세션 목록 조회 완료:');",
+              "    console.log('  - 총 세션 수:', response.total_count);",
+              "    ",
+              "    response.rooms.forEach((room, index) => {",
+              "        console.log(`  ${index + 1}. [${room.ai_persona}] ${room.title} (메시지: ${room.message_count}개)`);",
+              "    });",
+              "});",
+              "",
+              "// 다음 요청을 위해 sequence 증가",
+              "let currentSeq = parseInt(pm.collectionVariables.get('sequence'));",
+              "pm.collectionVariables.set('sequence', (currentSeq + 1).toString());"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"accessToken\": \"{{access_token}}\",\n  \"sequence\": {{sequence}},\n  \"page\": 1,\n  \"limit\": 20\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/chat/rooms",
+          "host": ["{{base_url}}"],
+          "path": ["api", "chat", "rooms"]
+        },
+        "description": "사용자의 모든 챗봇 세션 목록을 조회합니다."
+      }
+    },
+    {
+      "name": "💬 Step 8: 추가 세션 생성 (암호화폐)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('두 번째 세션 생성 성공', function () {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response.errorCode).to.eql(0);",
+              "    pm.expect(response.room).to.exist;",
+              "    ",
+              "    console.log('✅ 두 번째 챗봇 세션 생성:', response.room.room_id);",
+              "    console.log('  - 제목:', response.room.title);",
+              "});",
+              "",
+              "// 다음 요청을 위해 sequence 증가",
+              "let currentSeq = parseInt(pm.collectionVariables.get('sequence'));",
+              "pm.collectionVariables.set('sequence', (currentSeq + 1).toString());"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"accessToken\": \"{{access_token}}\",\n  \"sequence\": {{sequence}},\n  \"ai_persona\": \"GPT4O\",\n  \"title\": \"암호화폐 투자 가이드\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/chat/room/create",
+          "host": ["{{base_url}}"],
+          "path": ["api", "chat", "room", "create"]
+        },
+        "description": "다른 주제의 챗봇 세션을 추가로 생성합니다."
+      }
+    },
+    {
+      "name": "🗑️ Step 9: 첫 번째 세션 삭제",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('세션 삭제 성공', function () {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response.errorCode).to.eql(0);",
+              "    ",
+              "    console.log('✅ 챗봇 세션 삭제 완료');",
+              "    console.log('  - 삭제된 세션 ID:', pm.collectionVariables.get('room_id'));",
+              "});",
+              "",
+              "// 다음 요청을 위해 sequence 증가",
+              "let currentSeq = parseInt(pm.collectionVariables.get('sequence'));",
+              "pm.collectionVariables.set('sequence', (currentSeq + 1).toString());"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"accessToken\": \"{{access_token}}\",\n  \"sequence\": {{sequence}},\n  \"room_id\": \"{{room_id}}\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/chat/room/delete",
+          "host": ["{{base_url}}"],
+          "path": ["api", "chat", "room", "delete"]
+        },
+        "description": "테스트가 완료된 챗봇 세션을 삭제합니다."
+      }
+    },
+    {
+      "name": "🚪 Step 10: 로그아웃",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('로그아웃 성공', function () {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response.errorCode).to.eql(0);",
+              "    ",
+              "    console.log('✅ 로그아웃 완료');",
+              "});",
+              "",
+              "// 테스트 완료 후 변수 정리",
+              "pm.collectionVariables.set('access_token', '');",
+              "pm.collectionVariables.set('room_id', '');",
+              "pm.collectionVariables.set('sequence', '1');",
+              "",
+              "console.log('🎉 채팅 시스템 전체 테스트 완료!');"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"accessToken\": \"{{access_token}}\",\n  \"sequence\": {{sequence}}\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/account/logout",
+          "host": ["{{base_url}}"],
+          "path": ["api", "account", "logout"]
+        },
+        "description": "사용자 세션을 종료하고 로그아웃합니다."
+      }
+    }
+  ]
+}

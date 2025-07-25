@@ -431,6 +431,17 @@ async def lifespan(app: FastAPI):
                 Logger.info("QueueService 초기화 완료")
                 ServiceContainer.set_queue_service_initialized(True)
                 
+                # ChatPersistenceConsumer 등록 (채팅 메시지 DB 저장)
+                try:
+                    from template.chat.chat_persistence_consumer import register_chat_persistence_consumer
+                    if await register_chat_persistence_consumer():
+                        Logger.info("채팅 영속성 컨슈머 등록 완료")
+                    else:
+                        Logger.warn("채팅 영속성 컨슈머 등록 실패")
+                except Exception as chat_consumer_e:
+                    Logger.error(f"채팅 영속성 컨슈머 등록 실패: {chat_consumer_e}")
+                    Logger.info("채팅 영속성 컨슈머 없이 계속 진행")
+                
             else:
                 Logger.warn("QueueService 초기화 실패")
         except Exception as e:
