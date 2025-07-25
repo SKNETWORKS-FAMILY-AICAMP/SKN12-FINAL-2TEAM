@@ -28,13 +28,29 @@ export function useChat() {
   const loadRooms = useCallback(async () => {
     try {
       const res = await fetchChatRooms();
-      const rooms = (res as any).rooms || [];
+      const data = typeof res === "string" ? JSON.parse(res) : res;
+      console.log("[FRONT] 채팅방 목록 응답:", data);
+      const rooms = data.rooms || [];
       setRooms(rooms);
       if (rooms.length > 0) {
         setCurrentRoomId(rooms[0].room_id);
       }
     } catch (e) {
       setError("채팅방 목록 불러오기 실패");
+      console.error("채팅방 목록 불러오기 실패:", e);
+    }
+  }, []);
+
+  // 메시지 목록 불러오기
+  const loadMessages = useCallback(async (roomId: string) => {
+    try {
+      const res = await fetchChatMessages(roomId);
+      const data = typeof res === "string" ? JSON.parse(res) : res;
+      console.log("[FRONT] 메시지 목록 응답:", data);
+      setMessages((res as any).messages || []);
+    } catch (e) {
+      setError("메시지 불러오기 실패");
+      console.error("메시지 불러오기 실패:", e);
     }
   }, []);
 
@@ -42,28 +58,21 @@ export function useChat() {
   const createRoom = useCallback(async (aiPersona: string, title = "") => {
     try {
       const res = await apiCreateChatRoom(aiPersona, title);
-      // errorCode가 0이면 optimistic update
       const data = typeof res === "string" ? JSON.parse(res) : res;
+      console.log("[FRONT] 채팅방 생성 응답:", data);
+      // errorCode가 0이면 optimistic update
       if (data && data.errorCode === 0 && data.room) {
         setRooms(prev => [data.room, ...prev]);
         setCurrentRoomId(data.room.room_id);
+        await loadMessages(data.room.room_id); // 새 방 생성 후 바로 메시지 목록 불러오기
       } else {
         await loadRooms(); // fallback
       }
     } catch (e) {
       setError("채팅방 생성 실패");
+      console.error("채팅방 생성 실패:", e);
     }
-  }, [loadRooms]);
-
-  // 메시지 목록 불러오기
-  const loadMessages = useCallback(async (roomId: string) => {
-    try {
-      const res = await fetchChatMessages(roomId);
-      setMessages((res as any).messages || []);
-    } catch (e) {
-      setError("메시지 불러오기 실패");
-    }
-  }, []);
+  }, [loadRooms, loadMessages]);
 
   // 메시지 전송
   const sendMessage = useCallback(async (content: string, personaOverride?: string) => {

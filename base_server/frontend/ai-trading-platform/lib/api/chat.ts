@@ -45,9 +45,11 @@ export async function fetchChatMessages(room_id: string, page = 1, limit = 50, b
 
 // 채팅방 삭제
 export async function deleteChatRoom(room_id: string) {
-  // chat_serialize.py의 ChatRoomDeleteRequest와 일치
-  const payload = { room_id };
+  const accessToken = typeof window !== "undefined" ? localStorage.getItem("accessToken") : "";
+  const sequence = Date.now();
+  const payload = { accessToken, sequence, room_id };
   console.log("[FRONT] 채팅방 삭제 요청 payload:", payload);
+  console.log("[FRONT] Authorization 헤더:", accessToken ? `Bearer ${accessToken}` : "(없음)");
   const res = await apiClient.post("/api/chat/room/delete", payload);
   console.log("[FRONT] 채팅방 삭제 응답:", res);
   return res;

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Plus, MessageCircle, FolderOpen, Zap, Search, Settings, ArrowUp, Menu, ArrowLeft } from "lucide-react";
+import { Plus, MessageCircle, FolderOpen, Zap, Search, Settings, ArrowUp, Menu, ArrowLeft, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useChat } from "@/hooks/use-chat";
 import ChatMessage from "@/components/chat/chat-message";
@@ -48,6 +48,7 @@ export default function ChatPage() {
     personas,
     selectedPersona,
     setSelectedPersona,
+    deleteRoom,
   } = useChat();
   const [message, setMessage] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -59,6 +60,7 @@ export default function ChatPage() {
 
   // Persona selection modal state
   const [showPersonaModal, setShowPersonaModal] = useState(false);
+  const [deletingRoomId, setDeletingRoomId] = useState<string | null>(null);
 
   // account_db_key를 localStorage에서 읽어옴
   // const [accountDbKey, setAccountDbKey] = useState<string | null>(null);
@@ -105,6 +107,15 @@ export default function ChatPage() {
 
   const handleSelectChat = (roomId: string) => {
     setCurrentRoomId(roomId);
+  };
+
+  const handleDeleteRoom = async (roomId: string) => {
+    setDeletingRoomId(roomId);
+    try {
+      await deleteRoom(roomId);
+    } finally {
+      setDeletingRoomId(null);
+    }
   };
 
   // 입력창 엔터/쉬프트+엔터 처리
@@ -201,14 +212,26 @@ export default function ChatPage() {
               {rooms.map((item) => (
                 <div
                   key={item.room_id}
-                  className={`px-3 py-2 text-sm rounded cursor-pointer truncate transition-all font-medium ${
+                  className={`flex items-center group px-3 py-2 text-sm rounded cursor-pointer truncate transition-all font-medium ${
                     currentRoomId === item.room_id
                       ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow'
                       : 'text-gray-300 hover:bg-[#23243a]'
                   }`}
-                  onClick={() => handleSelectChat(item.room_id)}
                 >
-                  {item.title || "채팅방"}
+                  <div
+                    className="flex-1 truncate"
+                    onClick={() => handleSelectChat(item.room_id)}
+                  >
+                    {item.title || "채팅방"}
+                  </div>
+                  <button
+                    className="ml-2 p-1 rounded hover:bg-red-600/80 transition text-gray-400 hover:text-white opacity-0 group-hover:opacity-100 disabled:opacity-50"
+                    onClick={e => { e.stopPropagation(); handleDeleteRoom(item.room_id); }}
+                    disabled={deletingRoomId === item.room_id || isLoading}
+                    title="채팅방 삭제"
+                  >
+                    <X size={14} />
+                  </button>
                 </div>
               ))}
             </div>
