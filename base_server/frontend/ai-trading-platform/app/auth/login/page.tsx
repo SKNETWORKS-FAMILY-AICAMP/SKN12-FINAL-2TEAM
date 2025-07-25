@@ -29,7 +29,12 @@ export default function LoginPage() {
         password: password,
       };
 
-      const res = await axios.post("http://127.0.0.1:8000/api/account/login", payload);
+      const apiBase = process.env.NEXT_PUBLIC_API_URL;
+      if (!apiBase) throw new Error("NEXT_PUBLIC_API_URL 환경변수가 필요합니다");
+      const timeout = process.env.NEXT_PUBLIC_API_TIMEOUT
+        ? parseInt(process.env.NEXT_PUBLIC_API_TIMEOUT, 10)
+        : 10000;
+      const res = await axios.post(`${apiBase}/api/account/login`, payload, { timeout });
       let data = res.data;
       if (typeof data === "string") {
         try {
@@ -69,9 +74,13 @@ export default function LoginPage() {
         setError(message || `로그인 실패: 에러코드 ${errorCode}`);
       }
     } catch (err: any) {
-      const errorCode = err?.response?.data?.errorCode;
-      const message = err?.response?.data?.message;
-      setError(message || "네트워크 오류가 발생했습니다.");
+      if (err.code === 'ECONNABORTED') {
+        setError("요청이 지연되어 타임아웃되었습니다. 잠시 후 다시 시도해 주세요.");
+      } else {
+        const errorCode = err?.response?.data?.errorCode;
+        const message = err?.response?.data?.message;
+        setError(message || "네트워크 오류가 발생했습니다.");
+      }
     } finally {
       setIsLoading(false)
     }

@@ -7,14 +7,20 @@ class ApiClient {
   private wsConnections: Map<string, WebSocket> = new Map()
 
   constructor() {
+    const baseURL = process.env.NEXT_PUBLIC_API_URL;
+    if (!baseURL) {
+      throw new Error("NEXT_PUBLIC_API_URL 환경변수가 설정되어 있지 않습니다. .env.local 파일에 NEXT_PUBLIC_API_URL을 지정하세요.");
+    }
+    const timeout = process.env.NEXT_PUBLIC_API_TIMEOUT
+      ? parseInt(process.env.NEXT_PUBLIC_API_TIMEOUT, 10)
+      : 10000;
     this.client = axios.create({
-      baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000",
-      timeout: 10000,
+      baseURL,
+      timeout,
       headers: {
         "Content-Type": "application/json",
       },
     })
-
     this.setupInterceptors()
   }
 
@@ -55,6 +61,18 @@ class ApiClient {
     this.client.interceptors.response.use(
       (response) => response,
       async (error) => {
+        if (error.code === 'ECONNABORTED') {
+          // 이미 로그인된 상태라면
+          if (typeof window !== 'undefined') {
+            const authManager = require("@/lib/auth").authManager;
+            if (authManager.isLoggedIn && authManager.isLoggedIn()) {
+              window.alert("장시간 사용이 없어 로그아웃 되었습니다.");
+              authManager.clearSession();
+              window.location.href = "/auth/login";
+              return;
+            }
+          }
+        }
         const originalRequest = error.config
 
         if (error.response?.status === 401 && !originalRequest._retry) {

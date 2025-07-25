@@ -331,7 +331,12 @@ export default function RegisterPage() {
     setError("")
     setIsLoading(true)
     try {
-      const res = await axios.post("http://127.0.0.1:8000/api/account/signup", {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL;
+      if (!apiBase) throw new Error("NEXT_PUBLIC_API_URL 환경변수가 필요합니다");
+      const timeout = process.env.NEXT_PUBLIC_API_TIMEOUT
+        ? parseInt(process.env.NEXT_PUBLIC_API_TIMEOUT, 10)
+        : 10000;
+      const res = await axios.post(`${apiBase}/api/account/signup`, {
         sequence: Date.now(),
         platform_type: 1,
         account_id: form.account_id,
@@ -344,7 +349,7 @@ export default function RegisterPage() {
         birth_month: Number(form.birth_month),
         birth_day: Number(form.birth_day),
         gender: form.gender
-      })
+      }, { timeout });
       let data = res.data;
       if (typeof data === "string") {
         try {
@@ -368,10 +373,14 @@ export default function RegisterPage() {
         setError(getErrorMessage(data.errorCode, data.message))
       }
     } catch (e: any) {
-      console.error("회원가입 에러:", e); // 에러 콘솔 출력 추가
-      const errorCode = e?.response?.data?.errorCode;
-      const message = e?.response?.data?.message;
-      setError(getErrorMessage(errorCode, message || "회원가입에 실패했습니다. 다시 시도해주세요."));
+      if (e.code === 'ECONNABORTED') {
+        setError("요청이 지연되어 타임아웃되었습니다. 잠시 후 다시 시도해 주세요.");
+      } else {
+        console.error("회원가입 에러:", e); // 에러 콘솔 출력 추가
+        const errorCode = e?.response?.data?.errorCode;
+        const message = e?.response?.data?.message;
+        setError(getErrorMessage(errorCode, message || "회원가입에 실패했습니다. 다시 시도해주세요."));
+      }
     } finally {
       setIsLoading(false)
     }
