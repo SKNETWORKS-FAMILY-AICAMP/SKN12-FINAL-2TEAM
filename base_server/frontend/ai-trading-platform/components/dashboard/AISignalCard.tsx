@@ -1,29 +1,25 @@
 import React from "react";
 
-interface AISignal {
-  label: string;
-  action: string;
-  confidence: string;
-  change: string;
-  reason: string;
-}
-
-interface AISignalCardProps {
-  signals: AISignal[];
-}
-
-export function AISignalCard({ signals }: AISignalCardProps) {
+export function AISignalCard({ signals }: { signals: { label: string; action: string; confidence: string; change: string; reason: string }[] }) {
   return (
-    <div className="metric-card flex flex-col items-start p-3">
-      <div className="font-semibold text-white/90 mb-2 text-xs">AI Trading Signal</div>
-      {signals.map((signal) => (
-        <div key={signal.label} className="mb-2 w-full">
-          <div className="font-bold text-white text-xs">{signal.label}</div>
-          <div className="text-xs text-gray-400">{signal.action} | 신뢰도 {signal.confidence}</div>
-          <div className={signal.change.startsWith("+") ? "text-emerald-400 font-bold text-xs" : "text-red-400 font-bold text-xs"}>{signal.change}</div>
-          <div className="text-xs text-gray-500 mt-0.5">{signal.reason}</div>
-        </div>
-      ))}
+    <div className="bg-[#23243a] rounded-xl shadow-lg p-6 min-w-[260px] flex flex-col items-start w-full max-w-sm border border-[#353657]">
+      <div className="text-lg font-bold mb-4 text-white">AI Trading Signal</div>
+      <div className="flex flex-col gap-4 w-full">
+        {signals.map((s, i) => {
+          const isUp = s.change.startsWith("+");
+          const isDown = s.change.startsWith("-");
+          const color = isUp ? "text-green-400" : isDown ? "text-red-400" : "text-gray-300";
+          return (
+            <div key={s.label + i} className="flex flex-col gap-1 w-full">
+              <div className="flex items-center justify-between w-full">
+                <span className="text-base font-semibold text-white">{s.label}</span>
+                <span className={`text-base font-bold ${color}`}>{s.change}</span>
+              </div>
+              <div className="text-xs text-gray-400 leading-relaxed">{s.action} | 신뢰도 {s.confidence} | {s.reason}</div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 } 

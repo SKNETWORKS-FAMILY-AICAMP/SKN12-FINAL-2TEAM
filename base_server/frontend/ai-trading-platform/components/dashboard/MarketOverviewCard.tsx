@@ -1,26 +1,25 @@
 import React from "react";
 
-interface MarketItem {
-  label: string;
-  value: string | number;
-  change: string;
-}
-
-interface MarketOverviewCardProps {
-  markets: MarketItem[];
-}
-
-export function MarketOverviewCard({ markets }: MarketOverviewCardProps) {
+export function MarketOverviewCard({ markets }: { markets: { label: string; value: number; change: string }[] }) {
   return (
-    <div className="metric-card flex flex-col items-start p-3">
-      <div className="flex items-center gap-2 mb-2">
-        <span className="font-semibold text-white/90 text-xs">Market Overview</span>
+    <div className="bg-[#23243a] rounded-xl shadow-lg p-6 min-w-[260px] flex flex-col items-start w-full max-w-sm border border-[#353657]">
+      <div className="text-lg font-bold mb-4 text-white">Market Overview</div>
+      <div className="flex flex-col gap-4 w-full">
+        {markets.map((m) => {
+          const isUp = m.change.startsWith("+");
+          const isDown = m.change.startsWith("-");
+          const color = isUp ? "text-green-400" : isDown ? "text-red-400" : "text-gray-300";
+          return (
+            <div key={m.label} className="flex flex-col gap-1 w-full">
+              <div className="flex items-center justify-between w-full">
+                <span className="text-base font-semibold text-white">{m.label}</span>
+                <span className="text-xl font-extrabold text-white">{m.value.toLocaleString()}</span>
+              </div>
+              <div className={`text-base font-bold ${color} leading-relaxed`}>{m.change}</div>
+            </div>
+          );
+        })}
       </div>
-      {markets.map((item) => (
-        <div key={item.label} className="text-xs text-gray-400">
-          {item.label} <span className={item.change.startsWith("+") ? "text-emerald-400 font-bold ml-1" : "text-red-400 font-bold ml-1"}>{item.value} ({item.change})</span>
-        </div>
-      ))}
     </div>
   );
 } 

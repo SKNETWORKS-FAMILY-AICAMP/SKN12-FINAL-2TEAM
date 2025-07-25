@@ -35,8 +35,9 @@ export async function sendChatMessage(room_id: string, content: string, persona:
 
 // 메시지 목록
 export async function fetchChatMessages(room_id: string, page = 1, limit = 50, before_timestamp = "") {
-  // chat_serialize.py의 ChatMessageListRequest와 일치
-  const payload = { room_id, page, limit, before_timestamp };
+  const accessToken = typeof window !== "undefined" ? localStorage.getItem("accessToken") : "";
+  const sequence = Date.now();
+  const payload = { accessToken, sequence, room_id, page, limit, before_timestamp };
   console.log("[FRONT] 메시지 목록 요청 payload:", payload);
   const res = await apiClient.post("/api/chat/messages", payload);
   console.log("[FRONT] 메시지 목록 응답:", res);

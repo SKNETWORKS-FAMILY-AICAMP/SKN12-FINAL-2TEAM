@@ -1,25 +1,22 @@
 import React from "react";
 
-interface PortfolioItem {
-  label: string;
-  change: string;
-}
-
-interface PortfolioBreakdownCardProps {
-  items: PortfolioItem[];
-}
-
-export function PortfolioBreakdownCard({ items }: PortfolioBreakdownCardProps) {
+export function PortfolioBreakdownCard({ items }: { items: { label: string; change: string }[] }) {
   return (
-    <div className="metric-card flex flex-col items-start p-3">
-      <div className="flex items-center gap-2 mb-2">
-        <span className="font-semibold text-white/90 text-xs">Portfolio Breakdown</span>
+    <div className="bg-[#23243a] rounded-xl shadow-lg p-6 min-w-[260px] flex flex-col items-start w-full max-w-sm border border-[#353657]">
+      <div className="text-lg font-bold mb-4 text-white">Portfolio Breakdown</div>
+      <div className="flex flex-col gap-4 w-full">
+        {items.map((item) => {
+          const isUp = item.change.startsWith("+");
+          const isDown = item.change.startsWith("-");
+          const color = isUp ? "text-green-400" : isDown ? "text-red-400" : "text-gray-300";
+          return (
+            <div key={item.label} className="flex items-center justify-between w-full">
+              <span className="text-base font-semibold text-white">{item.label}</span>
+              <span className={`text-base font-bold ${color} leading-relaxed`}>{item.change}</span>
+            </div>
+          );
+        })}
       </div>
-      {items.map((item) => (
-        <div key={item.label} className="text-xs text-gray-400">
-          {item.label} <span className={item.change.startsWith("+") ? "text-emerald-400 font-bold ml-1" : "text-red-400 font-bold ml-1"}>{item.change}</span>
-        </div>
-      ))}
     </div>
   );
 } 

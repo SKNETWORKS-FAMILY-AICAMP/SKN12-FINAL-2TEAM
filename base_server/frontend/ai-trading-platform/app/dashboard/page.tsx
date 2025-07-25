@@ -13,6 +13,8 @@ import { PortfolioBreakdownCard } from "@/components/dashboard/PortfolioBreakdow
 import { AISignalCard } from "@/components/dashboard/AISignalCard";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { Header } from "@/components/layout/header";
+import RecommendStocksCards from "@/components/dashboard/RecommendStocksCards";
+import WorldIndicesTicker from "@/components/dashboard/WorldIndicesTicker";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -76,20 +78,14 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="h-screen w-full bg-gradient-to-br from-[#0a0a0a] via-[#18181c] to-[#23243a] text-white flex overflow-hidden">
+    <div className="min-h-screen w-full bg-gradient-to-br from-[#0a0a23] via-[#18181c] to-[#23243a] text-white">
+      <WorldIndicesTicker />
       <main className="flex-1 flex flex-col items-center px-6 md:px-12 py-8 bg-transparent overflow-hidden">
         <h1 className="text-4xl md:text-6xl font-bold mb-8 tracking-tight text-white text-balance">
           Professional <span className="bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">AI Trading Dashboard</span>
         </h1>
-        <div className="dashboard w-full max-w-6xl mb-8">
-          <div className="dashboard-grid">
-            <PortfolioValueCard value="$847,296" change="+18.4%" />
-            <ActivePositionsCard value={12} change="+3" />
-            <MonthlyReturnCard value="24.7%" change="+5.2%" />
-            <WinRateCard value="87%" change="+12%" />
-          </div>
-        </div>
-        <div className="w-full max-w-6xl grid grid-cols-1 md:grid-cols-3 gap-6">
+        <RecommendStocksCards />
+        <div className="w-full max-w-6xl grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
           <MarketOverviewCard markets={marketData} />
           <PortfolioBreakdownCard items={portfolioItems} />
           <AISignalCard signals={aiSignals} />
