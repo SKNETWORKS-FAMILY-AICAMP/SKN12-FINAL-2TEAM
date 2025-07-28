@@ -78,7 +78,7 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-[#0a0a23] via-[#18181c] to-[#23243a] text-white">
+    <div className="min-h-screen w-full bg-gradient-to-br from-black via-gray-900 to-gray-820 text-white">
       <WorldIndicesTicker />
       <main className="flex-1 flex flex-col items-center px-6 md:px-12 py-8 bg-transparent overflow-hidden">
         <h1 className="text-4xl md:text-6xl font-bold mb-8 tracking-tight text-white text-balance">

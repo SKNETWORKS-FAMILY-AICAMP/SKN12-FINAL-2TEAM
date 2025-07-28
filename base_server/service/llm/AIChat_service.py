@@ -1,5 +1,6 @@
 # base_server/service/llm/AIChat_service.py
 
+from service.core.logger import Logger
 import os, uuid, asyncio, json
 from fastapi import WebSocket, WebSocketDisconnect, HTTPException
 from langchain.memory import ConversationBufferMemory
@@ -57,10 +58,13 @@ class AIChatService:
         if not message.strip():
             raise HTTPException(400, "message empty")
         sid = session_id or str(uuid.uuid4())
-        loop = asyncio.get_event_loop()
+        Logger.debug(f"AIChatService.chat called with session_id={sid}, message={message}")
         router = AIChatRouter()
+        # 비동기 실행으로 변경하여 도구 호출이 제대로 작동하도록 함
+        loop = asyncio.get_event_loop()
         tool_out = await loop.run_in_executor(None, router.run_question, message)
         answer = await self._full_answer(sid, message, tool_out)
+        Logger.debug(f"AIChatService.chat response for session_id={sid}: {answer}")
         return {"session_id": sid, "reply": answer}
 
     async def stream(self, ws: WebSocket):

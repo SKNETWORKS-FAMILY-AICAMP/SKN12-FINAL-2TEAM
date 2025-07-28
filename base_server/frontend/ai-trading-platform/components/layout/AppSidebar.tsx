@@ -37,16 +37,16 @@ export function AppSidebar({ open, onClose, onNavigate }: AppSidebarProps) {
       )}
       {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 z-50 h-full w-64 bg-gradient-to-br from-[#18181c] via-[#23243a] to-[#18181c] shadow-xl border-r border-[#23243a] transition-transform duration-300
+        className={`fixed top-0 left-0 z-50 h-full w-64 bg-gradient-to-br from-black via-gray-900 to-gray-800 shadow-xl border-r border-gray-800 transition-transform duration-300
         ${open ? 'translate-x-0' : '-translate-x-full'}`}
       >
         <div className="flex flex-col h-full p-6">
-          <div className="font-bold text-xl mb-8">AI Trader Pro</div>
+          <div className="font-bold text-xl mb-8 text-white">AI Trader Pro</div>
           <nav className="flex flex-col gap-4">
             {menu.map((item) => (
               <button
                 key={item.key}
-                className="text-left px-3 py-2 rounded-lg hover:bg-[#23243a] text-white/90 font-medium transition"
+                className="text-left px-3 py-2 rounded-lg hover:bg-gray-800 text-white font-medium transition-colors duration-200"
                 onClick={() => { onNavigate(item.key); onClose(); }}
               >
                 {item.label}
@@ -54,13 +54,13 @@ export function AppSidebar({ open, onClose, onNavigate }: AppSidebarProps) {
             ))}
           </nav>
           <button
-            className="mt-auto text-gray-400 hover:text-white text-sm pt-8"
+            className="mt-auto text-gray-400 hover:text-white text-sm pt-8 transition-colors duration-200"
             onClick={onClose}
           >
             닫기
           </button>
           <button
-            className="text-red-400 hover:text-red-600 text-sm mt-2"
+            className="text-red-400 hover:text-red-300 text-sm mt-2 transition-colors duration-200"
             onClick={handleLogout}
           >
             로그아웃

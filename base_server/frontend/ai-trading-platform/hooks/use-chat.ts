@@ -13,6 +13,7 @@ interface LocalMessage {
   id: string;
   content: string;
   role: string;
+  isTyping?: boolean;
 }
 
 export function useChat() {
@@ -23,6 +24,7 @@ export function useChat() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [personas, setPersonas] = useState<any[]>([]);
+  const [typingMessageId, setTypingMessageId] = useState<string | null>(null);
 
   // 채팅방 목록 불러오기
   const loadRooms = useCallback(async () => {
@@ -107,14 +109,33 @@ export function useChat() {
       }
       const messageObj = parsed.message;
       if (messageObj && messageObj.content) {
-        setMessages(prev => [
-          ...prev,
-          {
-            id: messageObj.message_id || `ai_${Date.now()}`,
+        const aiMessageId = messageObj.message_id || `ai_${Date.now()}`;
+        
+        // 타이핑 효과를 위한 AI 메시지 추가
+        const typingMessage: LocalMessage = {
+          id: aiMessageId,
+          content: messageObj.content,
+          role: "assistant",
+          isTyping: true
+        };
+        
+        setTypingMessageId(aiMessageId);
+        setMessages(prev => [...prev, typingMessage]);
+        
+        // 타이핑 완료 후 실제 메시지로 변경
+        setTimeout(() => {
+          const finalMessage: LocalMessage = {
+            id: aiMessageId,
             content: messageObj.content,
-            role: messageObj.role || "assistant"
-          }
-        ]);
+            role: "assistant"
+          };
+          
+          setMessages(prev => prev.map(msg => 
+            msg.id === aiMessageId ? finalMessage : msg
+          ));
+          
+          setTypingMessageId(null);
+        }, (messageObj.content.split(/\n\s*\n/).filter((p: string) => p.trim().length > 0).length * 400) + 300); // 문단 수에 비례한 지연
       }
     } catch (e) {
       setError("메시지 전송 실패");

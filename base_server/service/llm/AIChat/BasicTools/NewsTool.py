@@ -44,7 +44,7 @@ class NewsTool(BaseFinanceTool):
         except Exception as e:
             return NewsOutput(agent="error", summary=f"❌ 매개변수 오류: {e}")
 
-        api_key = self.ai_chat_service.llm_config.API_Key.get("GNEWS_API_KEY")
+        api_key = self.ai_chat_service.llm_config.API_Key.get("NEWSAPI_KEY")
         params = {
             "q": input.query,
             "lang": "en",

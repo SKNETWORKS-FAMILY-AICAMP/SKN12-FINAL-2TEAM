@@ -55,7 +55,7 @@ function Sparkline({ data, color = "#60a5fa" }: { data: number[]; color?: string
 
 export default function RecommendStocksCards() {
   return (
-    <div className="w-full max-w-6xl bg-[#18181c] rounded-2xl shadow-2xl border border-[#23243a] p-10 flex flex-col gap-8">
+    <div className="w-full max-w-6xl bg-gradient-to-br from-black via-gray-900 to-gray-850 rounded-2xl shadow-2xl border border-gray-800 p-10 flex flex-col gap-8">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full">
         {mockStocks.map((stock, i) => {
           const isUp = stock.change > 0;

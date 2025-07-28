@@ -28,6 +28,9 @@ export async function sendChatMessage(room_id: string, content: string, persona:
   // chat_serialize.py의 ChatMessageSendRequest와 일치
   const payload = { room_id, content, persona };
   console.log("[FRONT] 메시지 전송 요청 payload:", payload);
+  console.log("[FRONT] room_id 타입:", typeof room_id, "값:", room_id);
+  console.log("[FRONT] content 타입:", typeof content, "값:", content);
+  console.log("[FRONT] persona 타입:", typeof persona, "값:", persona);
   const res = await apiClient.post("/api/chat/message/send", payload);
   console.log("[FRONT] 메시지 전송 응답:", res);
   return res;
@@ -39,8 +42,13 @@ export async function fetchChatMessages(room_id: string, page = 1, limit = 50, b
   const sequence = Date.now();
   const payload = { accessToken, sequence, room_id, page, limit, before_timestamp };
   console.log("[FRONT] 메시지 목록 요청 payload:", payload);
+  console.log("[FRONT] room_id 타입:", typeof room_id, "값:", room_id);
   const res = await apiClient.post("/api/chat/messages", payload);
   console.log("[FRONT] 메시지 목록 응답:", res);
+  console.log("[FRONT] 응답 타입:", typeof res);
+  if (res && typeof res === "object" && "data" in res) {
+    console.log("[FRONT] res.data:", (res as any).data);
+  }
   return res;
 }
 

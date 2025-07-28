@@ -95,9 +95,12 @@ class AIChatRouter:
         self.SYSTEM_PROMPT = {
             "role": "system",
             "content": (
-                "너는 금융 데이터를 분석하고 요약하는 AI 전문가야. "
-                "사용자의 질문을 분석해서 필요한 데이터를 툴을 통해 수집하고, "
-                "각 데이터의 출처와 근거를 들어 설명해. "
+                "너는 금융 데이터를 분석하는 AI 전문가야. "
+                "중요: 사용자의 질문에 답하기 위해서는 반드시 적절한 도구를 사용해야 해. "
+                "절대로 도구 없이 답변하지 마. "
+                "재무 실적, 주가, 시세, 뉴스 등 모든 금융 정보는 도구를 통해 수집해야 해. "
+                "도구를 사용해서 실제 데이터를 기반으로 정확한 정보를 제공해. "
+                "도구 사용이 불가능한 경우에도 가능한 도구를 찾아서 사용해. "
                 f"오늘 날짜는 {self.today}야."
             ),
         }
@@ -115,126 +118,94 @@ class AIChatRouter:
     def _define_tools(self):
         """self.ai_chat_service를 재사용하며 description을 명확히 기재"""
 
-        @tool(
-            args_schema=FinancialStatementParams,
-            description="기업 손익계산서(Income Statement) 핵심 항목을 조회·요약합니다.",
-        )
+        @tool(args_schema=FinancialStatementParams)
         def income_statement_tool(**params):
+            """기업의 손익계산서(Income Statement)를 조회합니다. 매출, 비용, 순이익 등 수익성 지표를 제공합니다. 재무 실적 분석에 필수적입니다."""
             agent = FinancialStatementTool(self.ai_chat_service, "income-statement")
             return agent.get_data(**params)
 
-        @tool(
-            args_schema=FinancialStatementParams,
-            description="기업 재무상태표(Balance Sheet) 핵심 항목을 조회·요약합니다.",
-        )
+        @tool(args_schema=FinancialStatementParams)
         def balance_sheet_tool(**params):
-            agent = FinancialStatementTool(
-                self.ai_chat_service, "balance-sheet-statement"
-            )
+            """기업의 재무상태표(Balance Sheet)를 조회합니다. 자산, 부채, 자본 등 재무 건전성 지표를 제공합니다. 재무 실적 분석에 필수적입니다."""
+            agent = FinancialStatementTool(self.ai_chat_service, "balance-sheet-statement")
             return agent.get_data(**params)
 
-        @tool(
-            args_schema=FinancialStatementParams,
-            description="기업 현금흐름표(Cash‑Flow Statement)를 조회·요약합니다.",
-        )
+        @tool(args_schema=FinancialStatementParams)
         def cashflow_statement_tool(**params):
+            """기업의 현금흐름표(Cash Flow Statement)를 조회합니다. 영업, 투자, 재무 활동의 현금 흐름을 제공합니다. 재무 실적 분석에 필수적입니다."""
             agent = FinancialStatementTool(self.ai_chat_service, "cash-flow-statement")
             return agent.get_data(**params)
 
-        @tool(
-            args_schema=FinancialStatementParams,
-            description="수익성·효율성 등 재무비율(Ratios)을 조회합니다.",
-        )
+        @tool(args_schema=FinancialStatementParams)
         def ratios_tool(**params):
+            """수익성·효율성 등 재무비율(Ratios)을 조회합니다."""
             agent = FinancialStatementTool(self.ai_chat_service, "ratios")
             return agent.get_data(**params)
 
-        @tool(
-            args_schema=FinancialStatementParams,
-            description="주당지표·배당·PSR 등 핵심지표(Key Metrics)를 조회합니다.",
-        )
+        @tool(args_schema=FinancialStatementParams)
         def key_metrics_tool(**params):
+            """주당지표·배당·PSR 등 핵심지표(Key Metrics)를 조회합니다."""
             agent = FinancialStatementTool(self.ai_chat_service, "key-metrics")
             return agent.get_data(**params)
 
-        @tool(
-            args_schema=FinancialStatementParams,
-            description="매출·이익 성장률 등 Financial Growth 데이터를 조회합니다.",
-        )
+        @tool(args_schema=FinancialStatementParams)
         def financial_growth_tool(**params):
+            """매출·이익 성장률 등 Financial Growth 데이터를 조회합니다."""
             agent = FinancialStatementTool(self.ai_chat_service, "financial-growth")
             return agent.get_data(**params)
 
-        @tool(
-            args_schema=FinancialStatementParams,
-            description="시가총액·EV/EBITDA 등 Enterprise Value 관련 지표를 조회합니다.",
-        )
+        @tool(args_schema=FinancialStatementParams)
         def enterprise_value_tool(**params):
+            """시가총액·EV/EBITDA 등 Enterprise Value 관련 지표를 조회합니다."""
             agent = FinancialStatementTool(self.ai_chat_service, "enterprise-values")
             return agent.get_data(**params)
 
-        @tool(
-            args_schema=NewsInput,
-            description="실시간·과거 뉴스 헤드라인을 요약해 제공합니다.",
-        )
+        @tool(args_schema=NewsInput)
         def news(**params):
+            """실시간·과거 뉴스 헤드라인을 요약해 제공합니다."""
             agent = NewsTool(self.ai_chat_service)
             return agent.get_data(**params).summary
 
-        @tool(
-            args_schema=TechnicalAnalysisInput,
-            description="RSI·MACD 등 기술적 분석 결과를 요약해 제공합니다.",
-        )
+        @tool(args_schema=TechnicalAnalysisInput)
         def technical_analysis(**params):
+            """RSI·MACD 등 기술적 분석 결과를 요약해 제공합니다."""
             agent = TechnicalAnalysisTool(self.ai_chat_service)
             results = agent.get_data(**params).results
             return "\n".join(r if isinstance(r, str) else r.summary for r in results)
 
-        @tool(
-            args_schema=MarketDataInput,
-            description="주가·거래량 등 일/분/틱 Market Data를 요약합니다.",
-        )
+        @tool(args_schema=MarketDataInput)
         def market_data(**params):
+            """주가·거래량 등 일/분/틱 Market Data를 요약합니다."""
             agent = MarketDataTool(self.ai_chat_service)
             return agent.get_data(**params).summary
 
-        @tool(
-            args_schema=MacroEconomicInput,
-            description="GDP·CPI·실업률 등 거시경제 지표를 요약합니다.",
-        )
+        @tool(args_schema=MacroEconomicInput)
         def macro_economic(**params):
+            """GDP·CPI·실업률 등 거시경제 지표를 요약합니다."""
             agent = MacroEconomicTool(self.ai_chat_service)
             return agent.get_data(**params).summary
 
-        @tool(
-            args_schema=SectorAnalysisInput,
-            description="11개 GICS 섹터의 퍼포먼스·밸류에이션을 분석합니다.",
-        )
+        @tool(args_schema=SectorAnalysisInput)
         def sector_analysis(**params):
+            """11개 GICS 섹터의 퍼포먼스·밸류에이션을 분석합니다."""
             agent = SectorAnalysisTool(self.ai_chat_service)
             return agent.get_data(**params).summary
 
-        @tool(
-            args_schema=IndustryAnalysisInput,
-            description="세부 산업(Industry) 레벨에서 주요 지표를 요약합니다.",
-        )
+        @tool(args_schema=IndustryAnalysisInput)
         def industry_analysis(**params):
+            """세부 산업(Industry) 레벨에서 주요 지표를 요약합니다."""
             agent = IndustryAnalysisTool(self.ai_chat_service)
             return agent.get_data(**params).summary
 
-        @tool(
-            args_schema=MarketRegimeDetectorInput,
-            description="시장 레짐(강세/약세/횡보) 판단을 위한 통계 모델을 실행합니다.",
-        )
+        @tool(args_schema=MarketRegimeDetectorInput)
         def market_regime_detector_tool(**params):
+            """시장 레짐(강세/약세/횡보) 판단을 위한 통계 모델을 실행합니다."""
             agent = MarketRegimeDetector()
             return agent.get_data(**params).summary
 
-        @tool(
-            args_schema=KalmanRegimeFilterInput,
-            description="칼만 필터 기반 레짐 전환 감지 결과를 제공합니다.",
-        )
+        @tool(args_schema=KalmanRegimeFilterInput)
         def kalman_regime_filter_tool(**params):
+            """칼만 필터 기반 레짐 전환 감지 결과를 제공합니다."""
             agent = KalmanRegimeFilterTool(self.ai_chat_service)
             return agent.get_data(**params).summary
 
@@ -259,26 +230,33 @@ class AIChatRouter:
     # ────────────────── LangGraph 로직 ───────────────────────────
     def should_continue(self, state: MessagesState):
         """마지막 메시지에 툴 호출이 있으면 →툴 노드, 없으면 END"""
+        from service.core.logger import Logger
 
         last = state["messages"][-1]
         tool_calls = getattr(last, "tool_calls", None)
+        
+        Logger.debug(f"should_continue: 마지막 메시지 타입={type(last).__name__}")
+        Logger.debug(f"should_continue: tool_calls={tool_calls}")
+        
         if not tool_calls:
+            Logger.debug("should_continue: 도구 호출 없음 → END")
             return END
 
-        # 이미 호출된 툴 set
-        already_called = {
-            _extract_tool_name(tc)
-            for msg in state["messages"]
-            for tc in getattr(msg, "tool_calls", [])
-            if _extract_tool_name(tc)
-        }
-
-        # 새로운 호출이 중복되면 종료, 아니면 툴 실행
+        # 현재 메시지의 도구 호출만 확인 (중복 체크 제거)
+        current_tool_calls = []
         for tc in tool_calls:
             name = _extract_tool_name(tc)
-            if name and name in already_called:
-                return END
-        return "tools"
+            if name:
+                current_tool_calls.append(name)
+        
+        Logger.debug(f"should_continue: 현재 도구 호출들={current_tool_calls}")
+        
+        if current_tool_calls:
+            Logger.debug("should_continue: 도구 호출 있음 → tools")
+            return "tools"
+        else:
+            Logger.debug("should_continue: 유효한 도구 호출 없음 → END")
+            return END
 
     def call_model(self, state: MessagesState):
         print("🔄 call_model: ", state["messages"])
@@ -300,10 +278,34 @@ class AIChatRouter:
 
     # ───────────────────────── Public API ──────────────────────────
     def run_question(self, question: str) -> str:
+        from service.core.logger import Logger
+        
+        Logger.debug(f"Router.run_question 시작: {question}")
         graph = self.build_workflow()
         init = [self.SYSTEM_PROMPT, {"role": "user", "content": question}]
         result = graph.invoke({"messages": init})
-        return "\n".join(getattr(m, "content", str(m)) for m in result["messages"])
+        
+        Logger.debug(f"Router 실행 완료, 메시지 수: {len(result['messages'])}")
+        
+        # 도구 호출 결과만 추출하여 반환
+        tool_results = []
+        for i, m in enumerate(result["messages"]):
+            Logger.debug(f"메시지 {i}: {type(m).__name__}, content={getattr(m, 'content', 'N/A')[:100]}...")
+            if hasattr(m, 'name') and m.name:  # ToolMessage인 경우
+                tool_results.append(f"🛠 {m.name}: {m.content}")
+                Logger.debug(f"도구 결과 발견: {m.name}")
+        
+        if tool_results:
+            Logger.debug(f"도구 결과 반환: {len(tool_results)}개")
+            return "\n".join(tool_results)
+        else:
+            # 도구 호출이 없으면 마지막 AI 응답 반환
+            for m in reversed(result["messages"]):
+                if hasattr(m, 'content') and m.content and not hasattr(m, 'name'):
+                    Logger.debug(f"AI 응답 반환: {m.content[:100]}...")
+                    return m.content
+            Logger.warn("도구 실행 결과를 찾을 수 없습니다.")
+            return "도구 실행 결과를 찾을 수 없습니다."
 
     def print_clean_messages(self, messages):
         """터미널용 간략 로그 출력"""

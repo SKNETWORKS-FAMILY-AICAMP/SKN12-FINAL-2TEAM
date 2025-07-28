@@ -13,14 +13,15 @@ const mockIndices = [
 
 export default function WorldIndicesTicker() {
   const [widths, setWidths] = useState<number[]>([]);
-  const refs = useRef<(HTMLDivElement | null)[]>([]);
+  const refs = useRef<Map<number, HTMLDivElement | null>>(new Map());
 
   useEffect(() => {
-    setWidths(refs.current.map(ref => ref?.offsetWidth || 0));
+    const widthArray = Array.from(refs.current.values()).map(ref => ref?.offsetWidth || 0);
+    setWidths(widthArray);
   }, []);
 
   return (
-    <div className="relative w-full overflow-hidden bg-[#18181c] border-b border-[#23243a]" style={{ height: 48 }}>
+    <div className="relative w-full overflow-hidden bg-black border-b border-gray-800" style={{ height: 40 }}>
       <div className="animate-marquee flex flex-nowrap items-center h-full gap-4">
         {mockIndices.concat(mockIndices).map((idx, i) => {
           const isUp = idx.change > 0;
@@ -30,13 +31,15 @@ export default function WorldIndicesTicker() {
           return (
             <div
               key={idx.symbol + i}
-              ref={el => refs.current[i] = el}
+              ref={(el) => {
+                refs.current.set(i, el);
+              }}
               className="flex items-center gap-1 flex-shrink-0 whitespace-nowrap"
               style={{ minWidth: 80 }}
             >
-              <span className="font-medium text-base tracking-wide" style={{ letterSpacing: 1 }}>{idx.symbol}</span>
-              <span className={`font-extrabold text-xl ${color}`}>{idx.price.toLocaleString()}</span>
-              <span className={`ml-1 ${color} text-xl`}>{arrow}</span>
+              <span className="font-light text-sm tracking-wide" style={{ letterSpacing: 1 }}>{idx.symbol}</span>
+              <span className={`font-light text-base ${color}`}>{idx.price.toLocaleString()}</span>
+              <span className={`ml-1 ${color} text-lg font-light`}>{arrow}</span>
             </div>
           );
         })}
