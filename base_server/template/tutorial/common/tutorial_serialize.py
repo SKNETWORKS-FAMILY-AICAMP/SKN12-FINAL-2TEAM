@@ -1,53 +1,24 @@
-from typing import Optional, List, Dict, Any
+from typing import Dict
 from service.net.protocol_base import BaseRequest, BaseResponse
-from .tutorial_model import TutorialStep, TutorialProgress, TutorialSession
 
 # ============================================================================
-# 튜토리얼 시작 (REQ-HELP-001~004)
-# 의거: 화면 004 (튜토리얼), REQ-HELP-001~004
+# 튜토리얼 저장 전용 - 초간단 API
 # ============================================================================
 
-class TutorialStartRequest(BaseRequest):
-    """튜토리얼 시작 요청"""
-    tutorial_type: str = "ONBOARDING"  # ONBOARDING, FEATURE_SPECIFIC
-    user_level: str = "BEGINNER"
+class TutorialCompleteStepRequest(BaseRequest):
+    """튜토리얼 스텝 완료 저장"""
+    tutorial_type: str
+    step_number: int
 
-class TutorialStartResponse(BaseResponse):
-    """튜토리얼 시작 응답"""
-    session_id: str = ""
-    steps: List[TutorialStep] = []
-    total_steps: int = 0
+class TutorialCompleteStepResponse(BaseResponse):
+    """응답"""
+    pass
 
-class TutorialProgressRequest(BaseRequest):
-    """튜토리얼 진행 상태 업데이트"""
-    session_id: str
-    current_step: int
-    action_completed: bool = False
-    time_spent: int = 0
+class TutorialGetProgressRequest(BaseRequest):
+    """진행 상태 조회 - 세션에서 사용자 정보 가져옴"""
+    pass
 
-class TutorialProgressResponse(BaseResponse):
-    """튜토리얼 진행 상태 응답"""
-    progress: Optional[TutorialProgress] = None
-    next_step: Optional[TutorialStep] = None
-    is_final_step: bool = False
-
-class TutorialCompleteRequest(BaseRequest):
-    """튜토리얼 완료 요청"""
-    session_id: str
-    feedback: Optional[str] = ""
-    rating: int = 5
-
-class TutorialCompleteResponse(BaseResponse):
-    """튜토리얼 완료 응답"""
-    completion_reward: int = 0
-    message: str = ""
-    next_action: str = "GOTO_DASHBOARD"
-
-class TutorialListRequest(BaseRequest):
-    """이용 가능한 튜토리얼 목록 요청"""
-    category: str = "ALL"  # ALL, BASIC, ADVANCED
-
-class TutorialListResponse(BaseResponse):
-    """튜토리얼 목록 응답"""
-    tutorials: List[Dict[str, Any]] = []
-    user_progress: Dict[str, TutorialProgress] = {}
+class TutorialGetProgressResponse(BaseResponse):
+    """진행 상태 응답"""
+    tutorial_type: str = ""
+    step_number: int = 0  # 0이면 시작 안함, N이면 N번째 스텝까지 완료

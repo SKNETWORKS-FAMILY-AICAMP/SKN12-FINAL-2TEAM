@@ -210,6 +210,11 @@ class ChatStateMachine:
                 Logger.warn("ChatStateMachine이 초기화되지 않음")
                 return False
             
+            # DELETED 상태일 때 TTL 설정 (7일 후 자동 삭제)
+            if to_state == MessageState.DELETED:
+                ttl_seconds = 7 * 24 * 3600  # 7일 = 604800초
+                Logger.debug(f"DELETED 상태 TTL 설정: {message_id}, TTL={ttl_seconds}초 (7일)")
+            
             # 현재 상태 확인
             is_initial_state = False
             if from_state is None:
@@ -345,6 +350,11 @@ class ChatStateMachine:
             if not self.__class__._initialized:
                 Logger.warn("ChatStateMachine이 초기화되지 않음")
                 return False
+            
+            # DELETED 상태일 때 TTL 설정 (7일 후 자동 삭제)
+            if to_state == RoomState.DELETED:
+                ttl_seconds = 7 * 24 * 3600  # 7일 = 604800초
+                Logger.debug(f"DELETED 상태 TTL 설정: {room_id}, TTL={ttl_seconds}초 (7일)")
             
             # 현재 상태 확인
             is_initial_state = False
