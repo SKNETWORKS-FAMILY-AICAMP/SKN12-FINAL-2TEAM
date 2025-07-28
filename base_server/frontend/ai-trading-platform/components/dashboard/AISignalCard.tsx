@@ -2,7 +2,7 @@ import React from "react";
 
 export function AISignalCard({ signals }: { signals: { label: string; action: string; confidence: string; change: string; reason: string }[] }) {
   return (
-    <div className="bg-[#23243a] rounded-xl shadow-lg p-6 min-w-[260px] flex flex-col items-start w-full max-w-sm border border-[#353657]">
+    <div className="bg-gradient-to-br from-gray-950 via-gray-900 to-gray-800 rounded-xl shadow-lg p-6 min-w-[260px] flex flex-col items-start w-full max-w-sm border border-gray-800">
       <div className="text-lg font-bold mb-4 text-white">AI Trading Signal</div>
       <div className="flex flex-col gap-4 w-full">
         {signals.map((s, i) => {

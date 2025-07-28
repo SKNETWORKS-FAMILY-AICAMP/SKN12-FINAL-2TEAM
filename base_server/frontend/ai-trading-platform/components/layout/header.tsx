@@ -3,8 +3,6 @@
 import { Badge } from "@/components/ui/badge"
 import { Search } from "lucide-react"
 import { Input } from "@/components/ui/input"
-import { ThemeToggle } from "./theme-toggle"
-import { NotificationDropdown } from "./notification-dropdown"
 import { Menu } from "lucide-react"
 
 export function Header({ onSidebarOpen = () => {} }: { onSidebarOpen?: () => void }) {
@@ -29,18 +27,14 @@ export function Header({ onSidebarOpen = () => {} }: { onSidebarOpen?: () => voi
       </div>
 
       {/* Market Status */}
-      <div className="hidden md:flex items-center gap-2">
+      <div className="hidden md:flex items-center gap-2 ml-auto">
         <Badge variant="outline" className="text-emerald-200 border-emerald-700 bg-black/60">
           <div className="w-2 h-2 bg-emerald-400 rounded-full mr-1" />
           시장 개장
         </Badge>
       </div>
 
-      {/* Actions */}
-      <div className="flex items-center gap-2">
-        <NotificationDropdown />
-        <ThemeToggle />
-      </div>
+
     </header>
   )
 }
