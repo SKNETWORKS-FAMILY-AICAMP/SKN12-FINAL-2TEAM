@@ -115,7 +115,7 @@ export default function PortfolioPage() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-[#0a0a0a] via-[#18181c] to-[#23243a] text-white">
+    <div className="min-h-screen w-full bg-gradient-to-br from-black via-gray-900 to-gray-820 text-white">
       <Header onSidebarOpen={() => setSidebarOpen(true)} />
       <AppSidebar 
         open={sidebarOpen} 

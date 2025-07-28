@@ -52,14 +52,21 @@ export async function fetchChatMessages(room_id: string, page = 1, limit = 50, b
   return res;
 }
 
-// 채팅방 삭제
-export async function deleteChatRoom(room_id: string) {
-  const accessToken = typeof window !== "undefined" ? localStorage.getItem("accessToken") : "";
+// 채팅방 이름 변경
+export async function updateChatRoomTitle(roomId: string, newTitle: string) {
+  const accessToken = typeof window !== "undefined" ? localStorage.getItem("accessToken") || "" : "";
   const sequence = Date.now();
-  const payload = { accessToken, sequence, room_id };
-  console.log("[FRONT] 채팅방 삭제 요청 payload:", payload);
-  console.log("[FRONT] Authorization 헤더:", accessToken ? `Bearer ${accessToken}` : "(없음)");
-  const res = await apiClient.post("/api/chat/room/delete", payload);
-  console.log("[FRONT] 채팅방 삭제 응답:", res);
-  return res;
+  return await apiClient.post("/api/chat/room/update", {
+    room_id: roomId,
+    new_title: newTitle,
+    accessToken,
+    sequence,
+  });
+}
+
+// 채팅방 삭제
+export async function deleteChatRoom(roomId: string) {
+  return await apiClient.post("/api/chat/room/delete", {
+    room_id: roomId,
+  });
 } 

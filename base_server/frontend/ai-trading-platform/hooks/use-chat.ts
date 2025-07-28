@@ -6,7 +6,8 @@ import {
   createChatRoom as apiCreateChatRoom,
   sendChatMessage as apiSendChatMessage,
   fetchChatMessages,
-  deleteChatRoom as apiDeleteChatRoom
+  deleteChatRoom as apiDeleteChatRoom,
+  updateChatRoomTitle as apiUpdateChatRoomTitle
 } from "@/lib/api/chat";
 
 interface LocalMessage {
@@ -26,22 +27,26 @@ export function useChat() {
   const [personas, setPersonas] = useState<any[]>([]);
   const [typingMessageId, setTypingMessageId] = useState<string | null>(null);
 
-  // 채팅방 목록 불러오기
+  // 채팅방 목록 불러오기 (항상 백엔드에서 최신 데이터 사용)
   const loadRooms = useCallback(async () => {
     try {
       const res = await fetchChatRooms();
       const data = typeof res === "string" ? JSON.parse(res) : res;
-      console.log("[FRONT] 채팅방 목록 응답:", data);
-      const rooms = data.rooms || [];
+      let rooms = data.rooms || [];
+      // room_state가 'DELETED'이거나, 방 정보가 불완전하면 무조건 목록에서 제외
+      rooms = rooms.filter((room: any) => {
+        if (!room) return false;
+        if (room.room_state === 'DELETED') return false;
+        if (!room.room_id || !room.title || !room.ai_persona) return false;
+        return true;
+      });
       setRooms(rooms);
-      if (rooms.length > 0) {
-        setCurrentRoomId(rooms[0].room_id);
-      }
+      if (rooms.length === 0) setCurrentRoomId(null);
+      else if (!rooms.find((r: any) => r.room_id === currentRoomId)) setCurrentRoomId(rooms[0].room_id);
     } catch (e) {
       setError("채팅방 목록 불러오기 실패");
-      console.error("채팅방 목록 불러오기 실패:", e);
     }
-  }, []);
+  }, [currentRoomId]);
 
   // 메시지 목록 불러오기
   const loadMessages = useCallback(async (roomId: string) => {
@@ -49,7 +54,11 @@ export function useChat() {
       const res = await fetchChatMessages(roomId);
       const data = typeof res === "string" ? JSON.parse(res) : res;
       console.log("[FRONT] 메시지 목록 응답:", data);
-      setMessages((res as any).messages || []);
+      setMessages(
+        (data && data.messages) ||
+        (data && data.data && data.data.messages) ||
+        []
+      );
     } catch (e) {
       setError("메시지 불러오기 실패");
       console.error("메시지 불러오기 실패:", e);
@@ -148,11 +157,28 @@ export function useChat() {
   const deleteRoom = useCallback(async (roomId: string) => {
     try {
       await apiDeleteChatRoom(roomId);
-      await loadRooms();
+      setRooms(prev => prev.filter(room => room.room_id !== roomId));
+      if (currentRoomId === roomId) setCurrentRoomId(null);
+      // 삭제 후 즉시 목록 새로고침
+      loadRooms();
     } catch (e) {
       setError("채팅방 삭제 실패");
     }
-  }, [loadRooms]);
+  }, [currentRoomId, loadRooms]);
+
+  // 채팅방 이름 변경
+  const handleRenameRoom = useCallback(async (roomId: string, newTitle: string) => {
+    try {
+      await apiUpdateChatRoomTitle(roomId, newTitle);
+      setRooms(prev =>
+        prev.map(room =>
+          room.room_id === roomId ? { ...room, title: newTitle } : room
+        )
+      );
+    } catch (e) {
+      setError("채팅방 이름 변경 실패");
+    }
+  }, []);
 
   useEffect(() => {
     loadRooms();
@@ -183,6 +209,7 @@ export function useChat() {
     createRoom,
     sendMessage,
     deleteRoom,
+    handleRenameRoom, // 추가
     selectedPersona,
     setSelectedPersona,
     personas,
