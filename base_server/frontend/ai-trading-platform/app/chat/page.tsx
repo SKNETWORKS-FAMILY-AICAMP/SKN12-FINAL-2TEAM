@@ -181,7 +181,11 @@ export default function ChatPage() {
             <span>뒤로가기</span>
           </button>
           <button
-            className={`flex items-center gap-2 font-semibold transition-colors text-blue-400 hover:text-blue-300`}
+            className={`flex items-center gap-2 font-semibold transition-colors ${
+              isLoading 
+                ? 'text-gray-500 cursor-not-allowed' 
+                : 'text-blue-400 hover:text-blue-300'
+            }`}
             onClick={handleNewChat}
             disabled={isLoading}
           >
@@ -191,15 +195,27 @@ export default function ChatPage() {
         </div>
         {/* Navigation */}
         <div className="p-4 space-y-2">
-          <div className="flex items-center gap-2 text-gray-300 hover:text-white cursor-pointer py-2">
+          <div className={`flex items-center gap-2 py-2 ${
+            isLoading 
+              ? 'text-gray-500 cursor-not-allowed' 
+              : 'text-gray-300 hover:text-white cursor-pointer'
+          }`}>
             <MessageCircle size={16} />
             <span>채팅</span>
           </div>
-          <div className="flex items-center gap-2 text-gray-300 hover:text-white cursor-pointer py-2">
+          <div className={`flex items-center gap-2 py-2 ${
+            isLoading 
+              ? 'text-gray-500 cursor-not-allowed' 
+              : 'text-gray-300 hover:text-white cursor-pointer'
+          }`}>
             <FolderOpen size={16} />
             <span>프로젝트</span>
           </div>
-          <div className="flex items-center gap-2 text-gray-300 hover:text-white cursor-pointer py-2">
+          <div className={`flex items-center gap-2 py-2 ${
+            isLoading 
+              ? 'text-gray-500 cursor-not-allowed' 
+              : 'text-gray-300 hover:text-white cursor-pointer'
+          }`}>
             <Zap size={16} />
             <span>아티팩트</span>
           </div>
@@ -212,15 +228,17 @@ export default function ChatPage() {
               {rooms.map((item) => (
                 <div
                   key={item.room_id}
-                  className={`flex items-center group px-3 py-2 text-sm rounded cursor-pointer truncate transition-all font-medium ${
+                  className={`flex items-center group px-3 py-2 text-sm rounded truncate transition-all font-medium ${
                     currentRoomId === item.room_id
                       ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow'
-                      : 'text-gray-300 hover:bg-[#23243a]'
+                      : isLoading 
+                        ? 'text-gray-500 cursor-not-allowed' 
+                        : 'text-gray-300 hover:bg-[#23243a] cursor-pointer'
                   }`}
                 >
                   <div
                     className="flex-1 truncate"
-                    onClick={() => handleSelectChat(item.room_id)}
+                    onClick={() => !isLoading && handleSelectChat(item.room_id)}
                   >
                     {item.title || "채팅방"}
                   </div>
@@ -239,7 +257,11 @@ export default function ChatPage() {
         </div>
         {/* Bottom Section */}
         <div className="p-4 border-t border-[#23243a]">
-          <div className="flex items-center gap-2 text-gray-300 hover:text-white cursor-pointer py-2">
+          <div className={`flex items-center gap-2 py-2 ${
+            isLoading 
+              ? 'text-gray-500 cursor-not-allowed' 
+              : 'text-gray-300 hover:text-white cursor-pointer'
+          }`}>
             <Settings size={16} />
             <span>설정</span>
           </div>
@@ -251,12 +273,19 @@ export default function ChatPage() {
         <div className="flex items-center justify-between p-4 border-b border-[#23243a] bg-black/60 backdrop-blur-xl">
           <div className="flex items-center gap-4">
             <button 
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-2 hover:bg-[#23243a] rounded transition"
+              onClick={() => !isLoading && setSidebarOpen(!sidebarOpen)}
+              className={`p-2 rounded transition ${
+                isLoading 
+                  ? 'text-gray-500 cursor-not-allowed' 
+                  : 'hover:bg-[#23243a]'
+              }`}
+              disabled={isLoading}
             >
               <Menu size={20} />
             </button>
-            <span className="text-lg font-bold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">AI 트레이딩 챗</span>
+            <span className="text-lg font-bold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
+              AI 트레이딩 챗
+            </span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-400">무료 요금제</span>
@@ -268,8 +297,13 @@ export default function ChatPage() {
           <div className="w-full max-w-2xl h-full flex flex-col">
             <div className="mb-8 text-center">
               <h1 className="text-4xl font-light mb-2 bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
-                {rooms.find((r) => r.room_id === currentRoomId)?.title || "채팅을 선택하세요"}
+                {rooms.find((r) => r.room_id === currentRoomId)?.title || (rooms.length === 0 ? "새 채팅방을 만들어보세요" : "채팅을 선택하세요")}
               </h1>
+              {rooms.length === 0 && (
+                <p className="text-gray-400 text-lg mt-2">
+                  왼쪽의 "새 채팅" 버튼을 클릭하여 AI와 대화를 시작하세요
+                </p>
+              )}
             </div>
             {/* 채팅 메시지 영역: 항상 아래 정렬 */}
             <div
@@ -316,13 +350,13 @@ export default function ChatPage() {
                     handleSubmit(e);
                   }
                 }}
-                placeholder="메시지를 입력하세요..."
+                placeholder={currentRoomId ? "메시지를 입력하세요..." : "채팅방을 선택하거나 새로 만들어주세요"}
                 className="w-full bg-[#18181c] border border-[#23243a] rounded-lg px-4 py-3 pr-12 text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 shadow"
-                disabled={isLoading}
+                disabled={isLoading || !currentRoomId}
               />
               <button
                 onClick={handleSubmit}
-                disabled={isLoading || !message.trim()}
+                disabled={isLoading || !message.trim() || !currentRoomId}
                 className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 bg-gradient-to-r from-blue-500 to-indigo-600 hover:opacity-90 disabled:opacity-50 rounded-lg transition-all"
               >
                 <ArrowUp size={16} />

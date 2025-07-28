@@ -15,6 +15,8 @@ export default function ChatMessage({ message }: { message: Message }) {
   const safeHtml = DOMPurify.sanitize(content);
 
   // 디버깅용 로그
+  console.log("[ChatMessage] message:", message);
+  console.log("[ChatMessage] role:", message.role, "isUser:", isUser);
   console.log("[ChatMessage] content (sanitized):", safeHtml);
 
   return (
