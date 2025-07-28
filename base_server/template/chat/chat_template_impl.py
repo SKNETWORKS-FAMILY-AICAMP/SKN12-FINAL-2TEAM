@@ -552,8 +552,8 @@ class ChatTemplateImpl(BaseTemplate):
                 # 메시지 캐시 삭제
                 await redis.delete(msg_key)
             
-            # 1.5. Redis 삭제 성공 시 DELETED 상태로 전이
-            await state_machine.transition_room(request.room_id, RoomState.DELETED, RoomState.DELETING)
+            # 1.5. Redis 삭제 성공 후에도 DELETING 상태 유지 (컨슈머에서 DB 삭제 후 DELETED로 변경)
+            # DELETING 상태를 유지해야 컨슈머가 DB 삭제를 수행할 수 있음
             
             # 2. MessageQueue로 DB Soft Delete 이벤트 발행 (비동기 처리)
             if ServiceContainer.is_queue_service_initialized():
