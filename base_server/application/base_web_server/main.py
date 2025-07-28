@@ -177,6 +177,17 @@ async def lifespan(app: FastAPI):
             Logger.info("✅ 캐시 서비스 초기화 완료")
             ServiceContainer.set_cache_service_initialized(True)
         
+        # ChatStateMachine 초기화 (CacheService 의존)
+        try:
+            from template.chat.chat_state_machine import initialize_chat_state_machine
+            if await initialize_chat_state_machine():
+                Logger.info("✅ ChatStateMachine 초기화 완료")
+            else:
+                Logger.warn("⚠️ ChatStateMachine 초기화 실패 - 채팅 순서 보장 기능 제한됨")
+        except Exception as e:
+            Logger.error(f"❌ ChatStateMachine 초기화 실패: {e}")
+            Logger.warn("⚠️ ChatStateMachine 없이 계속 진행 - 채팅 Race Condition 가능")
+        
         # DB 성공 여부와 상관 없이 AIChatService는 무조건 생성·등록
         ai_service = AIChatService(app_config.llmConfig)
         ServiceContainer.init(database_service if database_service else None, ai_service)
@@ -896,6 +907,14 @@ async def lifespan(app: FastAPI):
         Logger.info("TemplateService 및 TemplateContext 정리 완료")
     except Exception as e:
         Logger.error(f"TemplateService 종료 오류: {e}")
+    
+    # ChatStateMachine 종료 (TemplateService 이후, CacheService 이전)
+    try:
+        from template.chat.chat_state_machine import shutdown_chat_state_machine
+        await shutdown_chat_state_machine()
+        Logger.info("✅ ChatStateMachine 종료 완료")
+    except Exception as e:
+        Logger.error(f"❌ ChatStateMachine 종료 오류: {e}")
     
     # DataTableManager 정리
     try:

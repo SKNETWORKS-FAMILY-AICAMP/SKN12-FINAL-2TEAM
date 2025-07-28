@@ -54,3 +54,30 @@ class ChatRoomDeleteRequest(BaseRequest):
 class ChatRoomDeleteResponse(BaseResponse):
     """채팅방 삭제 응답"""
     message: str = ""
+
+# ============================================================================
+# 채팅방 제목 변경 기능 (신규 추가)
+# ============================================================================
+
+class ChatRoomUpdateRequest(BaseRequest):
+    """채팅방 제목 변경 요청"""
+    room_id: str
+    new_title: str
+
+class ChatRoomUpdateResponse(BaseResponse):
+    """채팅방 제목 변경 응답"""
+    message: str = ""
+    new_title: Optional[str] = None
+
+# ============================================================================
+# 메시지 삭제 기능 (신규 추가)
+# ============================================================================
+
+class ChatMessageDeleteRequest(BaseRequest):
+    """메시지 삭제 요청"""
+    message_id: str
+    room_id: str
+
+class ChatMessageDeleteResponse(BaseResponse):
+    """메시지 삭제 응답"""
+    message: str = ""

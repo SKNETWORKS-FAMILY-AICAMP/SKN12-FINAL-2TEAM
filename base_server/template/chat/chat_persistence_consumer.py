@@ -24,6 +24,9 @@ from service.scheduler.scheduler_service import SchedulerService
 from service.scheduler.base_scheduler import ScheduleJob, ScheduleType
 from service.service_container import ServiceContainer
 
+# State Machine 추가
+from template.chat.chat_state_machine import get_chat_state_machine, MessageState, RoomState
+
 
 class ChatPersistenceConsumer:
     """채팅 메시지 DB 저장 컨슈머
@@ -119,6 +122,12 @@ class ChatPersistenceConsumer:
                 return await self._handle_room_create(message)
             elif message.message_type == "CHAT_MESSAGE_SAVE":
                 return await self._handle_message_save(message)
+            elif message.message_type == "CHAT_ROOM_DELETE":
+                return await self._handle_room_delete(message)
+            elif message.message_type == "CHAT_ROOM_UPDATE":
+                return await self._handle_room_update(message)
+            elif message.message_type == "CHAT_MESSAGE_DELETE":
+                return await self._handle_message_delete(message)
             else:
                 Logger.warn(f"알 수 없는 메시지 타입: {message.message_type} (consumer: {self.consumer_id})")
                 return True  # 무시하고 ACK
@@ -133,6 +142,21 @@ class ChatPersistenceConsumer:
         room_id = payload.get('room_id')
         account_db_key = payload.get('account_db_key', 0)
         shard_id = payload.get('shard_id', 1)  # 매핑 테이블에서 조회된 shard_id 사용
+        
+        # State Machine으로 방 상태 확인
+        state_machine = get_chat_state_machine()
+        
+        # 방 상태를 PENDING → PROCESSING으로 전이
+        can_process = await state_machine.transition_room(room_id, RoomState.PROCESSING, RoomState.PENDING)
+        if not can_process:
+            # 현재 상태 확인
+            current_state = await state_machine.get_room_state(room_id)
+            if current_state == RoomState.ACTIVE:
+                Logger.info(f"방이 이미 ACTIVE 상태: {room_id} (consumer: {self.consumer_id})")
+                return True  # 이미 처리됨
+            else:
+                Logger.warn(f"방 생성 상태 전이 실패: {room_id} current_state={current_state} (consumer: {self.consumer_id})")
+                return False
         
         # Lock으로 중복 생성 방지 (멀티 프로세스 환경에서 중요)
         lock_key = f"chat_room_create:{room_id}"
@@ -163,10 +187,15 @@ class ChatPersistenceConsumer:
                 )
                 
                 if result and result[0].get('result') in ['SUCCESS', 'EXISTS']:
+                    # DB 저장 성공 시 PROCESSING → ACTIVE 상태로 전이
+                    await state_machine.transition_room(room_id, RoomState.ACTIVE, RoomState.PROCESSING)
                     Logger.info(f"채팅방 생성 완료: room_id={room_id}, shard_id={shard_id}, consumer={self.consumer_id}")
                     return True
                 else:
-                    Logger.warn(f"채팅방 생성 결과: {result} (consumer: {self.consumer_id})")
+                    # DB 저장 실패 시 Redis 데이터도 함께 정리
+                    await self._cleanup_failed_room_creation(room_id, account_db_key)
+                    await state_machine.transition_room(room_id, RoomState.DELETED, RoomState.PROCESSING)
+                    Logger.warn(f"채팅방 생성 실패로 Redis 데이터 정리: {result} (consumer: {self.consumer_id})")
                     return False
                     
             finally:
@@ -174,7 +203,167 @@ class ChatPersistenceConsumer:
                 await lock_service.release(lock_key, token)
                 
         except Exception as e:
-            Logger.error(f"채팅방 생성 DB 저장 실패: {e} (consumer: {self.consumer_id})")
+            # 예외 발생 시 Redis 데이터도 함께 정리
+            await self._cleanup_failed_room_creation(room_id, account_db_key)
+            await state_machine.transition_room(room_id, RoomState.DELETED, RoomState.PROCESSING)
+            Logger.error(f"채팅방 생성 DB 저장 실패로 Redis 데이터 정리: {e} (consumer: {self.consumer_id})")
+            return False
+
+    async def _handle_room_delete(self, message: QueueMessage) -> bool:
+        """채팅방 삭제 이벤트 처리 - 즉시 DB Soft Delete"""
+        payload = message.payload
+        room_id = payload.get('room_id')
+        account_db_key = payload.get('account_db_key', 0)
+        shard_id = payload.get('shard_id', 1)
+        
+        # State Machine으로 방 상태 확인
+        state_machine = get_chat_state_machine()
+        current_state = await state_machine.get_room_state(room_id)
+        
+        # DELETED 상태가 아닌 경우만 처리 (중복 삭제 방지)
+        if current_state != RoomState.DELETED:
+            Logger.info(f"채팅방 삭제 처리: room_id={room_id}, current_state={current_state}")
+        else:
+            Logger.info(f"채팅방 이미 삭제됨: room_id={room_id}")
+            return True  # 이미 삭제된 상태이므로 성공으로 처리
+        
+        # Lock으로 중복 삭제 방지
+        lock_key = f"chat_room_delete:{room_id}"
+        
+        try:
+            if not ServiceContainer.is_lock_service_initialized():
+                Logger.error("LockService가 초기화되지 않았습니다")
+                return False
+            
+            lock_service = ServiceContainer.get_lock_service()
+            
+            # Lock 획득
+            token = await lock_service.acquire(lock_key, ttl=self._lock_ttl, timeout=self._lock_timeout)
+            if not token:
+                Logger.warn(f"채팅방 삭제 Lock 획득 실패: {room_id} (consumer: {self.consumer_id})")
+                return False
+            
+            try:
+                database_service = ServiceContainer.get_database_service()
+                
+                # Soft Delete 프로시저 호출
+                result = await database_service.call_shard_procedure(
+                    shard_id,
+                    'fp_chat_room_soft_delete',
+                    (room_id, account_db_key)
+                )
+                
+                if result and result[0].get('result') == 'SUCCESS':
+                    # DB 삭제 성공 시 최종 DELETED 상태로 전이 (이미 DELETED일 수도 있음)
+                    if current_state != RoomState.DELETED:
+                        await state_machine.transition_room(room_id, RoomState.DELETED, current_state)
+                    Logger.info(f"채팅방 Soft Delete 완료: room_id={room_id}, shard_id={shard_id}, consumer={self.consumer_id}")
+                    return True
+                else:
+                    Logger.warn(f"채팅방 삭제 결과: {result} (consumer: {self.consumer_id})")
+                    return False
+                    
+            finally:
+                await lock_service.release(lock_key, token)
+                
+        except Exception as e:
+            Logger.error(f"채팅방 삭제 DB 처리 실패: {e} (consumer: {self.consumer_id})")
+            return False
+
+    async def _handle_room_update(self, message: QueueMessage) -> bool:
+        """채팅방 제목 변경 이벤트 처리 - 즉시 DB 업데이트"""
+        payload = message.payload
+        room_id = payload.get('room_id')
+        account_db_key = payload.get('account_db_key', 0)
+        shard_id = payload.get('shard_id', 1)
+        new_title = payload.get('new_title', '')
+        
+        # Lock으로 동시 수정 방지
+        lock_key = f"chat_room_update:{room_id}"
+        
+        try:
+            if not ServiceContainer.is_lock_service_initialized():
+                Logger.error("LockService가 초기화되지 않았습니다")
+                return False
+            
+            lock_service = ServiceContainer.get_lock_service()
+            
+            # Lock 획득
+            token = await lock_service.acquire(lock_key, ttl=self._lock_ttl, timeout=self._lock_timeout)
+            if not token:
+                Logger.warn(f"채팅방 제목 변경 Lock 획득 실패: {room_id} (consumer: {self.consumer_id})")
+                return False
+            
+            try:
+                database_service = ServiceContainer.get_database_service()
+                
+                # 제목 변경 프로시저 호출
+                result = await database_service.call_shard_procedure(
+                    shard_id,
+                    'fp_chat_room_update_title',
+                    (room_id, account_db_key, new_title)
+                )
+                
+                if result and result[0].get('result') == 'SUCCESS':
+                    Logger.info(f"채팅방 제목 변경 완료: room_id={room_id}, new_title={new_title}, shard_id={shard_id}, consumer={self.consumer_id}")
+                    return True
+                else:
+                    Logger.warn(f"채팅방 제목 변경 결과: {result} (consumer: {self.consumer_id})")
+                    return False
+                    
+            finally:
+                await lock_service.release(lock_key, token)
+                
+        except Exception as e:
+            Logger.error(f"채팅방 제목 변경 DB 처리 실패: {e} (consumer: {self.consumer_id})")
+            return False
+
+    async def _handle_message_delete(self, message: QueueMessage) -> bool:
+        """메시지 삭제 이벤트 처리 - 즉시 DB Soft Delete"""
+        payload = message.payload
+        message_id = payload.get('message_id')
+        room_id = payload.get('room_id')
+        account_db_key = payload.get('account_db_key', 0)
+        shard_id = payload.get('shard_id', 1)
+        
+        # Lock으로 중복 삭제 방지
+        lock_key = f"chat_message_delete:{message_id}"
+        
+        try:
+            if not ServiceContainer.is_lock_service_initialized():
+                Logger.error("LockService가 초기화되지 않았습니다")
+                return False
+            
+            lock_service = ServiceContainer.get_lock_service()
+            
+            # Lock 획득
+            token = await lock_service.acquire(lock_key, ttl=self._lock_ttl, timeout=self._lock_timeout)
+            if not token:
+                Logger.warn(f"메시지 삭제 Lock 획득 실패: {message_id} (consumer: {self.consumer_id})")
+                return False
+            
+            try:
+                database_service = ServiceContainer.get_database_service()
+                
+                # 메시지 Soft Delete 프로시저 호출
+                result = await database_service.call_shard_procedure(
+                    shard_id,
+                    'fp_chat_message_soft_delete',
+                    (message_id, room_id, account_db_key)
+                )
+                
+                if result and result[0].get('result') == 'SUCCESS':
+                    Logger.info(f"메시지 Soft Delete 완료: message_id={message_id}, room_id={room_id}, shard_id={shard_id}, consumer={self.consumer_id}")
+                    return True
+                else:
+                    Logger.warn(f"메시지 삭제 결과: {result} (consumer: {self.consumer_id})")
+                    return False
+                    
+            finally:
+                await lock_service.release(lock_key, token)
+                
+        except Exception as e:
+            Logger.error(f"메시지 삭제 DB 처리 실패: {e} (consumer: {self.consumer_id})")
             return False
     
     async def _handle_message_save(self, message: QueueMessage) -> bool:
@@ -184,6 +373,22 @@ class ChatPersistenceConsumer:
             account_db_key = payload.get('account_db_key', 0)
             shard_id = payload.get('shard_id', 1)  # 매핑 테이블에서 조회된 shard_id 사용
             room_id = payload.get('room_id')
+            message_id = payload.get('message_id')
+            
+            # State Machine으로 메시지 상태 확인 및 전이
+            state_machine = get_chat_state_machine()
+            
+            # 메시지를 PROCESSING 상태로 전이 시도
+            can_process = await state_machine.transition_message(message_id, MessageState.PROCESSING, MessageState.PENDING)
+            if not can_process:
+                # 상태 전이 실패 (이미 삭제되었거나 처리 중)
+                current_state = await state_machine.get_message_state(message_id)
+                if current_state in [MessageState.DELETED, MessageState.DELETING]:
+                    Logger.info(f"메시지가 삭제 상태이므로 처리 건너뜀: {message_id} (state: {current_state})")
+                    return True  # 성공으로 처리 (ACK)
+                else:
+                    Logger.warn(f"메시지 상태 전이 실패: {message_id} current_state={current_state} (consumer: {self.consumer_id})")
+                    return False  # 재시도
             
             # 메타데이터에서 sequence 번호 추출 (순서 검증용)
             metadata = json.loads(payload.get('metadata', '{}'))
@@ -200,7 +405,8 @@ class ChatPersistenceConsumer:
                 **payload,
                 'sequence': sequence,
                 'buffer_timestamp': datetime.now().timestamp(),
-                'consumer_id': self.consumer_id  # 추적용
+                'consumer_id': self.consumer_id,  # 추적용
+                'state_transition_time': datetime.now().isoformat()  # 상태 전이 시간
             }
             
             self.message_buffer[shard_key].append(buffer_item)
@@ -209,7 +415,7 @@ class ChatPersistenceConsumer:
             if len(self.message_buffer[shard_key]) >= self.batch_size:
                 await self._process_shard_batch(shard_key)
             
-            Logger.debug(f"메시지 버퍼 추가: room_id={room_id}, shard_id={shard_id}, buffer_size={len(self.message_buffer[shard_key])}, consumer={self.consumer_id}")
+            Logger.debug(f"메시지 버퍼 추가: message_id={message_id}, room_id={room_id}, shard_id={shard_id}, buffer_size={len(self.message_buffer[shard_key])}, consumer={self.consumer_id}")
             return True
             
         except Exception as e:
@@ -321,10 +527,23 @@ class ChatPersistenceConsumer:
                         )
                         
                         if result and result[0].get('result') == 'SUCCESS':
+                            # DB 저장 성공 시 SENT 상태로 전이
+                            state_machine = get_chat_state_machine()
+                            await state_machine.transition_message(
+                                msg_payload.get('message_id'), 
+                                MessageState.SENT, 
+                                MessageState.PROCESSING
+                            )
                             success_count += 1
                             Logger.debug(f"메시지 저장 성공: {msg_payload.get('message_id')}, shard_id={shard_id}, consumer={self.consumer_id}")
                         else:
-                            Logger.warn(f"메시지 저장 실패: {msg_payload.get('message_id')}, result={result}, consumer={self.consumer_id}")
+                            # DB 저장 실패 시 Redis 데이터도 함께 정리
+                            message_id = msg_payload.get('message_id')
+                            room_id = msg_payload['room_id']
+                            await self._cleanup_failed_message_save(message_id, room_id)
+                            state_machine = get_chat_state_machine()
+                            await state_machine.transition_message(message_id, MessageState.DELETED, MessageState.PROCESSING)
+                            Logger.warn(f"메시지 저장 실패로 Redis 데이터 정리: {message_id}, result={result}, consumer={self.consumer_id}")
                             
                     except Exception as e:
                         Logger.error(f"메시지 저장 중 오류: {e}, message_id={msg_payload.get('message_id')}, consumer={self.consumer_id}")
@@ -379,6 +598,39 @@ class ChatPersistenceConsumer:
                 
         except Exception as e:
             Logger.error(f"버퍼 정리 중 오류: {e} (consumer: {self.consumer_id})")
+    
+    async def _cleanup_failed_room_creation(self, room_id: str, account_db_key: int):
+        """방 생성 실패 시 Redis 데이터 정리"""
+        try:
+            from service.cache.cache_service import CacheService
+            async with CacheService.get_client() as redis:
+                # 방 데이터 삭제
+                room_key = f"room:{room_id}"
+                await redis.delete_key(room_key)
+                
+                # 사용자 방 목록에서 제거 (account_db_key를 이용해 추정)
+                # 실제로는 account_id가 필요하지만, 여기서는 room_id로 스캔
+                user_keys_pattern = "rooms:*"
+                user_keys = await redis.scan_keys(user_keys_pattern)
+                for user_key in user_keys:
+                    await redis.set_remove(user_key.split(":")[-1], room_id)
+                
+                Logger.info(f"실패한 방 생성 Redis 데이터 정리 완료: {room_id}")
+        except Exception as e:
+            Logger.error(f"방 생성 실패 Redis 정리 중 오류: {e}")
+    
+    async def _cleanup_failed_message_save(self, message_id: str, room_id: str):
+        """메시지 저장 실패 시 Redis 데이터 정리"""
+        try:
+            from service.cache.cache_service import CacheService
+            async with CacheService.get_client() as redis:
+                # 메시지 캐시 무효화 (다음 조회 시 DB에서 재로딩)
+                msg_key = f"messages:{room_id}"
+                await redis.delete_key(msg_key)
+                
+                Logger.info(f"실패한 메시지 저장 Redis 캐시 정리 완료: {message_id}")
+        except Exception as e:
+            Logger.error(f"메시지 저장 실패 Redis 정리 중 오류: {e}")
 
 
 # QueueService에 등록할 헬퍼 함수
