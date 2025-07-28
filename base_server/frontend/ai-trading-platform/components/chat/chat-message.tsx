@@ -39,7 +39,6 @@ export default function ChatMessage({ message }: { message: Message }) {
   if (message.isTyping) {
     return <TypingEffect 
       text={content} 
-      speed={20} 
       onUpdate={message.onTypingUpdate}
     />;
   }
