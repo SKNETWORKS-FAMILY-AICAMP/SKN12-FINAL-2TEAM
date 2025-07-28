@@ -13,6 +13,7 @@ interface LocalMessage {
   id: string;
   content: string;
   role: string;
+  isTyping?: boolean;
 }
 
 export function useChat() {
@@ -23,8 +24,7 @@ export function useChat() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [personas, setPersonas] = useState<any[]>([]);
-  const [messageCache, setMessageCache] = useState<Record<string, LocalMessage[]>>({}); // 채팅방별 메시지 캐시
-  const [isInitialLoad, setIsInitialLoad] = useState(true); // 초기 로드 여부
+  const [typingMessageId, setTypingMessageId] = useState<string | null>(null);
 
   // 채팅방 목록 불러오기
   const loadRooms = useCallback(async () => {
@@ -34,84 +34,27 @@ export function useChat() {
       console.log("[FRONT] 채팅방 목록 응답:", data);
       const rooms = data.rooms || [];
       setRooms(rooms);
-      // 초기 로드 시에만 자동으로 첫 번째 방 선택
-      if (isInitialLoad && rooms.length > 0 && !currentRoomId) {
+      if (rooms.length > 0) {
         setCurrentRoomId(rooms[0].room_id);
-        setIsInitialLoad(false);
       }
     } catch (e) {
       setError("채팅방 목록 불러오기 실패");
       console.error("채팅방 목록 불러오기 실패:", e);
     }
-  }, [currentRoomId]);
+  }, []);
 
   // 메시지 목록 불러오기
   const loadMessages = useCallback(async (roomId: string) => {
     try {
-      console.log("[FRONT] 메시지 로드 시작 - room_id:", roomId);
       const res = await fetchChatMessages(roomId);
       const data = typeof res === "string" ? JSON.parse(res) : res;
       console.log("[FRONT] 메시지 목록 응답:", data);
-      
-      // 응답 구조 확인 및 메시지 추출
-      let messages = [];
-      if (data && data.messages) {
-        messages = data.messages;
-      } else if (data && data.data && data.data.messages) {
-        messages = data.data.messages;
-      }
-      
-      console.log("[FRONT] 추출된 메시지:", messages);
-      console.log("[FRONT] 메시지 상세 정보:");
-      messages.forEach((msg: any, index: number) => {
-        console.log(`[FRONT] 메시지 ${index}:`, {
-          message_id: msg.message_id,
-          message_type: msg.message_type,
-          sender_type: msg.sender_type,
-          content: msg.content?.substring(0, 50) + "...",
-          role: msg.role
-        });
-      });
-      
-      // 메시지를 LocalMessage 형식으로 변환
-      const localMessages: LocalMessage[] = messages.map((msg: any) => {
-        console.log("[FRONT] 메시지 변환:", msg);
-        let role = "assistant"; // 기본값
-        
-        // 다양한 메시지 타입 필드 확인
-        if (msg.message_type === "USER" || msg.sender_type === "USER") {
-          role = "user";
-        } else if (msg.message_type === "AI" || msg.sender_type === "AI") {
-          role = "assistant";
-        } else if (msg.role) {
-          // 이미 role 필드가 있는 경우
-          role = msg.role;
-        }
-        
-        return {
-          id: msg.message_id || msg.id || `msg_${Date.now()}`,
-          content: msg.content || "",
-          role: role
-        };
-      });
-      
-      // 캐시에 저장
-      setMessageCache(prev => ({
-        ...prev,
-        [roomId]: localMessages
-      }));
-      
-      // 현재 채팅방이면 메시지 상태 업데이트
-      if (currentRoomId === roomId) {
-        setMessages(localMessages);
-      }
-      
-      console.log("[FRONT] 메시지 로드 완료 - room_id:", roomId, "개수:", localMessages.length);
+      setMessages((res as any).messages || []);
     } catch (e) {
       setError("메시지 불러오기 실패");
       console.error("메시지 불러오기 실패:", e);
     }
-  }, [currentRoomId]);
+  }, []);
 
   // 채팅방 생성
   const createRoom = useCallback(async (aiPersona: string, title = "") => {
@@ -135,28 +78,15 @@ export function useChat() {
 
   // 메시지 전송
   const sendMessage = useCallback(async (content: string, personaOverride?: string) => {
+    const roomIdToUse = currentRoomId || "test_room";
     const persona = personaOverride || selectedPersona || "GPT4O";
-    
-    // 채팅방이 없으면 메시지 전송 불가
-    if (!currentRoomId) {
-      setError("채팅방을 먼저 선택하거나 새 채팅방을 생성해주세요.");
-      return;
-    }
-    
     setIsLoading(true);
-    
-    // 사용자 메시지를 즉시 추가
-    const userMessage: LocalMessage = { 
-      id: Date.now().toString(), 
-      content, 
-      role: "user" 
-    };
-    
-    setMessages(prev => [...prev, userMessage]);
-    
+    setMessages(prev => [
+      ...prev,
+      { id: Date.now().toString(), content, role: "user" }
+    ]);
     try {
-      console.log("[FRONT] 메시지 전송 - room_id:", currentRoomId);
-      let res = await apiSendChatMessage(currentRoomId, content, persona);
+      let res = await apiSendChatMessage(roomIdToUse, content, persona);
       let parsed: any = res;
       if (parsed && parsed.data && typeof parsed.data === "object") {
         parsed = parsed.data;
@@ -177,78 +107,62 @@ export function useChat() {
           return;
         }
       }
-      
       const messageObj = parsed.message;
       if (messageObj && messageObj.content) {
-        const aiMessage: LocalMessage = {
-          id: messageObj.message_id || `ai_${Date.now()}`,
+        const aiMessageId = messageObj.message_id || `ai_${Date.now()}`;
+        
+        // 타이핑 효과를 위한 AI 메시지 추가
+        const typingMessage: LocalMessage = {
+          id: aiMessageId,
           content: messageObj.content,
-          role: "assistant"
+          role: "assistant",
+          isTyping: true
         };
         
-        // 현재 메시지 상태 업데이트
-        setMessages(prev => [...prev, aiMessage]);
+        setTypingMessageId(aiMessageId);
+        setMessages(prev => [...prev, typingMessage]);
         
-        // 캐시 업데이트
-        setMessageCache(prev => ({
-          ...prev,
-          [currentRoomId]: [...(prev[currentRoomId] || []), userMessage, aiMessage]
-        }));
+        // 타이핑 완료 후 실제 메시지로 변경
+        setTimeout(() => {
+          const finalMessage: LocalMessage = {
+            id: aiMessageId,
+            content: messageObj.content,
+            role: "assistant"
+          };
+          
+          setMessages(prev => prev.map(msg => 
+            msg.id === aiMessageId ? finalMessage : msg
+          ));
+          
+          setTypingMessageId(null);
+        }, (messageObj.content.split(/\n\s*\n/).filter((p: string) => p.trim().length > 0).length * 400) + 300); // 문단 수에 비례한 지연
       }
     } catch (e) {
       setError("메시지 전송 실패");
-      console.error("메시지 전송 실패:", e);
     } finally {
       setIsLoading(false);
     }
-  }, [currentRoomId, selectedPersona, apiCreateChatRoom]);
+  }, [currentRoomId, selectedPersona]);
 
   // 채팅방 삭제
   const deleteRoom = useCallback(async (roomId: string) => {
     try {
       await apiDeleteChatRoom(roomId);
-      
-      // 삭제된 채팅방의 캐시도 정리
-      setMessageCache(prev => {
-        const newCache = { ...prev };
-        delete newCache[roomId];
-        return newCache;
-      });
-      
-      // 현재 선택된 채팅방이 삭제된 방이면 선택 해제
-      if (currentRoomId === roomId) {
-        setCurrentRoomId(null);
-        setMessages([]);
-        setIsInitialLoad(false); // 삭제 후에는 자동 선택 비활성화
-      }
-      
       await loadRooms();
     } catch (e) {
       setError("채팅방 삭제 실패");
     }
-  }, [loadRooms, currentRoomId]);
+  }, [loadRooms]);
 
   useEffect(() => {
-    if (isInitialLoad) {
-      loadRooms();
-    }
-  }, [loadRooms, isInitialLoad]);
+    loadRooms();
+  }, [loadRooms]);
 
   useEffect(() => {
     if (currentRoomId) {
-      console.log("[FRONT] 채팅방 변경:", currentRoomId);
-      
-      // 캐시된 메시지가 있으면 먼저 사용
-      if (messageCache[currentRoomId]) {
-        console.log("[FRONT] 캐시된 메시지 사용:", messageCache[currentRoomId].length, "개");
-        setMessages(messageCache[currentRoomId]);
-      } else {
-        console.log("[FRONT] 캐시된 메시지 없음, DB에서 로드");
-        setMessages([]); // 로딩 중 빈 배열로 초기화
-        loadMessages(currentRoomId);
-      }
+      loadMessages(currentRoomId);
     }
-  }, [currentRoomId, messageCache, loadMessages]);
+  }, [currentRoomId, loadMessages]);
 
   useEffect(() => {
     setPersonas([

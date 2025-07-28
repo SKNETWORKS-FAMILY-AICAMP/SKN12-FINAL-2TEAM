@@ -2,11 +2,14 @@
 
 import React from "react";
 import DOMPurify from "dompurify";
+import TypingEffect from "./typing-effect";
 
 interface Message {
   id: string;
   content: string;
   role: "user" | "assistant";
+  isTyping?: boolean;
+  onTypingUpdate?: () => void;
 }
 
 export default function ChatMessage({ message }: { message: Message }) {
@@ -32,7 +35,15 @@ export default function ChatMessage({ message }: { message: Message }) {
     );
   }
 
-  // AI 답변은 전체 화면에 텍스트로 표시
+  // AI 답변은 타이핑 효과와 함께 전체 화면에 텍스트로 표시
+  if (message.isTyping) {
+    return <TypingEffect 
+      text={content} 
+      speed={20} 
+      onUpdate={message.onTypingUpdate}
+    />;
+  }
+  
   return (
     <div className="w-full py-8 border-b border-gray-800">
       <div className="max-w-4xl mx-auto px-4">

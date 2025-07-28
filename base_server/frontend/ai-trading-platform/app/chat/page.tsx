@@ -129,6 +129,16 @@ export default function ChatPage() {
     }
   };
 
+  // 타이핑 중 스크롤 처리
+  const handleTypingUpdate = () => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior: "smooth"
+      });
+    }
+  };
+
   // 메시지 렌더링
   // 마지막 메시지가 AI이고 isLoading이면 타이핑 애니메이션 적용
   const lastMsgIdx = messages.length - 1;
@@ -337,7 +347,9 @@ export default function ChatPage() {
                         key={msg.id}
                         message={{
                           ...msg,
-                          role: msg.role === "user" ? "user" : "assistant"
+                          role: msg.role === "user" ? "user" : "assistant",
+                          isTyping: msg.isTyping,
+                          onTypingUpdate: msg.isTyping ? handleTypingUpdate : undefined
                         }}
                       />
                     ))}
