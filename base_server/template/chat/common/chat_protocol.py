@@ -3,7 +3,8 @@
 from .chat_serialize import (
     ChatRoomListRequest, ChatRoomCreateRequest,
     ChatMessageSendRequest, ChatMessageListRequest,
-    ChatRoomDeleteRequest
+    ChatRoomDeleteRequest, ChatRoomUpdateRequest,
+    ChatMessageDeleteRequest
 )
 from typing import Callable, Awaitable, Optional
 
@@ -15,6 +16,8 @@ class ChatProtocol:
         self.on_chat_message_send_req_callback: Optional[Callable[..., Awaitable]] = None
         self.on_chat_message_list_req_callback: Optional[Callable[..., Awaitable]] = None
         self.on_chat_room_delete_req_callback: Optional[Callable[..., Awaitable]] = None
+        self.on_chat_room_update_req_callback: Optional[Callable[..., Awaitable]] = None
+        self.on_chat_message_delete_req_callback: Optional[Callable[..., Awaitable]] = None
 
     async def chat_room_list_req_controller(self, session, msg: bytes, length: int):
         request = ChatRoomListRequest.model_validate_json(msg)
@@ -46,3 +49,15 @@ class ChatProtocol:
         if self.on_chat_room_delete_req_callback:
             return await self.on_chat_room_delete_req_callback(session, request)
         raise NotImplementedError("on_chat_room_delete_req_callback is not set")
+
+    async def chat_room_update_req_controller(self, session, msg: bytes, length: int):
+        request = ChatRoomUpdateRequest.model_validate_json(msg)
+        if self.on_chat_room_update_req_callback:
+            return await self.on_chat_room_update_req_callback(session, request)
+        raise NotImplementedError("on_chat_room_update_req_callback is not set")
+
+    async def chat_message_delete_req_controller(self, session, msg: bytes, length: int):
+        request = ChatMessageDeleteRequest.model_validate_json(msg)
+        if self.on_chat_message_delete_req_callback:
+            return await self.on_chat_message_delete_req_callback(session, request)
+        raise NotImplementedError("on_chat_message_delete_req_callback is not set")

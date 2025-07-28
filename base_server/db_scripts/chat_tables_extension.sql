@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS `table_chat_rooms` (
   `last_message_id` varchar(128) DEFAULT NULL COMMENT '마지막 메시지 ID',
   `last_message_at` datetime(6) DEFAULT NULL COMMENT '마지막 메시지 시간',
   `message_count` int DEFAULT 0 COMMENT '총 메시지 수',
-  `is_active` tinyint(1) DEFAULT 1 COMMENT '활성 상태',
+  `is_active` tinyint(1) DEFAULT 1 COMMENT '활성 상태 (카카오 방식: 최종 상태만 저장)',
   `created_at` datetime(6) DEFAULT CURRENT_TIMESTAMP(6) COMMENT '생성 시간',
   `updated_at` datetime(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6) COMMENT '수정 시간',
   PRIMARY KEY (`room_id`),
@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS `table_chat_messages` (
   `content` text NOT NULL COMMENT '메시지 내용',
   `metadata` json DEFAULT NULL COMMENT '메시지 메타데이터 (토큰 수, 모델 정보 등)',
   `parent_message_id` varchar(128) DEFAULT NULL COMMENT '부모 메시지 ID (대화 체인)',
-  `is_deleted` tinyint(1) DEFAULT 0 COMMENT '삭제 여부',
+  `is_deleted` tinyint(1) DEFAULT 0 COMMENT '삭제 여부 (카카오 방식: 최종 상태만 저장)',
   `created_at` datetime(6) DEFAULT CURRENT_TIMESTAMP(6) COMMENT '생성 시간',
   `updated_at` datetime(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6) COMMENT '수정 시간',
   PRIMARY KEY (`idx`),
@@ -105,7 +105,7 @@ BEGIN
     IF v_existing_count > 0 THEN
         SELECT 'EXISTS' as result, 'Chatbot session already exists' as message, p_room_id as room_id;
     ELSE
-        -- 새 챗봇 세션 생성
+        -- 새 챗봇 세션 생성 (카카오 방식: 최종 상태만 DB 저장, State Machine은 Redis에서 관리)
         INSERT INTO table_chat_rooms (room_id, account_db_key, title, ai_persona)
         VALUES (p_room_id, p_account_db_key, p_title, p_ai_persona);
         
@@ -147,7 +147,7 @@ BEGIN
     -- 전달받은 message_id 사용 (이미 생성된 값)
     SET v_message_id = p_message_id;
     
-    -- 채팅 메시지 저장 (idx는 AUTO_INCREMENT)
+    -- 채팅 메시지 저장 (카카오 방식: 최종 상태만 DB 저장, State Machine은 Redis에서 관리)
     INSERT INTO table_chat_messages (message_id, room_id, account_db_key, message_type, content, metadata, parent_message_id)
     VALUES (v_message_id, p_room_id, p_account_db_key, p_message_type, p_content, p_metadata, p_parent_message_id);
     
@@ -261,6 +261,172 @@ BEGIN
 END ;;
 DELIMITER ;
 
+-- 채팅방 Soft Delete 프로시저 (신규 추가)
+DROP PROCEDURE IF EXISTS `fp_chat_room_soft_delete`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_chat_room_soft_delete`(
+    IN p_room_id VARCHAR(128),
+    IN p_account_db_key BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_room_exists INT DEFAULT 0;
+    DECLARE ProcParam VARCHAR(4000);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET ProcParam = CONCAT(p_room_id, ',', p_account_db_key);
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        ROLLBACK;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_chat_room_soft_delete', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        RESIGNAL;
+    END;
+    
+    START TRANSACTION;
+    
+    -- 채팅방 존재 및 소유권 확인
+    SELECT COUNT(*) INTO v_room_exists
+    FROM table_chat_rooms 
+    WHERE room_id = p_room_id 
+      AND account_db_key = p_account_db_key 
+      AND is_active = 1;
+    
+    IF v_room_exists = 0 THEN
+        ROLLBACK;
+        SELECT 'FAILED' as result, 'Room not found or already deleted' as message;
+    ELSE
+        -- 채팅방 Soft Delete (카카오 방식: 최종 상태만 DB 저장)
+        UPDATE table_chat_rooms 
+        SET is_active = 0,
+            updated_at = NOW()
+        WHERE room_id = p_room_id 
+          AND account_db_key = p_account_db_key;
+        
+        -- 관련 메시지들도 Soft Delete (카카오 방식: 최종 상태만 DB 저장)
+        UPDATE table_chat_messages 
+        SET is_deleted = 1,
+            updated_at = NOW()
+        WHERE room_id = p_room_id;
+        
+        COMMIT;
+        SELECT 'SUCCESS' as result, 'Chat room soft deleted successfully' as message;
+    END IF;
+    
+END ;;
+DELIMITER ;
+
+-- 채팅방 제목 변경 프로시저 (신규 추가)
+DROP PROCEDURE IF EXISTS `fp_chat_room_update_title`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_chat_room_update_title`(
+    IN p_room_id VARCHAR(128),
+    IN p_account_db_key BIGINT UNSIGNED,
+    IN p_new_title VARCHAR(200)
+)
+BEGIN
+    DECLARE v_room_exists INT DEFAULT 0;
+    DECLARE ProcParam VARCHAR(4000);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET ProcParam = CONCAT(p_room_id, ',', p_account_db_key, ',', p_new_title);
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        ROLLBACK;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_chat_room_update_title', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        RESIGNAL;
+    END;
+    
+    -- 제목 길이 검증
+    IF CHAR_LENGTH(p_new_title) = 0 OR CHAR_LENGTH(p_new_title) > 200 THEN
+        SELECT 'FAILED' as result, 'Invalid title length (1-200 characters required)' as message;
+    ELSE
+        -- 채팅방 존재 및 소유권 확인
+        SELECT COUNT(*) INTO v_room_exists
+        FROM table_chat_rooms 
+        WHERE room_id = p_room_id 
+          AND account_db_key = p_account_db_key 
+          AND is_active = 1;
+        
+        IF v_room_exists = 0 THEN
+            SELECT 'FAILED' as result, 'Room not found or access denied' as message;
+        ELSE
+            -- 채팅방 제목 업데이트
+            UPDATE table_chat_rooms 
+            SET title = p_new_title,
+                updated_at = NOW()
+            WHERE room_id = p_room_id 
+              AND account_db_key = p_account_db_key;
+            
+            SELECT 'SUCCESS' as result, 'Room title updated successfully' as message, p_new_title as new_title;
+        END IF;
+    END IF;
+    
+END ;;
+DELIMITER ;
+
+-- 개별 메시지 Soft Delete 프로시저 (신규 추가)
+DROP PROCEDURE IF EXISTS `fp_chat_message_soft_delete`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_chat_message_soft_delete`(
+    IN p_message_id VARCHAR(128),
+    IN p_room_id VARCHAR(128),
+    IN p_account_db_key BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_message_exists INT DEFAULT 0;
+    DECLARE v_room_owner INT DEFAULT 0;
+    DECLARE ProcParam VARCHAR(4000);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET ProcParam = CONCAT(p_message_id, ',', p_room_id, ',', p_account_db_key);
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        ROLLBACK;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_chat_message_soft_delete', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        RESIGNAL;
+    END;
+    
+    START TRANSACTION;
+    
+    -- 채팅방 소유권 확인
+    SELECT COUNT(*) INTO v_room_owner
+    FROM table_chat_rooms 
+    WHERE room_id = p_room_id 
+      AND account_db_key = p_account_db_key 
+      AND is_active = 1;
+    
+    IF v_room_owner = 0 THEN
+        ROLLBACK;
+        SELECT 'FAILED' as result, 'Room not found or access denied' as message;
+    ELSE
+        -- 메시지 존재 확인
+        SELECT COUNT(*) INTO v_message_exists
+        FROM table_chat_messages 
+        WHERE message_id = p_message_id 
+          AND room_id = p_room_id 
+          AND is_deleted = 0;
+        
+        IF v_message_exists = 0 THEN
+            ROLLBACK;
+            SELECT 'FAILED' as result, 'Message not found or already deleted' as message;
+        ELSE
+            -- 메시지 Soft Delete (is_deleted = 1)
+            UPDATE table_chat_messages 
+            SET is_deleted = 1,
+                updated_at = NOW()
+            WHERE message_id = p_message_id 
+              AND room_id = p_room_id;
+            
+            COMMIT;
+            SELECT 'SUCCESS' as result, 'Message soft deleted successfully' as message;
+        END IF;
+    END IF;
+    
+END ;;
+DELIMITER ;
+
 -- =====================================
 -- Shard DB 2에 동일한 구조 생성
 -- =====================================
@@ -275,7 +441,7 @@ CREATE TABLE IF NOT EXISTS `table_chat_rooms` (
   `last_message_id` varchar(128) DEFAULT NULL COMMENT '마지막 메시지 ID',
   `last_message_at` datetime(6) DEFAULT NULL COMMENT '마지막 메시지 시간',
   `message_count` int DEFAULT 0 COMMENT '총 메시지 수',
-  `is_active` tinyint(1) DEFAULT 1 COMMENT '활성 상태',
+  `is_active` tinyint(1) DEFAULT 1 COMMENT '활성 상태 (카카오 방식: 최종 상태만 저장)',
   `created_at` datetime(6) DEFAULT CURRENT_TIMESTAMP(6) COMMENT '생성 시간',
   `updated_at` datetime(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6) COMMENT '수정 시간',
   PRIMARY KEY (`room_id`),
@@ -294,7 +460,7 @@ CREATE TABLE IF NOT EXISTS `table_chat_messages` (
   `content` text NOT NULL COMMENT '메시지 내용',
   `metadata` json DEFAULT NULL COMMENT '메시지 메타데이터 (토큰 수, 모델 정보 등)',
   `parent_message_id` varchar(128) DEFAULT NULL COMMENT '부모 메시지 ID (대화 체인)',
-  `is_deleted` tinyint(1) DEFAULT 0 COMMENT '삭제 여부',
+  `is_deleted` tinyint(1) DEFAULT 0 COMMENT '삭제 여부 (카카오 방식: 최종 상태만 저장)',
   `created_at` datetime(6) DEFAULT CURRENT_TIMESTAMP(6) COMMENT '생성 시간',
   `updated_at` datetime(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6) COMMENT '수정 시간',
   PRIMARY KEY (`idx`),
@@ -500,6 +666,160 @@ BEGIN
       AND is_active = 1
     ORDER BY last_message_at DESC, created_at DESC;
     
+END ;;
+DELIMITER ;
+
+-- 채팅방 Soft Delete 프로시저 (Shard 2)
+DROP PROCEDURE IF EXISTS `fp_chat_room_soft_delete`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_chat_room_soft_delete`(
+    IN p_room_id VARCHAR(128),
+    IN p_account_db_key BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_room_exists INT DEFAULT 0;
+    DECLARE ProcParam VARCHAR(4000);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET ProcParam = CONCAT(p_room_id, ',', p_account_db_key);
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        ROLLBACK;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_chat_room_soft_delete', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        RESIGNAL;
+    END;
+    
+    START TRANSACTION;
+    
+    SELECT COUNT(*) INTO v_room_exists
+    FROM table_chat_rooms 
+    WHERE room_id = p_room_id 
+      AND account_db_key = p_account_db_key 
+      AND is_active = 1;
+    
+    IF v_room_exists = 0 THEN
+        ROLLBACK;
+        SELECT 'FAILED' as result, 'Room not found or already deleted' as message;
+    ELSE
+        UPDATE table_chat_rooms 
+        SET is_active = 0,
+            updated_at = NOW()
+        WHERE room_id = p_room_id 
+          AND account_db_key = p_account_db_key;
+        
+        UPDATE table_chat_messages 
+        SET is_deleted = 1,
+            updated_at = NOW()
+        WHERE room_id = p_room_id;
+        
+        COMMIT;
+        SELECT 'SUCCESS' as result, 'Chat room soft deleted successfully' as message;
+    END IF;
+END ;;
+DELIMITER ;
+
+-- 채팅방 제목 변경 프로시저 (Shard 2)
+DROP PROCEDURE IF EXISTS `fp_chat_room_update_title`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_chat_room_update_title`(
+    IN p_room_id VARCHAR(128),
+    IN p_account_db_key BIGINT UNSIGNED,
+    IN p_new_title VARCHAR(200)
+)
+BEGIN
+    DECLARE v_room_exists INT DEFAULT 0;
+    DECLARE ProcParam VARCHAR(4000);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET ProcParam = CONCAT(p_room_id, ',', p_account_db_key, ',', p_new_title);
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        ROLLBACK;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_chat_room_update_title', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        RESIGNAL;
+    END;
+    
+    IF CHAR_LENGTH(p_new_title) = 0 OR CHAR_LENGTH(p_new_title) > 200 THEN
+        SELECT 'FAILED' as result, 'Invalid title length (1-200 characters required)' as message;
+    ELSE
+        SELECT COUNT(*) INTO v_room_exists
+        FROM table_chat_rooms 
+        WHERE room_id = p_room_id 
+          AND account_db_key = p_account_db_key 
+          AND is_active = 1;
+        
+        IF v_room_exists = 0 THEN
+            SELECT 'FAILED' as result, 'Room not found or access denied' as message;
+        ELSE
+            UPDATE table_chat_rooms 
+            SET title = p_new_title,
+                updated_at = NOW()
+            WHERE room_id = p_room_id 
+              AND account_db_key = p_account_db_key;
+            
+            SELECT 'SUCCESS' as result, 'Room title updated successfully' as message, p_new_title as new_title;
+        END IF;
+    END IF;
+END ;;
+DELIMITER ;
+
+-- 개별 메시지 Soft Delete 프로시저 (Shard 2)
+DROP PROCEDURE IF EXISTS `fp_chat_message_soft_delete`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_chat_message_soft_delete`(
+    IN p_message_id VARCHAR(128),
+    IN p_room_id VARCHAR(128),
+    IN p_account_db_key BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_message_exists INT DEFAULT 0;
+    DECLARE v_room_owner INT DEFAULT 0;
+    DECLARE ProcParam VARCHAR(4000);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET ProcParam = CONCAT(p_message_id, ',', p_room_id, ',', p_account_db_key);
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        ROLLBACK;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_chat_message_soft_delete', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        RESIGNAL;
+    END;
+    
+    START TRANSACTION;
+    
+    SELECT COUNT(*) INTO v_room_owner
+    FROM table_chat_rooms 
+    WHERE room_id = p_room_id 
+      AND account_db_key = p_account_db_key 
+      AND is_active = 1;
+    
+    IF v_room_owner = 0 THEN
+        ROLLBACK;
+        SELECT 'FAILED' as result, 'Room not found or access denied' as message;
+    ELSE
+        SELECT COUNT(*) INTO v_message_exists
+        FROM table_chat_messages 
+        WHERE message_id = p_message_id 
+          AND room_id = p_room_id 
+          AND is_deleted = 0;
+        
+        IF v_message_exists = 0 THEN
+            ROLLBACK;
+            SELECT 'FAILED' as result, 'Message not found or already deleted' as message;
+        ELSE
+            UPDATE table_chat_messages 
+            SET is_deleted = 1,
+                updated_at = NOW()
+            WHERE message_id = p_message_id 
+              AND room_id = p_room_id;
+            
+            COMMIT;
+            SELECT 'SUCCESS' as result, 'Message soft deleted successfully' as message;
+        END IF;
+    END IF;
 END ;;
 DELIMITER ;
 
