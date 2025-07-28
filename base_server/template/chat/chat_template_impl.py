@@ -230,6 +230,7 @@ class ChatTemplateImpl(BaseTemplate):
             
             # 2) Redis 메모리에 사용자 메시지 기록
             ai_service: AIChatService = ServiceContainer.get_ai_chat_service()
+            Logger.debug(f"AIChatService: {request.room_id}")    
             session_id = request.room_id
             ai_service.mem(session_id).chat_memory.add_user_message(request.content)
 
