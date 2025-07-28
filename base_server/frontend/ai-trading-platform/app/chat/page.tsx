@@ -49,6 +49,7 @@ export default function ChatPage() {
     selectedPersona,
     setSelectedPersona,
     deleteRoom,
+    handleRenameRoom, // 추가
   } = useChat();
   const [message, setMessage] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -142,6 +143,22 @@ export default function ChatPage() {
   // 메시지 렌더링
   // 마지막 메시지가 AI이고 isLoading이면 타이핑 애니메이션 적용
   const lastMsgIdx = messages.length - 1;
+
+  // 인라인 에디트 핸들러
+  const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState<string>("");
+
+  // 인라인 에디트 핸들러
+  const startEdit = (roomId: string, currentTitle: string) => {
+    setEditingRoomId(roomId);
+    setEditingTitle(currentTitle);
+  };
+  const finishEdit = (roomId: string) => {
+    if (editingTitle.trim() && editingTitle !== rooms.find(r => r.room_id === roomId)?.title) {
+      handleRenameRoom(roomId, editingTitle.trim());
+    }
+    setEditingRoomId(null);
+  };
 
   return (
     <div className="h-screen w-full bg-gradient-to-br from-[#0a0a23] via-[#18181c] to-[#23243a] text-white flex overflow-hidden">
@@ -238,33 +255,55 @@ export default function ChatPage() {
           <div className="p-4">
             <h3 className="text-xs text-gray-400 mb-3 font-semibold tracking-wider">최근 항목</h3>
             <div className="space-y-1">
-              {rooms.map((item) => (
-                <div
-                  key={item.room_id}
-                  className={`flex items-center group px-3 py-2 text-sm rounded truncate transition-all font-medium ${
-                    currentRoomId === item.room_id
-                      ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow'
-                      : isLoading 
-                        ? 'text-gray-500 cursor-not-allowed' 
-                        : 'text-gray-300 hover:bg-[#23243a] cursor-pointer'
-                  }`}
-                >
+              {rooms.length === 0 ? null : (
+                rooms.map((item) => (
                   <div
-                    className="flex-1 truncate"
-                    onClick={() => !isLoading && handleSelectChat(item.room_id)}
+                    key={item.room_id}
+                    className={`flex items-center group px-3 py-2 text-sm rounded truncate transition-all font-medium ${
+                      currentRoomId === item.room_id
+                        ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow'
+                        : isLoading 
+                          ? 'text-gray-500 cursor-not-allowed' 
+                          : 'text-gray-300 hover:bg-[#23243a] cursor-pointer'
+                    }`}
+                    onClick={() => {
+                      if (!isLoading && editingRoomId !== item.room_id && deletingRoomId !== item.room_id) handleSelectChat(item.room_id);
+                    }}
                   >
-                    {item.title || "채팅방"}
+                    <div className="flex-1 truncate">
+                      {editingRoomId === item.room_id ? (
+                        <input
+                          className="bg-gray-800 text-white rounded px-2 py-1 w-32 outline-none border border-blue-500"
+                          value={editingTitle}
+                          autoFocus
+                          onChange={e => setEditingTitle(e.target.value)}
+                          onBlur={() => finishEdit(item.room_id)}
+                          onKeyDown={e => {
+                            if (e.key === "Enter") finishEdit(item.room_id);
+                            if (e.key === "Escape") setEditingRoomId(null);
+                          }}
+                        />
+                      ) : (
+                        <span
+                          className="truncate cursor-pointer"
+                          onDoubleClick={e => { e.stopPropagation(); startEdit(item.room_id, item.title || "채팅방"); }}
+                          title="이름 변경"
+                        >
+                          {item.title || "채팅방"}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      className="ml-2 p-1 rounded hover:bg-red-600/80 transition text-gray-400 hover:text-white opacity-0 group-hover:opacity-100 disabled:opacity-50"
+                      onClick={e => { e.stopPropagation(); handleDeleteRoom(item.room_id); }}
+                      disabled={deletingRoomId === item.room_id || isLoading}
+                      title="채팅방 삭제"
+                    >
+                      <X size={14} />
+                    </button>
                   </div>
-                  <button
-                    className="ml-2 p-1 rounded hover:bg-red-600/80 transition text-gray-400 hover:text-white opacity-0 group-hover:opacity-100 disabled:opacity-50"
-                    onClick={e => { e.stopPropagation(); handleDeleteRoom(item.room_id); }}
-                    disabled={deletingRoomId === item.room_id || isLoading}
-                    title="채팅방 삭제"
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -307,18 +346,24 @@ export default function ChatPage() {
         </div>
         {/* Chat Content - ChatGPT Style */}
         <div className="flex-1 flex flex-col w-full">
-          {!currentRoomId ? (
+          {rooms.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center p-8">
+              <div className="w-full max-w-2xl text-center">
+                <h1 className="text-4xl font-light mb-2 bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
+                  새 채팅방을 만들어보세요
+                </h1>
+                <p className="text-gray-400 text-lg mt-2">
+                  왼쪽의 "새 채팅" 버튼을 클릭하여 AI와 대화를 시작하세요
+                </p>
+              </div>
+            </div>
+          ) : !currentRoomId ? (
             // 채팅방이 선택되지 않았을 때
             <div className="flex-1 flex flex-col items-center justify-center p-8">
               <div className="w-full max-w-2xl text-center">
                 <h1 className="text-4xl font-light mb-2 bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
-                  {rooms.length === 0 ? "새 채팅방을 만들어보세요" : "채팅을 선택하세요"}
+                  채팅을 선택하세요
                 </h1>
-                {rooms.length === 0 && (
-                  <p className="text-gray-400 text-lg mt-2">
-                    왼쪽의 "새 채팅" 버튼을 클릭하여 AI와 대화를 시작하세요
-                  </p>
-                )}
               </div>
             </div>
           ) : (
