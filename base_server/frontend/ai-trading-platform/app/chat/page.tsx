@@ -78,10 +78,13 @@ export default function ChatPage() {
   };
 
   useEffect(() => {
-    if (autoScroll && messagesEndRef.current) {
+    if (autoScroll && messagesEndRef.current && chatContainerRef.current) {
       setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
-      }, 0);
+        chatContainerRef.current?.scrollTo({
+          top: chatContainerRef.current.scrollHeight,
+          behavior: "smooth"
+        });
+      }, 100);
     }
   }, [messages, currentRoomId, autoScroll]);
 
@@ -131,7 +134,7 @@ export default function ChatPage() {
   const lastMsgIdx = messages.length - 1;
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-[#0a0a23] via-[#18181c] to-[#23243a] text-white flex">
+    <div className="h-screen w-full bg-gradient-to-br from-[#0a0a23] via-[#18181c] to-[#23243a] text-white flex overflow-hidden">
       {/* Persona Modal */}
       {showPersonaModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
@@ -292,52 +295,74 @@ export default function ChatPage() {
             <span className="text-xs bg-blue-600 px-2 py-1 rounded">업그레이드</span>
           </div>
         </div>
-        {/* Chat Content */}
-        <div className="flex-1 flex flex-col items-center justify-center p-8 w-full">
-          <div className="w-full max-w-2xl h-full flex flex-col">
-            <div className="mb-8 text-center">
-              <h1 className="text-4xl font-light mb-2 bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
-                {rooms.find((r) => r.room_id === currentRoomId)?.title || (rooms.length === 0 ? "새 채팅방을 만들어보세요" : "채팅을 선택하세요")}
-              </h1>
-              {rooms.length === 0 && (
-                <p className="text-gray-400 text-lg mt-2">
-                  왼쪽의 "새 채팅" 버튼을 클릭하여 AI와 대화를 시작하세요
-                </p>
-              )}
+        {/* Chat Content - ChatGPT Style */}
+        <div className="flex-1 flex flex-col w-full">
+          {!currentRoomId ? (
+            // 채팅방이 선택되지 않았을 때
+            <div className="flex-1 flex flex-col items-center justify-center p-8">
+              <div className="w-full max-w-2xl text-center">
+                <h1 className="text-4xl font-light mb-2 bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
+                  {rooms.length === 0 ? "새 채팅방을 만들어보세요" : "채팅을 선택하세요"}
+                </h1>
+                {rooms.length === 0 && (
+                  <p className="text-gray-400 text-lg mt-2">
+                    왼쪽의 "새 채팅" 버튼을 클릭하여 AI와 대화를 시작하세요
+                  </p>
+                )}
+              </div>
             </div>
-            {/* 채팅 메시지 영역: 항상 아래 정렬 */}
-            <div
-              ref={chatContainerRef}
-              onScroll={handleScroll}
-              className="flex-1 flex flex-col justify-end gap-3 p-6 max-h-[60vh] min-h-[200px] overflow-y-auto bg-transparent scrollbar-hide"
-            >
-              {messages.map((msg) => (
-                <ChatMessage
-                  key={msg.id}
-                  message={{
-                    ...msg,
-                    role: msg.role === "user" ? "user" : "assistant"
-                  }}
-                />
-              ))}
-              {/* 로딩 인디케이터 */}
-              {isLoading && (
-                <div className="flex justify-start animate-fadein">
-                  <div className="px-4 py-2 rounded-xl max-w-xs break-words text-sm shadow bg-gray-800 text-gray-100 flex items-center gap-1">
-                    <span className="animate-bounce">.</span>
-                    <span className="animate-bounce delay-150">.</span>
-                    <span className="animate-bounce delay-300">.</span>
+          ) : (
+            // 채팅방이 선택되었을 때 - ChatGPT 스타일
+            <div className="flex-1 flex flex-col">
+              {/* 메시지 영역 - 고정 높이 + 스크롤 */}
+              <div
+                ref={chatContainerRef}
+                onScroll={handleScroll}
+                className="overflow-y-auto scrollbar-hide"
+                style={{ height: 'calc(100vh - 180px)' }}
+              >
+                {messages.length === 0 ? (
+                  // 첫 메시지 안내
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-center text-gray-400">
+                      <h2 className="text-xl font-medium mb-2">AI 트레이딩 어시스턴트</h2>
+                      <p className="text-sm">아래에서 메시지를 입력하여 대화를 시작하세요</p>
+                    </div>
                   </div>
-                </div>
-              )}
-              <div ref={messagesEndRef} />
+                ) : (
+                  // 메시지 목록
+                  <div className="max-w-4xl mx-auto">
+                    {messages.map((msg) => (
+                      <ChatMessage
+                        key={msg.id}
+                        message={{
+                          ...msg,
+                          role: msg.role === "user" ? "user" : "assistant"
+                        }}
+                      />
+                    ))}
+                    {/* 로딩 인디케이터 - AI 답변 스타일 */}
+                    {isLoading && (
+                      <div className="w-full py-8 border-b border-gray-800">
+                        <div className="max-w-4xl mx-auto px-4">
+                          <div className="text-gray-400 text-base flex items-center gap-3 opacity-70">
+                            <div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+                            <span>AI가 응답을 생성하고 있습니다...</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    <div ref={messagesEndRef} />
+                  </div>
+                )}
+              </div>
+              {error && <div className="text-red-400 text-sm text-center p-4">{error}</div>}
             </div>
-            {error && <div className="text-red-400 text-sm text-center mb-2">{error}</div>}
-          </div>
+          )}
         </div>
-        {/* Input Area */}
-        <div className="p-6 border-t border-[#23243a] bg-black/60 backdrop-blur-xl">
-          <div className="max-w-4xl mx-auto">
+        {/* Input Area - ChatGPT Style */}
+        <div className="border-t border-gray-800 bg-black/60 backdrop-blur-xl">
+          <div className="max-w-4xl mx-auto p-4">
             <div className="relative">
               <input
                 ref={inputRef}
@@ -351,28 +376,20 @@ export default function ChatPage() {
                   }
                 }}
                 placeholder={currentRoomId ? "메시지를 입력하세요..." : "채팅방을 선택하거나 새로 만들어주세요"}
-                className="w-full bg-[#18181c] border border-[#23243a] rounded-lg px-4 py-3 pr-12 text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 shadow"
+                className="w-full bg-gray-800 border border-gray-700 rounded-2xl px-4 py-3 pr-12 text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
                 disabled={isLoading || !currentRoomId}
               />
               <button
                 onClick={handleSubmit}
                 disabled={isLoading || !message.trim() || !currentRoomId}
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 bg-gradient-to-r from-blue-500 to-indigo-600 hover:opacity-90 disabled:opacity-50 rounded-lg transition-all"
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all"
               >
                 <ArrowUp size={16} />
               </button>
             </div>
-          </div>
-          {/* Footer */}
-          <div className="flex items-center justify-between mt-4 text-xs text-gray-400">
-            <div className="flex items-center gap-2">
-
-            </div>
-            <div className="flex items-center gap-2">
-              <span>업그레이드하여 도구 연결하기</span>
-              <button className="p-1 hover:bg-[#23243a] rounded">
-                <ArrowUp size={12} />
-              </button>
+            {/* 간단한 안내 */}
+            <div className="text-center mt-2 text-xs text-gray-500">
+              AI 트레이딩 어시스턴트와 자유롭게 대화하세요
             </div>
           </div>
         </div>
