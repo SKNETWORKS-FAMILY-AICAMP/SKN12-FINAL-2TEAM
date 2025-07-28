@@ -54,11 +54,18 @@ export function useChat() {
       const res = await fetchChatMessages(roomId);
       const data = typeof res === "string" ? JSON.parse(res) : res;
       console.log("[FRONT] 메시지 목록 응답:", data);
-      setMessages(
+      // sender_type을 role로 변환
+      const rawMessages =
         (data && data.messages) ||
         (data && data.data && data.data.messages) ||
-        []
-      );
+        [];
+      const mappedMessages = rawMessages.map((msg: any) => ({
+        id: msg.id || msg.message_id,
+        content: msg.content,
+        role: msg.role || (msg.sender_type === 'USER' ? 'user' : 'assistant'),
+        isTyping: msg.isTyping,
+      }));
+      setMessages(mappedMessages);
     } catch (e) {
       setError("메시지 불러오기 실패");
       console.error("메시지 불러오기 실패:", e);

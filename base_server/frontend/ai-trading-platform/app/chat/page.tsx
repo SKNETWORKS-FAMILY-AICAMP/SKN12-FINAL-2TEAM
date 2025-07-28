@@ -266,6 +266,9 @@ export default function ChatPage() {
                           ? 'text-gray-500 cursor-not-allowed' 
                           : 'text-gray-300 hover:bg-[#23243a] cursor-pointer'
                     }`}
+                    onClick={() => {
+                      if (!isLoading && editingRoomId !== item.room_id && deletingRoomId !== item.room_id) handleSelectChat(item.room_id);
+                    }}
                   >
                     <div className="flex-1 truncate">
                       {editingRoomId === item.room_id ? (
@@ -283,9 +286,8 @@ export default function ChatPage() {
                       ) : (
                         <span
                           className="truncate cursor-pointer"
-                          onDoubleClick={() => startEdit(item.room_id, item.title || "채팅방")}
+                          onDoubleClick={e => { e.stopPropagation(); startEdit(item.room_id, item.title || "채팅방"); }}
                           title="이름 변경"
-                          onClick={() => !isLoading && handleSelectChat(item.room_id)}
                         >
                           {item.title || "채팅방"}
                         </span>
