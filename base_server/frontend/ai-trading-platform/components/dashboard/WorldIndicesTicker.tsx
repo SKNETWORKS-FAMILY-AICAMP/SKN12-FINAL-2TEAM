@@ -13,10 +13,11 @@ const mockIndices = [
 
 export default function WorldIndicesTicker() {
   const [widths, setWidths] = useState<number[]>([]);
-  const refs = useRef<(HTMLDivElement | null)[]>([]);
+  const refs = useRef<Map<number, HTMLDivElement | null>>(new Map());
 
   useEffect(() => {
-    setWidths(refs.current.map(ref => ref?.offsetWidth || 0));
+    const widthArray = Array.from(refs.current.values()).map(ref => ref?.offsetWidth || 0);
+    setWidths(widthArray);
   }, []);
 
   return (
@@ -30,7 +31,9 @@ export default function WorldIndicesTicker() {
           return (
             <div
               key={idx.symbol + i}
-              ref={el => refs.current[i] = el}
+              ref={(el) => {
+                refs.current.set(i, el);
+              }}
               className="flex items-center gap-1 flex-shrink-0 whitespace-nowrap"
               style={{ minWidth: 80 }}
             >
