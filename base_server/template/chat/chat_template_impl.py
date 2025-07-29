@@ -45,14 +45,21 @@ class ChatTemplateImpl(BaseTemplate):
                 async with CacheService.get_client() as redis:
                     room_ids = await redis._client.smembers(redis._get_key(user_key))
                     if room_ids:  # Redis에 데이터가 있으면
+                        state_machine = get_chat_state_machine()
                         for room_id in room_ids:
+                            # State Machine으로 방 상태 확인
+                            room_state = await state_machine.get_room_state(room_id)
+                            if room_state in [RoomState.DELETING, RoomState.DELETED]:
+                                Logger.debug(f"삭제 중/삭제된 방 필터링: room_id={room_id}, state={room_state.value if room_state else 'UNKNOWN'}")
+                                continue  # 삭제 중이거나 삭제된 방은 목록에서 제외
+                            
                             room_key = f"room:{room_id}"
                             raw = await redis.get_string(room_key)
                             if raw:
                                 room_data = json.loads(raw)
                                 rooms.append(ChatRoom(**room_data))
                         redis_success = True
-                        Logger.debug(f"Redis에서 챗봇 세션 목록 조회 성공: {len(rooms)}개")
+                        Logger.debug(f"Redis에서 챗봇 세션 목록 조회 성공: {len(rooms)}개 (상태 필터링 적용)")
             except Exception as redis_e:
                 Logger.warn(f"Redis 챗봇 세션 목록 조회 실패: {redis_e}")
             
@@ -69,9 +76,18 @@ class ChatTemplateImpl(BaseTemplate):
                     if db_result:
                         # DB 데이터를 Redis 형식으로 변환 (챗봇 세션 정보)
                         db_rooms = []
+                        state_machine = get_chat_state_machine()
                         for row in db_result:
+                            room_id = str(row.get('room_id', ''))
+                            
+                            # State Machine으로 방 상태 확인
+                            room_state = await state_machine.get_room_state(room_id)
+                            if room_state in [RoomState.DELETING, RoomState.DELETED]:
+                                Logger.debug(f"DB 조회 시 삭제 중/삭제된 방 필터링: room_id={room_id}, state={room_state.value if room_state else 'UNKNOWN'}")
+                                continue  # 삭제 중이거나 삭제된 방은 목록에서 제외
+                            
                             room_data = {
-                                "room_id": str(row.get('room_id', '')),
+                                "room_id": room_id,
                                 "title": str(row.get('title', '')),  # 챗봇 세션 제목
                                 "ai_persona": str(row.get('ai_persona', '')),  # 챗봇 페르소나
                                 "created_at": row.get('created_at').isoformat() if row.get('created_at') else '',
@@ -81,7 +97,7 @@ class ChatTemplateImpl(BaseTemplate):
                             db_rooms.append(room_data)
                             rooms.append(ChatRoom(**room_data))
                         
-                        Logger.info(f"DB에서 챗봇 세션 목록 조회 성공: {len(rooms)}개 (Redis 캐시 미스)")
+                        Logger.info(f"DB에서 챗봇 세션 목록 조회 성공: {len(rooms)}개 (Redis 캐시 미스, 상태 필터링 적용)")
                         
                         # 3단계: DB 데이터를 Redis에 캐시링 (비동기)
                         if db_rooms:
@@ -552,8 +568,8 @@ class ChatTemplateImpl(BaseTemplate):
                 # 메시지 캐시 삭제
                 await redis.delete(msg_key)
             
-            # 1.5. Redis 삭제 성공 시 DELETED 상태로 전이
-            await state_machine.transition_room(request.room_id, RoomState.DELETED, RoomState.DELETING)
+            # 1.5. Redis 삭제 성공 후에도 DELETING 상태 유지 (컨슈머에서 DB 삭제 후 DELETED로 변경)
+            # DELETING 상태를 유지해야 컨슈머가 DB 삭제를 수행할 수 있음
             
             # 2. MessageQueue로 DB Soft Delete 이벤트 발행 (비동기 처리)
             if ServiceContainer.is_queue_service_initialized():

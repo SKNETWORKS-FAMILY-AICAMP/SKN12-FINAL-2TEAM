@@ -254,9 +254,8 @@ class ChatPersistenceConsumer:
                 )
                 
                 if result and result[0].get('result') == 'SUCCESS':
-                    # DB 삭제 성공 시 최종 DELETED 상태로 전이 (이미 DELETED일 수도 있음)
-                    if current_state != RoomState.DELETED:
-                        await state_machine.transition_room(room_id, RoomState.DELETED, current_state)
+                    # DB 삭제 성공 시 최종 DELETED 상태로 전이
+                    await state_machine.transition_room(room_id, RoomState.DELETED, RoomState.DELETING)
                     Logger.info(f"채팅방 Soft Delete 완료: room_id={room_id}, shard_id={shard_id}, consumer={self.consumer_id}")
                     return True
                 else:

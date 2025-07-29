@@ -1,14 +1,8 @@
-import uuid
-from datetime import datetime
 from template.base.base_template import BaseTemplate
-from template.base.template_context import TemplateContext
 from template.tutorial.common.tutorial_serialize import (
-    TutorialStartRequest, TutorialStartResponse,
-    TutorialProgressRequest, TutorialProgressResponse,
-    TutorialCompleteRequest, TutorialCompleteResponse,
-    TutorialListRequest, TutorialListResponse
+    TutorialCompleteStepRequest, TutorialCompleteStepResponse,
+    TutorialGetProgressRequest, TutorialGetProgressResponse
 )
-from template.tutorial.common.tutorial_model import TutorialStep, TutorialProgress, TutorialSession
 from service.service_container import ServiceContainer
 from service.core.logger import Logger
 
@@ -19,180 +13,75 @@ class TutorialTemplateImpl(BaseTemplate):
     def init(self, config):
         """튜토리얼 템플릿 초기화"""
         try:
-            Logger.info("Tutorial 템플릿 초기화 시작")
-            # 튜토리얼 관련 초기화 작업이 있다면 여기서 수행
             Logger.info("Tutorial 템플릿 초기화 완료")
         except Exception as e:
             Logger.error(f"Tutorial 템플릿 초기화 실패: {e}")
     
     def on_load_data(self, config):
         """튜토리얼 데이터 로딩"""
-        try:
-            Logger.info("Tutorial 템플릿 데이터 로드 시작")
-            # 튜토리얼 관련 데이터 로딩이 있다면 여기서 수행
-            Logger.info("Tutorial 템플릿 데이터 로드 완료")
-        except Exception as e:
-            Logger.error(f"Tutorial 템플릿 데이터 로드 실패: {e}")
+        pass
 
-    async def on_tutorial_start_req(self, client_session, request: TutorialStartRequest):
-        """튜토리얼 시작 요청 처리"""
-        response = TutorialStartResponse()
+    async def on_tutorial_complete_step_req(self, client_session, request: TutorialCompleteStepRequest):
+        """튜토리얼 스텝 완료 저장"""
+        response = TutorialCompleteStepResponse()
         response.sequence = request.sequence
         
-        Logger.info(f"Tutorial start request: {request.tutorial_type}")
-        
         try:
-            # 튜토리얼 세션 생성
-            session_id = str(uuid.uuid4())
+            account_db_key = client_session.session_info.account_db_key
+            shard_id = client_session.session_info.shard_id
             
-            # 튜토리얼 타입에 따른 단계 생성
-            steps = self._create_tutorial_steps(request.tutorial_type, request.user_level)
-            
-            response.errorCode = 0
-            response.session_id = session_id
-            response.steps = steps
-            response.total_steps = len(steps)
-            
-            Logger.info(f"Tutorial started: session_id={session_id}, steps={len(steps)}")
-            
-        except Exception as e:
-            response.errorCode = 1000
-            Logger.error(f"Tutorial start error: {e}")
-        
-        return response
-
-    async def on_tutorial_progress_req(self, client_session, request: TutorialProgressRequest):
-        """튜토리얼 진행 상태 업데이트"""
-        response = TutorialProgressResponse()
-        response.sequence = request.sequence
-        
-        Logger.info(f"Tutorial progress: session_id={request.session_id}, step={request.current_step}")
-        
-        try:
-            # 진행 상태 업데이트
-            progress = TutorialProgress(
-                tutorial_type="ONBOARDING",
-                current_step=request.current_step,
-                total_steps=10,  # 예시
-                is_completed=False,
-                completion_rate=request.current_step / 10.0,
-                time_spent=request.time_spent
+            # DB에 스텝 완료 저장
+            database_service = ServiceContainer.get_database_service()
+            result = await database_service.call_shard_procedure(
+                shard_id,
+                'fp_tutorial_complete_step',
+                (account_db_key, request.tutorial_type, request.step_number)
             )
             
-            # 다음 단계 준비
-            if request.current_step < 10:
-                next_step = TutorialStep(
-                    step_id=f"step_{request.current_step + 1}",
-                    step_number=request.current_step + 1,
-                    title=f"Step {request.current_step + 1}",
-                    description=f"Description for step {request.current_step + 1}",
-                    target_element="",
-                    position="BOTTOM"
-                )
-                response.next_step = next_step
-                response.is_final_step = False
+            if result and result[0].get('result') == 'SUCCESS':
+                response.errorCode = 0
+                Logger.debug(f"Tutorial step completed: user={account_db_key}, type={request.tutorial_type}, step={request.step_number}")
             else:
-                response.is_final_step = True
-                progress.is_completed = True
-            
-            response.errorCode = 0
-            response.progress = progress
+                response.errorCode = 500
+                Logger.error(f"Tutorial step save failed: {result}")
             
         except Exception as e:
-            response.errorCode = 1000
-            Logger.error(f"Tutorial progress error: {e}")
+            response.errorCode = 500
+            Logger.error(f"Tutorial step complete error: {e}")
         
         return response
 
-    async def on_tutorial_complete_req(self, client_session, request: TutorialCompleteRequest):
-        """튜토리얼 완료 요청 처리"""
-        response = TutorialCompleteResponse()
+    async def on_tutorial_get_progress_req(self, client_session, request: TutorialGetProgressRequest):
+        """튜토리얼 진행 상태 조회 - 첫 번째 튜토리얼 반환"""
+        response = TutorialGetProgressResponse()
         response.sequence = request.sequence
         
-        Logger.info(f"Tutorial complete: session_id={request.session_id}")
-        
         try:
-            response.errorCode = 0
-            response.completion_reward = 100  # 예시 보상
-            response.message = "튜토리얼을 완료했습니다!"
-            response.next_action = "GOTO_DASHBOARD"
+            account_db_key = client_session.session_info.account_db_key
+            shard_id = client_session.session_info.shard_id
             
-            Logger.info(f"Tutorial completed: session_id={request.session_id}")
+            database_service = ServiceContainer.get_database_service()
+            result = await database_service.call_shard_procedure(
+                shard_id,
+                'fp_tutorial_get_progress',
+                (account_db_key,)
+            )
             
-        except Exception as e:
-            response.errorCode = 1000
-            Logger.error(f"Tutorial complete error: {e}")
-        
-        return response
-
-    async def on_tutorial_list_req(self, client_session, request: TutorialListRequest):
-        """튜토리얼 목록 요청 처리"""
-        response = TutorialListResponse()
-        response.sequence = request.sequence
-        
-        Logger.info(f"Tutorial list request: category={request.category}")
-        
-        try:
-            # 샘플 튜토리얼 목록
-            tutorials = [
-                {
-                    "id": "onboarding",
-                    "title": "기본 사용법",
-                    "description": "투자 플랫폼 기본 사용법을 익혀보세요",
-                    "category": "BASIC",
-                    "duration": 300,
-                    "steps": 10
-                },
-                {
-                    "id": "portfolio",
-                    "title": "포트폴리오 관리",
-                    "description": "포트폴리오를 효율적으로 관리하는 방법",
-                    "category": "BASIC",
-                    "duration": 180,
-                    "steps": 6
-                }
-            ]
+            # 첫 번째 결과만 반환 (알파벳 순으로 정렬되어 나옴)
+            if result and len(result) > 0:
+                first_row = result[0]
+                response.tutorial_type = first_row.get('tutorial_type', '')
+                response.step_number = first_row.get('completed_step', 0)
+            else:
+                response.tutorial_type = ""
+                response.step_number = 0
             
             response.errorCode = 0
-            response.tutorials = tutorials
-            response.user_progress = {}
             
         except Exception as e:
-            response.errorCode = 1000
-            Logger.error(f"Tutorial list error: {e}")
+            response.errorCode = 500
+            response.tutorial_type = ""
+            response.step_number = 0
+            Logger.error(f"Tutorial get progress error: {e}")
         
         return response
-
-    def _create_tutorial_steps(self, tutorial_type: str, user_level: str) -> list[TutorialStep]:
-        """튜토리얼 타입에 따른 단계 생성"""
-        steps = []
-        
-        if tutorial_type == "ONBOARDING":
-            steps = [
-                TutorialStep(
-                    step_id="step_1",
-                    step_number=1,
-                    title="대시보드 둘러보기",
-                    description="메인 대시보드의 주요 기능을 알아보세요",
-                    target_element="#dashboard",
-                    position="BOTTOM"
-                ),
-                TutorialStep(
-                    step_id="step_2",
-                    step_number=2,
-                    title="포트폴리오 확인",
-                    description="현재 포트폴리오 상태를 확인해보세요",
-                    target_element="#portfolio",
-                    position="RIGHT"
-                ),
-                TutorialStep(
-                    step_id="step_3",
-                    step_number=3,
-                    title="AI 채팅 사용",
-                    description="AI 투자 어드바이저와 대화해보세요",
-                    target_element="#ai-chat",
-                    position="LEFT"
-                )
-            ]
-        
-        return steps
