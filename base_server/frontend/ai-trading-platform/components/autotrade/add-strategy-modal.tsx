@@ -143,6 +143,21 @@ export function AddStrategyModal({ isOpen, onClose, onAddStrategy }: AddStrategy
     debouncedSearch(searchTerm);
   }, [searchTerm, debouncedSearch]);
 
+  // 검색어가 비어지면 선택된 기업 자동 해제
+  useEffect(() => {
+    // 선택된 기업이 현재 검색 결과에 없으면 자동 해제
+    if (selectedStock && searchResults.length > 0) {
+      const isSelectedStockInResults = searchResults.some(
+        (stock: any) => stock.symbol === selectedStock.symbol
+      );
+      
+      if (!isSelectedStockInResults) {
+        console.log("선택된 기업이 목록에 없어서 자동 해제:", selectedStock.symbol);
+        setSelectedStock(null);
+      }
+    }
+  }, [searchResults, selectedStock]);
+
   const handleStockSelect = async (stock: any) => {
     try {
       // stock과 symbol 유효성 검사
@@ -250,7 +265,13 @@ export function AddStrategyModal({ isOpen, onClose, onAddStrategy }: AddStrategy
     setSearchError("");
   };
 
-
+  // 영어 알파벳만 허용하는 함수
+  const handleSearchInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    // 영어 알파벳, 공백, 점(.)만 허용
+    const englishOnly = value.replace(/[^a-zA-Z\s.]/g, '');
+    setSearchTerm(englishOnly);
+  };
 
   return (
     <AnimatePresence>
@@ -290,9 +311,9 @@ export function AddStrategyModal({ isOpen, onClose, onAddStrategy }: AddStrategy
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
                   <Input
-                    placeholder="기업명 또는 종목코드로 검색..."
+                    placeholder="기업명 또는 종목코드 입력 (영어만 가능)..."
                     value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onChange={handleSearchInputChange}
                     className="pl-10 bg-[#1e293b] border-gray-700 text-white"
                   />
                   {isSearching && (
@@ -344,7 +365,7 @@ export function AddStrategyModal({ isOpen, onClose, onAddStrategy }: AddStrategy
                     <div className="text-center py-8 text-muted-foreground">
                       <Search className="w-8 h-8 mx-auto mb-2 opacity-50" />
                       <p>검색 결과가 없습니다</p>
-                      <p className="text-xs">다른 키워드로 검색해보세요</p>
+                      <p className="text-xs">Try different keywords (English only)</p>
                     </div>
                   ) : null}
                 </div>
@@ -354,8 +375,8 @@ export function AddStrategyModal({ isOpen, onClose, onAddStrategy }: AddStrategy
               {(!searchTerm || (isSearching && searchResults.length === 0)) && (
                 <div className="text-center py-8 text-muted-foreground">
                   <Search className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <p>기업명을 입력하여 검색하세요</p>
-                  <p className="text-xs">예: 엔비디아, 테슬라, 애플</p>
+                  <p>기업명을 입력하여 검색하세요 (영어로 입력해주세요)</p>
+                  <p className="text-xs">예: Nvidia, Tesla, Apple</p>
                 </div>
               )}
 

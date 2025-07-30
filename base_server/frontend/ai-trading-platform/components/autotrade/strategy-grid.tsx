@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { BarChart2, Zap, Eye, Pause, Play, Plus } from "lucide-react";
+import { BarChart2, Zap, Trash2, Pause, Play, Plus } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AddStrategyModal } from "./add-strategy-modal";
 
@@ -56,11 +56,8 @@ export function StrategyGrid() {
         </div>
 
         <div className="flex gap-3">
-          <Button variant="outline" size="sm" className="flex items-center gap-2 rounded-2xl shadow">
-            <BarChart2 className="w-4 h-4" />
-            거래 내역
-          </Button>
           <Button 
+            variant="outline"
             size="sm" 
             className="flex items-center gap-2 rounded-2xl shadow"
             onClick={() => setIsModalOpen(true)}
@@ -104,7 +101,7 @@ export function StrategyGrid() {
                 stiffness: 100
               }}
             >
-              <Card className="rounded-2xl bg-[#0f172a]/70 backdrop-blur shadow-lg">
+              <Card className="rounded-2xl bg-[#0f172a]/70 backdrop-blur shadow-lg border border-white/10">
                 <CardHeader className="pb-4 border-none">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-2">
@@ -133,10 +130,10 @@ export function StrategyGrid() {
                       <Button 
                         variant="ghost" 
                         size="icon" 
-                        className="rounded-full hover:bg-white/10"
+                        className="rounded-full hover:bg-red-500/20 hover:text-red-400 transition-colors duration-200"
                         onClick={() => deleteStrategy(strategy.id)}
                       >
-                        <Eye className="w-4 h-4" />
+                        <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
                   </div>
@@ -145,7 +142,7 @@ export function StrategyGrid() {
                 <CardContent>
                   {/* 투자 철학 */}
                   <div className="rounded-lg bg-[#101827] p-4 text-sm text-muted-foreground">
-                    <h3 className="font-medium mb-1 text-white">투자 철학</h3>
+                    <h3 className="font-medium mb-1 text-white">기업 설명</h3>
                     {strategy.philosophy}
                   </div>
 
@@ -162,8 +159,8 @@ export function StrategyGrid() {
                   </div>
 
                   <div className="flex justify-between text-xs text-muted-foreground mt-6">
-                    <span>총 거래: {strategy.trades}회</span>
-                    <span>최근 거래: {strategy.recent}</span>
+                    <span>총 시그널: {strategy.trades}회</span>
+                    <span>최근 추가: {strategy.recent}</span>
                   </div>
                 </CardContent>
               </Card>
