@@ -10,6 +10,8 @@ from service.llm.llm_config import LlmConfig
 from service.net.net_config import NetConfig
 from service.net.fastapi_config import FastApiConfig
 from service.websocket.websocket_config import WebSocketConfig
+from service.email.email_config import EmailConfig
+from service.sms.sms_config import SmsConfig
 
 class TemplateConfig(BaseModel):
     appId: str
@@ -33,3 +35,5 @@ class AppConfig(BaseModel):
     llmConfig: LlmConfig
     netConfig: NetConfig
     websocketConfig: WebSocketConfig
+    emailConfig: EmailConfig
+    smsConfig: SmsConfig
