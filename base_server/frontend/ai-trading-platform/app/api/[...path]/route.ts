@@ -22,9 +22,10 @@ async function proxyRequest(req: NextRequest, pathArr: string[]) {
   const timeout = setTimeout(() => controller.abort(), TIMEOUT);
 
   try {
+    const headers = Object.fromEntries(req.headers.entries());
     const fetchOptions: RequestInit = {
       method: req.method,
-      headers: Object.fromEntries(req.headers.entries()),
+      headers,
       body: ['GET', 'HEAD'].includes(req.method) ? undefined : await req.text(),
       signal: controller.signal,
     };
