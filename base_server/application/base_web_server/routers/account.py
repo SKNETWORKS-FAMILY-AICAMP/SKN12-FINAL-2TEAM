@@ -6,7 +6,7 @@ from template.account.common.account_serialize import (
     AccountEmailVerifyRequest, AccountEmailConfirmRequest, AccountOTPSetupRequest,
     AccountOTPVerifyRequest, AccountOTPLoginRequest, AccountProfileSetupRequest,
     AccountProfileGetRequest, AccountProfileUpdateRequest, AccountTokenRefreshRequest,
-    AccountTokenValidateRequest
+    AccountTokenValidateRequest, AccountApiKeysSaveRequest
 )
 from template.account.common.account_protocol import AccountProtocol
 
@@ -31,6 +31,7 @@ def setup_account_protocol_callbacks():
     account_protocol.on_account_profile_update_req_callback = getattr(account_template, "on_account_profile_update_req", None)
     account_protocol.on_account_token_refresh_req_callback = getattr(account_template, "on_account_token_refresh_req", None)
     account_protocol.on_account_token_validate_req_callback = getattr(account_template, "on_account_token_validate_req", None)
+    account_protocol.on_account_api_keys_save_req_callback = getattr(account_template, "on_account_api_keys_save_req", None)
 
 @router.post("/login")
 async def account_login(request: AccountLoginRequest, req: Request):
@@ -254,4 +255,20 @@ async def account_token_validate(request: AccountTokenValidateRequest, req: Requ
         ip,
         request.model_dump_json(),
         account_protocol.account_token_validate_req_controller
+    )
+
+@router.post("/api-keys/save")
+async def account_api_keys_save(request: AccountApiKeysSaveRequest, req: Request):
+    """API 키 저장"""
+    ip = req.headers.get("X-Forwarded-For")
+    if not ip:
+        ip = req.client.host
+    else:
+        ip = ip.split(", ")[0]
+    return await TemplateService.run_user(
+        req.method,
+        req.url.path,
+        ip,
+        request.model_dump_json(),
+        account_protocol.account_api_keys_save_req_controller
     )

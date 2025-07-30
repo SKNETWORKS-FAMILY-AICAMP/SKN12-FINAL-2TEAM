@@ -2,6 +2,7 @@
 WebSocket 라우터
 """
 import json
+import asyncio
 from typing import Optional, Dict, Any
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -10,6 +11,7 @@ from service.core.logger import Logger
 from service.websocket.websocket_service import WebSocketService
 from template.base.session_info import SessionInfo
 from template.base.base_template import BaseTemplate
+from service.external.websocket_manager import get_websocket_manager
 
 
 router = APIRouter()
@@ -31,59 +33,165 @@ async def get_session_from_token(token: Optional[str] = Query(None)) -> Optional
         return None
 
 
-@router.websocket("/connect")
-async def websocket_endpoint(
-    websocket: WebSocket,
-    token: Optional[str] = Query(None),
-    client_id: Optional[str] = Query(None)
-):
-    """WebSocket 연결 엔드포인트"""
+@router.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    """웹소켓 엔드포인트"""
+    await websocket.accept()
+    Logger.info("웹소켓 클라이언트 연결됨")
     
-    # 서비스 초기화 확인
-    if not WebSocketService.is_initialized():
-        await websocket.close(code=1001, reason="WebSocket service not available")
-        return
-    
-    # 세션 검증
-    session_info = await get_session_from_token(token)
-    user_id = session_info.account_id if session_info else None
-    
-    # 클라이언트 연결
     try:
-        connected_client_id = await WebSocketService.connect_client(
-            websocket=websocket,
-            user_id=user_id,
-            client_id=client_id
-        )
-        
-        if not connected_client_id:
-            await websocket.close(code=1008, reason="Connection failed")
-            return
-        
-        Logger.info(f"WebSocket 연결 성공: {connected_client_id} (사용자: {user_id})")
-        
-        # 메시지 수신 루프
-        try:
-            while True:
-                message = await websocket.receive_text()
-                await WebSocketService.handle_client_message(connected_client_id, message)
-        
-        except WebSocketDisconnect:
-            Logger.info(f"WebSocket 클라이언트 연결 해제: {connected_client_id}")
-        
-        except Exception as e:
-            Logger.error(f"WebSocket 메시지 처리 오류: {connected_client_id} - {e}")
-        
-        finally:
-            # 연결 정리
-            await WebSocketService.disconnect_client(connected_client_id, "connection_closed")
-    
+        while True:
+            # 클라이언트로부터 메시지 수신
+            data = await websocket.receive_text()
+            message = json.loads(data)
+            
+            Logger.info(f"웹소켓 메시지 수신: {message}")
+            
+            # 메시지 타입에 따른 처리
+            if message.get('type') == 'subscribe':
+                # 구독 요청 처리
+                symbols = message.get('symbols', [])
+                indices = message.get('indices', [])
+                
+                Logger.info(f"구독 요청: symbols={symbols}, indices={indices}")
+                
+                # 한국투자증권 API를 통한 실시간 데이터 조회
+                websocket_manager = get_websocket_manager()
+                
+                # 사용자 API 키 조회
+                from service.service_container import ServiceContainer
+                db_service = ServiceContainer.get_database_service()
+                
+                # 여기서는 임시로 account_db_key를 1000으로 설정 (실제로는 세션에서 가져와야 함)
+                account_db_key = 1000
+                
+                api_keys_result = await db_service.execute_global_query(
+                    "SELECT korea_investment_app_key, korea_investment_app_secret FROM table_user_api_keys WHERE account_db_key = %s",
+                    (account_db_key,)
+                )
+                
+                if api_keys_result and api_keys_result[0].get('korea_investment_app_key'):
+                    Logger.info("한국투자증권 API 키 발견, REST API로 데이터 조회")
+                    
+                    app_key = api_keys_result[0]['korea_investment_app_key']
+                    app_secret = api_keys_result[0]['korea_investment_app_secret']
+                    
+                    # REST API를 통한 데이터 조회 (웹소켓 대신)
+                    try:
+                        from service.external.korea_investment_service import get_korea_investment_service
+                        korea_service = await get_korea_investment_service()
+                        
+                        if await korea_service.authenticate(app_key, app_secret):
+                            Logger.info("한국투자증권 REST API 인증 성공")
+                            
+                            # 지수 데이터 조회
+                            market_data = {}
+                            for index_code in indices:
+                                index_data = await korea_service.get_market_index(index_code)
+                                if index_data:
+                                    index_name = "kospi" if index_code == "0001" else "kosdaq"
+                                    market_data[index_name] = {
+                                        'current_price': float(index_data.get('stck_prpr', 0)),
+                                        'change_amount': float(index_data.get('prdy_vrss', 0)),
+                                        'change_rate': float(index_data.get('prdy_ctrt', 0)),
+                                        'volume': int(index_data.get('acml_vol', 0))
+                                    }
+                                # Rate limit 방지를 위한 지연
+                                await asyncio.sleep(0.5)
+                            
+                            # 주식 데이터 조회
+                            portfolio_data = []
+                            for symbol in symbols:
+                                stock_data = await korea_service.get_stock_price(symbol)
+                                if stock_data:
+                                    portfolio_data.append({
+                                        'symbol': symbol,
+                                        'name': symbol,  # 실제로는 종목명 조회 필요
+                                        'current_price': float(stock_data.get('stck_prpr', 0)),
+                                        'change_amount': float(stock_data.get('prdy_vrss', 0)),
+                                        'change_rate': float(stock_data.get('prdy_ctrt', 0)),
+                                        'volume': int(stock_data.get('acml_vol', 0))
+                                    })
+                                # Rate limit 방지를 위한 지연
+                                await asyncio.sleep(0.5)
+                            
+                            # 데이터 전송
+                            await websocket.send_text(json.dumps({
+                                'type': 'market_data',
+                                'market_data': market_data
+                            }))
+                            await websocket.send_text(json.dumps({
+                                'type': 'portfolio_data',
+                                'portfolio_data': portfolio_data
+                            }))
+                            await websocket.send_text(json.dumps({
+                                'type': 'connection_status',
+                                'status': 'connected',
+                                'message': '한국투자증권 REST API 연결 성공'
+                            }))
+                            
+                        else:
+                            Logger.error("한국투자증권 REST API 인증 실패")
+                            # 인증 실패 시 N/A 데이터 전송
+                            await websocket.send_text(json.dumps({
+                                'type': 'market_data',
+                                'market_data': {}
+                            }))
+                            await websocket.send_text(json.dumps({
+                                'type': 'portfolio_data',
+                                'portfolio_data': []
+                            }))
+                            await websocket.send_text(json.dumps({
+                                'type': 'connection_status',
+                                'status': 'auth_failed',
+                                'message': '한국투자증권 API 인증 실패'
+                            }))
+                            
+                    except Exception as e:
+                        Logger.error(f"한국투자증권 REST API 호출 에러: {e}")
+                        # 에러 시 N/A 데이터 전송
+                        await websocket.send_text(json.dumps({
+                            'type': 'market_data',
+                            'market_data': {}
+                        }))
+                        await websocket.send_text(json.dumps({
+                            'type': 'portfolio_data',
+                            'portfolio_data': []
+                        }))
+                        await websocket.send_text(json.dumps({
+                            'type': 'connection_status',
+                            'status': 'error',
+                            'message': f'한국투자증권 API 에러: {str(e)}'
+                        }))
+                else:
+                    Logger.info("한국투자증권 API 키 없음, N/A 데이터 전송")
+                    # API 키가 없으면 N/A 데이터 전송
+                    await websocket.send_text(json.dumps({
+                        'type': 'market_data',
+                        'market_data': {}
+                    }))
+                    await websocket.send_text(json.dumps({
+                        'type': 'portfolio_data',
+                        'portfolio_data': []
+                    }))
+                    await websocket.send_text(json.dumps({
+                        'type': 'connection_status',
+                        'status': 'no_api_key',
+                        'message': '한국투자증권 API 키가 설정되지 않음'
+                    }))
+                
+            elif message.get('type') == 'ping':
+                # 핑 응답
+                await websocket.send_text(json.dumps({
+                    'type': 'pong',
+                    'timestamp': message.get('timestamp')
+                }))
+                
+    except WebSocketDisconnect:
+        Logger.info("웹소켓 클라이언트 연결 해제")
     except Exception as e:
-        Logger.error(f"WebSocket 연결 오류: {e}")
-        try:
-            await websocket.close(code=1011, reason="Internal server error")
-        except:
-            pass
+        Logger.error(f"웹소켓 에러: {e}")
+        await websocket.close()
 
 
 @router.get("/status")

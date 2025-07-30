@@ -1213,7 +1213,7 @@ app.include_router(market.router, prefix="/api/market", tags=["market"])
 app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(notification.router, prefix="/api/notification", tags=["notification"])
 app.include_router(crawler.router, prefix="/api/crawler", tags=["crawler"])
-app.include_router(websocket.router, prefix="/api/websocket", tags=["websocket"])
+app.include_router(websocket.router, tags=["websocket"])
 
 @app.get("/")
 def root():

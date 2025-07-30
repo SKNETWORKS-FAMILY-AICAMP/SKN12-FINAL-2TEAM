@@ -64,3 +64,15 @@ class TransactionInfo(BaseModel):
     reference_id: str = ""                   # reference_id 컬럼 (varchar(50)) - 참조번호
     status: str = ""                         # status 컬럼 (ENUM: pending/completed/failed/cancelled)
     created_at: str = ""                     # created_at 컬럼
+
+class AccountApiKeysSaveRequest(BaseModel):
+    """API 키 저장 요청"""
+    korea_investment_app_key: str = ""
+    korea_investment_app_secret: str = ""
+    alpha_vantage_key: str = ""
+    polygon_key: str = ""
+    finnhub_key: str = ""
+
+class AccountApiKeysSaveResponse(BaseModel):
+    """API 키 저장 응답"""
+    message: str = ""
