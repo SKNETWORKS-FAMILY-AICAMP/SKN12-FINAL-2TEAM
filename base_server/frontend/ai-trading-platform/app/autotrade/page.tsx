@@ -4,6 +4,8 @@ import React, { useState } from "react";
 import { Header } from "@/components/layout/header";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { useRouter } from "next/navigation";
+import { useTutorial } from "@/hooks/use-tutorial";
+import { TutorialOverlay } from "@/components/tutorial/tutorial-overlay";
 import { StrategyGrid } from "@/components/autotrade/strategy-grid";
 
 /**
@@ -13,6 +15,16 @@ import { StrategyGrid } from "@/components/autotrade/strategy-grid";
 export default function AutoTradingPage() {
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  
+  const {
+    currentTutorial,
+    currentStep,
+    currentStepInfo,
+    nextStep,
+    previousStep,
+    skipTutorial,
+    isLoading: tutorialLoading
+  } = useTutorial();
 
   // 페이지 이동 핸들러
   const handleNavigate = (key: string) => {
@@ -44,6 +56,17 @@ export default function AutoTradingPage() {
       <div className="min-h-screen bg-gradient-to-br from-[#0b1221] to-[#02050a] p-6 md:p-10 text-white">
         <StrategyGrid />
       </div>
+      
+      {/* 튜토리얼 오버레이 */}
+      <TutorialOverlay
+        isVisible={!!currentTutorial && !!currentStepInfo()}
+        stepInfo={currentStepInfo()}
+        onNext={nextStep}
+        onPrevious={previousStep}
+        onSkip={skipTutorial}
+        currentStep={currentStep}
+        totalSteps={currentTutorial === 'SIGNALS' ? 3 : 0}
+      />
     </>
   );
 }

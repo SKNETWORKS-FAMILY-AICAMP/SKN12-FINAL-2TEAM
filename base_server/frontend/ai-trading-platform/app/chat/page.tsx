@@ -4,6 +4,8 @@ import React, { useState, useRef, useEffect } from "react";
 import { Plus, MessageCircle, FolderOpen, Zap, Search, Settings, ArrowUp, Menu, ArrowLeft, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useChat } from "@/hooks/use-chat";
+import { useTutorial } from "@/hooks/use-tutorial";
+import { TutorialOverlay } from "@/components/tutorial/tutorial-overlay";
 import ChatMessage from "@/components/chat/chat-message";
 
 // 타이핑 애니메이션 컴포넌트
@@ -51,6 +53,16 @@ export default function ChatPage() {
     deleteRoom,
     handleRenameRoom, // 추가
   } = useChat();
+  
+  const {
+    currentTutorial,
+    currentStep,
+    currentStepInfo,
+    nextStep,
+    previousStep,
+    skipTutorial,
+    isLoading: tutorialLoading
+  } = useTutorial();
   const [message, setMessage] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const router = useRouter();
@@ -451,6 +463,17 @@ export default function ChatPage() {
           </div>
         </div>
       </div>
+      
+      {/* 튜토리얼 오버레이 */}
+      <TutorialOverlay
+        isVisible={!!currentTutorial && !!currentStepInfo()}
+        stepInfo={currentStepInfo()}
+        onNext={nextStep}
+        onPrevious={previousStep}
+        onSkip={skipTutorial}
+        currentStep={currentStep}
+        totalSteps={currentTutorial === 'CHAT' ? 4 : 0}
+      />
     </div>
   );
 }

@@ -6,10 +6,22 @@ import { useRouter } from 'next/navigation';
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell } from 'recharts';
 import { Header } from "@/components/layout/header";
 import { AppSidebar } from "@/components/layout/AppSidebar";
+import { useTutorial } from "@/hooks/use-tutorial";
+import { TutorialOverlay } from "@/components/tutorial/tutorial-overlay";
 
 export default function PortfolioPage() {
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  
+  const {
+    currentTutorial,
+    currentStep,
+    currentStepInfo,
+    nextStep,
+    previousStep,
+    skipTutorial,
+    isLoading: tutorialLoading
+  } = useTutorial();
 
   const stats = [
     {
@@ -326,6 +338,17 @@ export default function PortfolioPage() {
           </div>
         </div>
       </main>
+      
+      {/* 튜토리얼 오버레이 */}
+      <TutorialOverlay
+        isVisible={!!currentTutorial && !!currentStepInfo()}
+        stepInfo={currentStepInfo()}
+        onNext={nextStep}
+        onSkip={skipTutorial}
+        onPrevious={previousStep}
+        currentStep={currentStep}
+        totalSteps={currentTutorial === 'PORTFOLIO' ? 3 : 0}
+      />
     </div>
   );
 }
