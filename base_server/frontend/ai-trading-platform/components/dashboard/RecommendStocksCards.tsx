@@ -34,7 +34,7 @@ const mockStocks = [
 ];
 
 function Sparkline({ data, color = "#60a5fa" }: { data: number[]; color?: string }) {
-  const width = 48, height = 24;
+  const width = 160, height = 80;
   const min = Math.min(...data), max = Math.max(...data);
   const points = data.map((v, i) => {
     const x = (i / (data.length - 1)) * width;
@@ -42,11 +42,11 @@ function Sparkline({ data, color = "#60a5fa" }: { data: number[]; color?: string
     return `${x},${y}`;
   }).join(" ");
   return (
-    <svg width={width} height={height} className="ml-2" style={{ minWidth: width }}>
+    <svg width={width} height={height} style={{ minWidth: width }}>
       <polyline
         fill="none"
         stroke={color}
-        strokeWidth="2"
+        strokeWidth="4"
         points={points}
       />
     </svg>
@@ -55,8 +55,8 @@ function Sparkline({ data, color = "#60a5fa" }: { data: number[]; color?: string
 
 export default function RecommendStocksCards() {
   return (
-    <div className="w-full max-w-6xl bg-gradient-to-br from-black via-gray-900 to-gray-850 rounded-2xl shadow-2xl border border-gray-800 p-10 flex flex-col gap-8">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full">
+    <div className="w-full max-w-7xl bg-gradient-to-br from-black via-gray-900 to-gray-850 rounded-2xl shadow-2xl border border-gray-800 p-4 flex flex-col gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
         {mockStocks.map((stock, i) => {
           const isUp = stock.change > 0;
           const isDown = stock.change < 0;
@@ -66,25 +66,29 @@ export default function RecommendStocksCards() {
           return (
             <div
               key={stock.symbol}
-              className={`group rounded-xl border-0 bg-white/80 dark:bg-[#18181c]/80 backdrop-blur-xl hover:shadow-2xl transition-all duration-500 hover:scale-105 shadow-md p-6 flex flex-col items-start min-h-[380px] min-w-[220px] w-full bg-gradient-to-br ${stock.gradient}`}
+              className={`group rounded-xl border-0 bg-white/80 dark:bg-[#18181c]/80 backdrop-blur-xl hover:shadow-2xl transition-all duration-500 hover:scale-105 shadow-md p-4 flex flex-col items-start min-h-[320px] min-w-[280px] w-full bg-gradient-to-br ${stock.gradient}`}
             >
-              <div className="flex items-center w-full mb-4">
-                <div className="w-12 h-12 rounded-full bg-white text-black font-bold text-xl flex items-center justify-center mr-6 shadow">
+              <div className="flex items-center w-full mb-3">
+                <div className="w-12 h-12 rounded-full bg-white text-black font-bold text-xl flex items-center justify-center mr-5 shadow">
                   {stock.logo}
                 </div>
                 <div className="flex-1">
-                  <div className="text-2xl font-bold leading-tight">{stock.name}</div>
+                  <div className="text-xl font-bold leading-tight">{stock.name}</div>
                   <div className="text-sm text-gray-400 font-semibold">{stock.symbol}</div>
                 </div>
               </div>
-              <div className="flex items-center mb-4">
-                <span className="text-3xl font-extrabold mr-3">{stock.price.toLocaleString()}</span>
-                <span className={`font-bold ${color} flex items-center text-2xl mr-2`}>{arrow}</span>
-                <Sparkline data={stock.chart} color={chartColor} />
+              <div className="flex items-center justify-between w-full mb-3">
+                <div className="flex items-center">
+                  <span className="text-2xl font-extrabold mr-4">{stock.price.toLocaleString()}</span>
+                  <span className={`font-bold ${color} flex items-center text-xl mr-3`}>{arrow}</span>
+                </div>
+                <div className="-mt-16">
+                  <Sparkline data={stock.chart} color={chartColor} />
+                </div>
               </div>
               <div className="mt-auto w-full pt-2">
-                <div className="text-xs text-gray-400 mb-1 font-semibold">추천 사유</div>
-                <div className="text-base text-gray-300 whitespace-pre-line leading-relaxed">
+                <div className="text-sm text-gray-400 mb-1 font-semibold">추천 사유</div>
+                <div className="text-sm text-gray-300 whitespace-pre-line leading-relaxed">
                   {stock.desc}
                 </div>
               </div>

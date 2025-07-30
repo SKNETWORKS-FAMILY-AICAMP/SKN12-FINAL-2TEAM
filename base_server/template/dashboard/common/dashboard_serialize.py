@@ -46,3 +46,17 @@ class DashboardPerformanceResponse(BaseResponse):
     max_drawdown: float = 0.0
     volatility: float = 0.0
     performance_chart: List[Dict[str, Any]] = []
+
+# =========================
+# 증권사 API 로그인 요청/응답
+# =========================
+class SecuritiesLoginRequest(BaseRequest):
+    """증권사 API 로그인 요청"""
+    appkey: str
+    appsecret: str
+    mode: str = "prod"
+
+class SecuritiesLoginResponse(BaseResponse):
+    """증권사 API 로그인 응답"""
+    result: str
+    error: Optional[str] = None

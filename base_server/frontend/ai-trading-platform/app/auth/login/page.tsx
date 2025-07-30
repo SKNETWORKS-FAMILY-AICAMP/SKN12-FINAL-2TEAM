@@ -65,7 +65,7 @@ export default function LoginPage() {
         if (completed) {
           window.location.href = "/dashboard";
         } else {
-          window.location.href = "/onboarding";
+          window.location.href = "/auth/api-keys";
         }
         return;
       } else {
