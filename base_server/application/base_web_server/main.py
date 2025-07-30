@@ -50,6 +50,12 @@ from service.core.service_monitor import service_monitor
 from service.websocket.websocket_service import WebSocketService
 from service.net.fastapi_middleware import FastAPIMiddlewareService
 
+# 새로 구현한 AWS 서비스들 import
+from service.email.email_service import EmailService
+from service.email.email_config import EmailConfig
+from service.sms.sms_service import SmsService  
+from service.sms.sms_config import SmsConfig
+
 # uvicorn base_server.application.base_web_server.main:app --reload --  logLevel=Debug
 
 # 로그레벨, 환경 읽기
@@ -391,6 +397,97 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             Logger.error(f"VectorDB 서비스 초기화 실패: {e}")
             Logger.info("VectorDB 서비스 없이 계속 진행")
+        
+        # EmailService 초기화 (AWS SES) - 새로 추가
+        try:
+            if EmailService.init(app_config.emailConfig):
+                Logger.info("✅ EmailService 초기화 완료")
+                
+                # 이메일 발송 테스트 (skipAwsTests가 false인 경우만)
+                if not app_config.templateConfig.skipAwsTests:
+                    try:
+                        # 테스트 이메일 발송 (사용자 이메일로 테스트)
+                        test_result = await EmailService.send_simple_email(
+                            to_emails=["ldgo91@naver.com"],  # 사용자 이메일로 테스트
+                            subject="[시스템 테스트] AI Trading Platform 이메일 서비스 정상 동작",
+                            text_body="안녕하세요! AI Trading Platform EmailService가 정상적으로 초기화되었습니다.",
+                            html_body="""
+                            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                                <h1 style="color: #2c3e50;">AI Trading Platform 알림</h1>
+                                <p style="color: #34495e; font-size: 16px;">
+                                    EmailService가 성공적으로 초기화되었습니다.
+                                </p>
+                                <p style="color: #7f8c8d; font-size: 14px;">
+                                    이제 거래 신호, 가격 알림 등을 이메일로 받으실 수 있습니다.
+                                </p>
+                                <hr style="border: 1px solid #ecf0f1;">
+                                <p style="color: #95a5a6; font-size: 12px;">
+                                    이 메일은 시스템 테스트 메일입니다.
+                                </p>
+                            </div>
+                            """
+                        )
+                        
+                        if test_result["success"]:
+                            Logger.info("✅ EmailService 발송 테스트 성공")
+                        else:
+                            Logger.warn(f"⚠️ EmailService 발송 테스트 실패: {test_result.get('error', 'Unknown')}")
+                    except Exception as email_test_e:
+                        Logger.warn(f"⚠️ EmailService 발송 테스트 실패: {email_test_e}")
+                else:
+                    Logger.info("⏭️ EmailService 테스트 스킵 (skipAwsTests=true)")
+            else:
+                Logger.warn("⚠️ EmailService 초기화 실패")
+        except Exception as e:
+            Logger.error(f"❌ EmailService 초기화 실패: {e}")
+            Logger.info("⚠️ EmailService 없이 계속 진행 - 이메일 알림 기능 제한됨")
+        
+        # SmsService 초기화 (AWS SNS) - 새로 추가
+        try:
+            if SmsService.init(app_config.smsConfig):
+                Logger.info("✅ SmsService 초기화 완료")
+                
+                # SMS 설정 확인 및 테스트 발송
+                if not app_config.templateConfig.skipAwsTests:
+                    try:
+                        # AWS SNS 설정 확인
+                        settings_result = await SmsService.check_aws_sms_settings()
+                        if settings_result["success"]:
+                            Logger.info("✅ SmsService AWS SNS 연결 테스트 성공")
+                        else:
+                            Logger.warn(f"⚠️ SmsService AWS SNS 연결 테스트 실패: {settings_result.get('error', 'Unknown')}")
+                        
+                        # 발송 통계 확인
+                        stats_result = await SmsService.get_send_statistics()
+                        if stats_result["success"]:
+                            Logger.info(f"✅ SmsService 통계 확인 성공 - 일일 잔여: {stats_result['daily_remaining']}건")
+                        
+                        # 실제 SMS 테스트 발송 (사용자 번호로)
+                        Logger.info("📱 SMS 테스트 발송 시작...")
+                        sms_result = await SmsService.send_sms(
+                            phone_number="+82-10-8874-6452",  # 사용자 전화번호
+                            message="[AI Trading] 시스템 테스트 SMS입니다. 서비스가 정상 초기화되었습니다.",
+                            message_type="system_alert"
+                        )
+                        
+                        if sms_result["success"]:
+                            Logger.info(f"✅ SMS 테스트 발송 성공! (메시지 ID: {sms_result.get('message_id', 'N/A')})")
+                            Logger.info(f"   일일 잔여: {sms_result.get('daily_remaining', 'N/A')}건")
+                            Logger.info(f"   월간 잔여: {sms_result.get('monthly_remaining', 'N/A')}건")
+                        else:
+                            Logger.warn(f"⚠️ SMS 테스트 발송 실패: {sms_result.get('error', 'Unknown')}")
+                            if "sandbox" in str(sms_result.get('error', '')).lower():
+                                Logger.info("💡 SMS Sandbox 모드입니다. 전화번호를 먼저 확인해야 합니다.")
+                        
+                    except Exception as sms_test_e:
+                        Logger.warn(f"⚠️ SmsService 테스트 실패: {sms_test_e}")
+                else:
+                    Logger.info("⏭️ SmsService 테스트 스킵 (skipAwsTests=true)")
+            else:
+                Logger.warn("⚠️ SmsService 초기화 실패")
+        except Exception as e:
+            Logger.error(f"❌ SmsService 초기화 실패: {e}")
+            Logger.info("⚠️ SmsService 없이 계속 진행 - SMS 알림 기능 제한됨")
         
         # LockService 초기화 (Redis 분산락)
         try:

@@ -31,6 +31,24 @@ class EventType(Enum):
     MARKET_DATA_UPDATED = "market.data.updated"
     PRICE_ALERT = "price.alert"
     
+    # 알림 관련 (신규 추가)
+    NOTIFICATION_CREATED = "notification.created"
+    NOTIFICATION_SENT = "notification.sent"
+    NOTIFICATION_FAILED = "notification.failed"
+    NOTIFICATION_CLICKED = "notification.clicked"
+    NOTIFICATION_DISMISSED = "notification.dismissed"
+    
+    # 예측 알림 관련 (신규 추가)
+    PREDICTION_REQUESTED = "prediction.requested"
+    PREDICTION_COMPLETED = "prediction.completed"
+    PREDICTION_FAILED = "prediction.failed"
+    PREDICTION_ALERT_TRIGGERED = "prediction.alert_triggered"
+    
+    # 알림 설정 관련 (신규 추가)
+    ALERT_SETTING_CREATED = "alert_setting.created"
+    ALERT_SETTING_UPDATED = "alert_setting.updated"
+    ALERT_SETTING_DELETED = "alert_setting.deleted"
+    
     # 시스템 관련
     SYSTEM_MAINTENANCE = "system.maintenance"
     SYSTEM_ERROR = "system.error"
