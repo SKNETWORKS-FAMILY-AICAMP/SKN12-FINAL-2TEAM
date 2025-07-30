@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth"
+import { useTutorial } from "@/hooks/use-tutorial"
+import { TutorialOverlay } from "@/components/tutorial/tutorial-overlay"
 import { BarChart2, PieChart, Activity } from "lucide-react"
 import { PortfolioValueCard } from "@/components/dashboard/PortfolioValueCard";
 import { ActivePositionsCard } from "@/components/dashboard/ActivePositionsCard";
@@ -19,6 +21,14 @@ import WorldIndicesTicker from "@/components/dashboard/WorldIndicesTicker";
 export default function DashboardPage() {
   const router = useRouter();
   const { user, isLoading } = useAuth();
+  const { 
+    currentTutorial, 
+    currentStep, 
+    currentStepInfo, 
+    nextStep, 
+    previousStep, 
+    skipTutorial 
+  } = useTutorial();
                 const [marketData, setMarketData] = useState([
                 { label: "KOSPI", value: 0, change: "N/A" },
                 { label: "S&P 500", value: 0, change: "N/A" },
@@ -193,6 +203,16 @@ export default function DashboardPage() {
           </div>
         </div>
       </main>
+      {/* 튜토리얼 오버레이 */}
+      <TutorialOverlay
+        isVisible={!!currentTutorial && !!currentStepInfo()}
+        stepInfo={currentStepInfo()}
+        onNext={nextStep}
+        onPrevious={previousStep}
+        onSkip={skipTutorial}
+        currentStep={currentStep}
+        totalSteps={currentTutorial === 'OVERVIEW' ? 6 : 0}
+      />
     </div>
   );
 } 
