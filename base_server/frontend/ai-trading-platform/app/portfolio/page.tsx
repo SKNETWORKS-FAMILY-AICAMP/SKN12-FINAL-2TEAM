@@ -104,7 +104,7 @@ export default function PortfolioPage() {
       case "portfolio":
         router.push("/portfolio"); break;
       case "signals":
-        router.push("/signals"); break;
+        router.push("/autotrade"); break;
       case "chat":
         router.push("/chat"); break;
       case "settings":

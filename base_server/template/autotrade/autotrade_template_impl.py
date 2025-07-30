@@ -14,6 +14,7 @@ import json
 import uuid
 import random
 from datetime import datetime
+from service.external.yahoo_finance_client import YahooFinanceClient
 
 class AutoTradeTemplateImpl(BaseTemplate):
     def __init__(self):
@@ -436,3 +437,71 @@ class AutoTradeTemplateImpl(BaseTemplate):
             Logger.error(f"AutoTrade AI strategy error: {e}")
         
         return response
+
+    async def on_autotrade_yahoo_search_req(self, client_session, request: dict):
+        """야후 파이낸스 주식 검색"""
+        Logger.info(f"client_session: {client_session}")
+        Logger.info(f"client_session.session: {getattr(client_session, 'session', None)}")
+        Logger.info(f"user_id: {getattr(getattr(client_session, 'session', None), 'user_id', None)}")
+        cache_service = ServiceContainer.get_cache_service()
+        async with YahooFinanceClient(cache_service) as client:
+            result = await client.search_stocks(request.get("query", ""))
+            return result
+
+    async def on_autotrade_yahoo_detail_req(self, client_session, request: dict):
+        """야후 파이낸스 주식 상세 정보"""
+        symbol = request.get("symbol")
+        
+        # symbol 유효성 검사
+        if not symbol or not isinstance(symbol, str) or not symbol.strip():
+            return {
+                "errorCode": 1,
+                "price_data": {},
+                "message": f"유효하지 않은 symbol: {symbol}"
+            }
+        
+        cache_service = ServiceContainer.get_cache_service()
+        async with YahooFinanceClient(cache_service) as client:
+            result = await client.get_stock_detail(symbol)
+            if result is None:
+                # None 대신 유효한 응답 구조 반환
+                return {
+                    "errorCode": 1,
+                    "price_data": {
+                        symbol: {
+                            "symbol": symbol,
+                            "current_price": 0.0,
+                            "close_price": 0.0,
+                            "open_price": 0.0,
+                            "high_price": 0.0,
+                            "low_price": 0.0,
+                            "volume": 0,
+                            "change_amount": 0.0,
+                            "change_percent": 0.0,
+                            "currency": "USD",
+                            "exchange": "NASDAQ"
+                        }
+                    },
+                    "message": f"상세 정보를 가져올 수 없습니다: {symbol}"
+                }
+            # 성공 시에도 프론트엔드가 기대하는 형태로 변환
+            return {
+                "errorCode": 0,
+                "price_data": {
+                    symbol: {
+                        "symbol": result.symbol,
+                        "name": result.name,
+                        "current_price": result.current_price,
+                        "close_price": result.current_price,  # current_price를 close_price로도 사용
+                        "open_price": result.open_price,
+                        "high_price": result.high_price,
+                        "low_price": result.low_price,
+                        "volume": result.volume,
+                        "change_amount": result.change_amount,
+                        "change_percent": result.change_percent,
+                        "currency": result.currency,
+                        "exchange": result.exchange
+                    }
+                },
+                "message": "상세 정보 조회 성공"
+            }

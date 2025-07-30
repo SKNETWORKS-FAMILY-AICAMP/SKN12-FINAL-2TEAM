@@ -9,11 +9,11 @@ interface AppSidebarProps {
 }
 
 const menu = [
-  { key: "dashboard", label: "Overview" },
-  { key: "portfolio", label: "Portfolio" },
-  { key: "signals", label: "Signals" },
-  { key: "chat", label: "Chat" }, // 추가: Chat 메뉴
-  { key: "settings", label: "Settings" },
+  { key: "dashboard", label: "대시보드" },
+  { key: "portfolio", label: "포트폴리오" },
+  { key: "signals", label: "매매 시그널" },
+  { key: "chat", label: "AI 채팅" },
+  { key: "settings", label: "설정" },
 ];
 
 export function AppSidebar({ open, onClose, onNavigate }: AppSidebarProps) {
@@ -41,7 +41,8 @@ export function AppSidebar({ open, onClose, onNavigate }: AppSidebarProps) {
         ${open ? 'translate-x-0' : '-translate-x-full'}`}
       >
         <div className="flex flex-col h-full p-6">
-          <div className="font-bold text-xl mb-8 text-white">AI Trader Pro</div>
+          <div className="font-bold text-xl mb-4 text-white">AI Trader Pro</div>
+          <div className="h-px bg-gradient-to-r from-blue-500 via-purple-500 to-transparent mb-8 opacity-60"></div>
           <nav className="flex flex-col gap-4">
             {menu.map((item) => (
               <button
@@ -54,13 +55,13 @@ export function AppSidebar({ open, onClose, onNavigate }: AppSidebarProps) {
             ))}
           </nav>
           <button
-            className="mt-auto text-gray-400 hover:text-white text-sm pt-8 transition-colors duration-200"
+            className="mt-auto text-gray-400 hover:text-white text-sm font-medium py-3 px-4 rounded-lg border border-gray-600 hover:border-gray-500 hover:bg-gray-800/50 transition-all duration-200"
             onClick={onClose}
           >
             닫기
           </button>
           <button
-            className="text-red-400 hover:text-red-300 text-sm mt-2 transition-colors duration-200"
+            className="text-red-400 hover:text-red-300 text-sm font-medium py-3 px-4 rounded-lg border border-red-600/50 hover:border-red-500 hover:bg-red-900/20 mt-2 transition-all duration-200"
             onClick={handleLogout}
           >
             로그아웃
