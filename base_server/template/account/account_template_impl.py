@@ -19,7 +19,8 @@ from template.account.common.account_serialize import (
     AccountProfileGetRequest, AccountProfileGetResponse,
     AccountProfileUpdateRequest, AccountProfileUpdateResponse,
     AccountTokenRefreshRequest, AccountTokenRefreshResponse,
-    AccountTokenValidateRequest, AccountTokenValidateResponse
+    AccountTokenValidateRequest, AccountTokenValidateResponse,
+    AccountApiKeysSaveRequest, AccountApiKeysSaveResponse
 )
 from template.account.common.account_model import AccountInfo, UserInfo, OTPInfo, UserProfile
 from service.service_container import ServiceContainer
@@ -738,6 +739,51 @@ class AccountTemplateImpl(AccountTemplate):
             response.errorCode = 1000
             response.message = "프로필 업데이트 중 오류가 발생했습니다"
             Logger.error(f"Profile update error: {e}")
+        
+        return response
+
+    async def on_account_api_keys_save_req(self, session, request: AccountApiKeysSaveRequest):
+        """API 키 저장"""
+        response = AccountApiKeysSaveResponse()
+        response.sequence = request.sequence
+        
+        Logger.info(f"API keys save request: {session.session.account_db_key}")
+        
+        try:
+            db_service = ServiceContainer.get_database_service()
+            account_db_key = session.session.account_db_key
+            
+            # API 키 저장 쿼리
+            save_query = """
+            INSERT INTO table_user_api_keys (
+                account_db_key, korea_investment_app_key, korea_investment_app_secret,
+                alpha_vantage_key, polygon_key, finnhub_key, created_at, updated_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW())
+            ON DUPLICATE KEY UPDATE
+                korea_investment_app_key = VALUES(korea_investment_app_key),
+                korea_investment_app_secret = VALUES(korea_investment_app_secret),
+                alpha_vantage_key = VALUES(alpha_vantage_key),
+                polygon_key = VALUES(polygon_key),
+                finnhub_key = VALUES(finnhub_key),
+                updated_at = NOW()
+            """
+            
+            await db_service.execute_global_query(save_query, (
+                account_db_key,
+                request.korea_investment_app_key,
+                request.korea_investment_app_secret,
+                request.alpha_vantage_key,
+                request.polygon_key,
+                request.finnhub_key
+            ))
+            
+            response.errorCode = 0
+            response.message = "API 키가 성공적으로 저장되었습니다."
+            
+        except Exception as e:
+            response.errorCode = 1000
+            response.message = "API 키 저장에 실패했습니다."
+            Logger.error(f"API keys save error: {e}")
         
         return response
 

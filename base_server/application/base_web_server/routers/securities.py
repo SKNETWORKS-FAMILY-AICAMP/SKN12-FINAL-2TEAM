@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request
 from template.base.template_service import TemplateService
-from template.securities.common.securities_serialize import SecuritiesLoginRequest
-from template.securities.common.securities_protocol import SecuritiesProtocol
+from template.dashboard.common.dashboard_protocol import SecuritiesLoginRequest
+from template.dashboard.common.dashboard_protocol import SecuritiesProtocol
 
 router = APIRouter()
 securities_protocol = SecuritiesProtocol()

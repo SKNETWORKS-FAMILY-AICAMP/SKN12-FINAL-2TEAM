@@ -3,8 +3,10 @@ from .account_serialize import (
     AccountEmailVerifyRequest, AccountEmailConfirmRequest, AccountOTPSetupRequest,
     AccountOTPVerifyRequest, AccountOTPLoginRequest, AccountProfileSetupRequest,
     AccountProfileGetRequest, AccountProfileUpdateRequest, AccountTokenRefreshRequest,
-    AccountTokenValidateRequest
+    AccountTokenValidateRequest, AccountApiKeysSaveRequest, AccountApiKeysSaveResponse
 )
+from typing import Callable, Optional
+import asyncio
 
 class AccountProtocol:
     def __init__(self):
@@ -25,6 +27,7 @@ class AccountProtocol:
         self.on_account_profile_update_req_callback = None
         self.on_account_token_refresh_req_callback = None
         self.on_account_token_validate_req_callback = None
+        self.on_account_api_keys_save_req_callback: Optional[Callable] = None
 
     async def account_login_req_controller(self, session, msg: bytes, length: int):
         request = AccountLoginRequest.model_validate_json(msg)
@@ -110,3 +113,9 @@ class AccountProtocol:
         if self.on_account_token_validate_req_callback:
             return await self.on_account_token_validate_req_callback(session, request)
         raise NotImplementedError('on_account_token_validate_req_callback is not set')
+
+    async def account_api_keys_save_req_controller(self, session, msg: bytes, length: int):
+        request = AccountApiKeysSaveRequest.model_validate_json(msg)
+        if self.on_account_api_keys_save_req_callback:
+            return await self.on_account_api_keys_save_req_callback(session, request)
+        raise NotImplementedError('on_account_api_keys_save_req_callback is not set')

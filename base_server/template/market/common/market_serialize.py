@@ -54,3 +54,18 @@ class MarketNewsResponse(BaseResponse):
     news: List[NewsItem] = []
     total_count: int = 0
     sentiment_summary: Dict[str, float] = {}
+
+# ============================================================================
+# 실시간 데이터
+# ============================================================================
+
+class MarketRealTimeRequest(BaseRequest):
+    """실시간 시장 데이터 요청"""
+    symbols: List[str] = []  # 주식 심볼들
+    indices: List[str] = []  # 지수 코드들 (0001: KOSPI, 1001: KOSDAQ)
+
+class MarketRealTimeResponse(BaseResponse):
+    """실시간 시장 데이터 응답"""
+    market_data: Dict[str, Dict[str, Any]] = {}  # 지수 데이터
+    portfolio_data: List[Dict[str, Any]] = []    # 포트폴리오 데이터
+    timestamp: str = ""

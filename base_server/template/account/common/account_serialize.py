@@ -191,3 +191,19 @@ class AccountTokenValidateResponse(BaseResponse):
     is_valid: bool = False
     user_info: Optional[UserInfo] = None
     expires_at: str = ""
+
+# ============================================================================
+# API 키 관리
+# ============================================================================
+
+class AccountApiKeysSaveRequest(BaseRequest):
+    """API 키 저장 요청"""
+    korea_investment_app_key: str = ""
+    korea_investment_app_secret: str = ""
+    alpha_vantage_key: str = ""
+    polygon_key: str = ""
+    finnhub_key: str = ""
+
+class AccountApiKeysSaveResponse(BaseResponse):
+    """API 키 저장 응답"""
+    message: str = ""

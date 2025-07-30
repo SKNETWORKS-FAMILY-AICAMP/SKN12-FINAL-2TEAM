@@ -3,7 +3,8 @@ from template.market.common.market_serialize import (
     MarketSecuritySearchRequest, MarketSecuritySearchResponse,
     MarketPriceRequest, MarketPriceResponse,
     MarketNewsRequest, MarketNewsResponse,
-    MarketOverviewRequest, MarketOverviewResponse
+    MarketOverviewRequest, MarketOverviewResponse,
+    MarketRealTimeRequest, MarketRealTimeResponse
 )
 from service.core.logger import Logger
 from service.service_container import ServiceContainer
@@ -13,6 +14,60 @@ from datetime import datetime
 class MarketTemplateImpl(BaseTemplate):
     def __init__(self):
         super().__init__()
+        self._received_market_data = {}
+        self._received_portfolio_data = []
+    
+    async def _handle_market_data(self, data):
+        """웹소켓 시장 데이터 핸들러"""
+        try:
+            Logger.info(f"웹소켓 시장 데이터 수신: {data}")
+            if 'body' in data and 'output' in data['body']:
+                output = data['body']['output']
+                index_code = data.get('tr_key', '')
+                
+                if index_code == '0001':  # KOSPI
+                    self._received_market_data['kospi'] = {
+                        'current_price': float(output.get('stck_prpr', 0)),
+                        'change_amount': float(output.get('prdy_vrss', 0)),
+                        'change_rate': float(output.get('prdy_ctrt', 0)),
+                        'volume': int(output.get('acml_vol', 0))
+                    }
+                elif index_code == '1001':  # KOSDAQ
+                    self._received_market_data['kosdaq'] = {
+                        'current_price': float(output.get('stck_prpr', 0)),
+                        'change_amount': float(output.get('prdy_vrss', 0)),
+                        'change_rate': float(output.get('prdy_ctrt', 0)),
+                        'volume': int(output.get('acml_vol', 0))
+                    }
+        except Exception as e:
+            Logger.error(f"웹소켓 시장 데이터 처리 에러: {e}")
+    
+    async def _handle_stock_data(self, data):
+        """웹소켓 주식 데이터 핸들러"""
+        try:
+            Logger.info(f"웹소켓 주식 데이터 수신: {data}")
+            if 'body' in data and 'output' in data['body']:
+                output = data['body']['output']
+                symbol = data.get('tr_key', '')
+                
+                stock_data = {
+                    'symbol': symbol,
+                    'name': symbol,  # 실제로는 종목명 조회 필요
+                    'current_price': float(output.get('stck_prpr', 0)),
+                    'change_amount': float(output.get('prdy_vrss', 0)),
+                    'change_rate': float(output.get('prdy_ctrt', 0)),
+                    'volume': int(output.get('acml_vol', 0))
+                }
+                
+                # 기존 데이터 업데이트 또는 새로 추가
+                existing_index = next((i for i, item in enumerate(self._received_portfolio_data) if item['symbol'] == symbol), None)
+                if existing_index is not None:
+                    self._received_portfolio_data[existing_index] = stock_data
+                else:
+                    self._received_portfolio_data.append(stock_data)
+                    
+        except Exception as e:
+            Logger.error(f"웹소켓 주식 데이터 처리 에러: {e}")
     
     async def on_market_security_search_req(self, client_session, request: MarketSecuritySearchRequest):
         """종목 검색 요청 처리"""
@@ -307,5 +362,106 @@ class MarketTemplateImpl(BaseTemplate):
             response.most_active = []
             response.market_sentiment = "NEUTRAL"
             Logger.error(f"Market overview error: {e}")
+        
+        return response
+
+    async def on_market_real_time_req(self, client_session, request: MarketRealTimeRequest):
+        """실시간 시장 데이터 요청 처리"""
+        response = MarketRealTimeResponse()
+        
+        Logger.info(f"Market real-time request: symbols={request.symbols}, indices={request.indices}")
+        
+        try:
+            account_db_key = client_session.session.account_db_key
+            shard_id = client_session.session.shard_id
+            
+            db_service = ServiceContainer.get_database_service()
+            
+            # 1. 사용자 API 키 조회
+            api_keys_result = await db_service.execute_global_query(
+                "SELECT korea_investment_app_key, korea_investment_app_secret FROM table_user_api_keys WHERE account_db_key = %s",
+                (account_db_key,)
+            )
+            
+            Logger.info(f"API 키 조회 결과: {api_keys_result}")
+            if api_keys_result:
+                Logger.info(f"API 키 존재: {api_keys_result[0].get('korea_investment_app_key', '')[:10]}...")
+            else:
+                Logger.info("API 키가 존재하지 않음")
+            
+            market_data = {}
+            portfolio_data = []
+            
+            # 2. 웹소켓 매니저를 통한 지속적인 연결 관리
+            if api_keys_result and api_keys_result[0].get('korea_investment_app_key'):
+                Logger.info("웹소켓 매니저를 통한 연결 시도")
+                try:
+                    from service.external.websocket_manager import get_websocket_manager
+                    websocket_manager = get_websocket_manager()
+                    
+                    # 사용자 웹소켓 연결
+                    app_key = api_keys_result[0]['korea_investment_app_key']
+                    app_secret = api_keys_result[0]['korea_investment_app_secret']
+                    
+                    if await websocket_manager.connect_user(str(account_db_key), app_key, app_secret):
+                        Logger.info("웹소켓 매니저 연결 성공")
+                        
+                        # 주식 구독 추가
+                        if request.symbols:
+                            await websocket_manager.subscribe_stocks(str(account_db_key), request.symbols)
+                        
+                        # 연결 상태 확인
+                        if websocket_manager.get_connection_status(str(account_db_key)):
+                            Logger.info("웹소켓 연결 상태 확인됨")
+                            # 실시간 데이터는 웹소켓을 통해 계속 수신되므로
+                            # 여기서는 연결 성공만 확인
+                            market_data = {}  # 실시간으로 업데이트됨
+                            portfolio_data = []  # 실시간으로 업데이트됨
+                        else:
+                            Logger.error("웹소켓 연결 상태 확인 실패")
+                            market_data = {}
+                            portfolio_data = []
+                    else:
+                        Logger.error("웹소켓 매니저 연결 실패")
+                        market_data = {}
+                        portfolio_data = []
+                    
+                except Exception as e:
+                    Logger.error(f"웹소켓 매니저 연결 에러: {e}")
+                    market_data = {}
+                    portfolio_data = []
+            else:
+                Logger.info("한국투자증권 API 키가 없음")
+                market_data = {}
+                portfolio_data = []
+            
+            # 3. API 키가 없거나 실패한 경우 빈 데이터 반환 (N/A 표시)
+            if not market_data:
+                Logger.info("한국투자증권 API 데이터 없음, N/A 표시")
+                market_data = {}  # 빈 데이터로 설정하여 N/A 표시
+            else:
+                Logger.info("한국투자증권 API 실시간 데이터 사용")
+            
+
+            
+            if not portfolio_data:
+                Logger.info("한국투자증권 API 포트폴리오 데이터 없음, N/A 표시")
+                portfolio_data = []  # 빈 배열로 설정하여 N/A 표시
+                
+
+            else:
+                Logger.info(f"한국투자증권 API 포트폴리오 데이터 사용: {len(portfolio_data)}개 종목")
+            
+            response.market_data = market_data
+            response.portfolio_data = portfolio_data
+            response.timestamp = datetime.now().isoformat()
+            response.errorCode = 0
+            
+        except Exception as e:
+            response.errorCode = 1000
+            response.market_data = {}
+            response.portfolio_data = []
+            response.timestamp = datetime.now().isoformat()
+            Logger.error(f"Market real-time error: {e}")
         
         return response

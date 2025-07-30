@@ -3,7 +3,7 @@ from template.base.template_context import TemplateContext, TemplateType
 from template.base.template_service import TemplateService
 from template.market.common.market_serialize import (
     MarketSecuritySearchRequest, MarketPriceRequest, MarketNewsRequest,
-    MarketOverviewRequest
+    MarketOverviewRequest, MarketRealTimeRequest
 )
 from template.market.common.market_protocol import MarketProtocol
 
@@ -18,6 +18,7 @@ def setup_market_protocol_callbacks():
     market_protocol.on_market_price_req_callback = getattr(market_template, "on_market_price_req", None)
     market_protocol.on_market_news_req_callback = getattr(market_template, "on_market_news_req", None)
     market_protocol.on_market_overview_req_callback = getattr(market_template, "on_market_overview_req", None)
+    market_protocol.on_market_real_time_req_callback = getattr(market_template, "on_market_real_time_req", None)
 
 @router.post("/security/search")
 async def market_security_search(request: MarketSecuritySearchRequest, req: Request):
@@ -81,5 +82,21 @@ async def market_news(request: MarketNewsRequest, req: Request):
         ip,
         request.model_dump_json(),
         market_protocol.market_news_req_controller
+    )
+
+@router.post("/real-time")
+async def market_real_time(request: MarketRealTimeRequest, req: Request):
+    """실시간 시장 데이터 조회"""
+    ip = req.headers.get("X-Forwarded-For")
+    if not ip:
+        ip = req.client.host
+    else:
+        ip = ip.split(", ")[0]
+    return await TemplateService.run_user(
+        req.method,
+        req.url.path,
+        ip,
+        request.model_dump_json(),
+        market_protocol.market_real_time_req_controller
     )
 

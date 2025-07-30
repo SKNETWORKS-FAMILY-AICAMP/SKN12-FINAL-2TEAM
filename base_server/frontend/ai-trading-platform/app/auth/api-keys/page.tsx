@@ -35,16 +35,46 @@ export default function ApiKeysPage() {
     setError("");
     
     try {
-      // API 키 저장 로직 (백엔드 API 호출)
-      // 실제로는 백엔드에 API 키를 저장하는 엔드포인트가 필요합니다
-      console.log("저장할 API 키:", apiKeys);
+      // 실제 백엔드 API 호출
+      const apiBase = process.env.NEXT_PUBLIC_API_URL;
+      if (!apiBase) throw new Error("NEXT_PUBLIC_API_URL 환경변수가 필요합니다");
       
-      // 임시로 1초 대기 (실제 API 호출로 대체)
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const response = await fetch(`${apiBase}/api/account/api-keys/save`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+        },
+        body: JSON.stringify({
+          korea_investment_app_key: apiKeys.korea_investment_app_key,
+          korea_investment_app_secret: apiKeys.korea_investment_app_secret,
+          alpha_vantage_key: apiKeys.alpha_vantage_key,
+          polygon_key: apiKeys.polygon_key,
+          finnhub_key: apiKeys.finnhub_key,
+          accessToken: localStorage.getItem('accessToken'),
+          sequence: Date.now()
+        })
+      });
+
+      console.log("Response status:", response.status);
+      console.log("Response ok:", response.ok);
       
-      // 성공 시 온보딩으로 이동
-      window.location.href = "/onboarding";
+      const data_json = await response.json();
+      const data = JSON.parse(data_json);
+      console.log("API 키 저장 응답:", data); // 디버깅용 로그
+      console.log("errorCode 타입:", typeof data["errorCode"]);
+      console.log("errorCode 값:", data["errorCode"]);
+      
+      if (data["errorCode"] === 0 || data["errorCode"] === "0") {
+        // 성공 시 온보딩으로 이동
+        console.log("API 키 저장 성공, 온보딩으로 이동");
+        window.location.href = "/onboarding";
+      } else {
+        console.log("API 키 저장 실패:", data["message"])
+        setError(data["message"] || "API 키 저장에 실패했습니다.");
+      }
     } catch (err: any) {
+      console.error("API 키 저장 에러:", err);
       setError("API 키 저장에 실패했습니다. 다시 시도해 주세요.");
     } finally {
       setIsLoading(false);
@@ -97,7 +127,7 @@ export default function ApiKeysPage() {
           </div>
           <h1 style={{ fontSize: 24, fontWeight: 700, color: "#fff", marginBottom: 8 }}>API 키 설정</h1>
           <p style={{ fontSize: 14, color: "rgba(255,255,255,0.6)" }}>
-            더 정확한 투자 정보를 위해 API 키를 입력해 주세요. 나중에 설정에서도 변경할 수 있습니다.
+            실시간 주식 데이터를 받기 위해 필요한 API 키들을 입력해주세요.
           </p>
         </div>
 
@@ -105,7 +135,12 @@ export default function ApiKeysPage() {
         <div style={{ marginBottom: 32 }}>
           {/* 한국투자증권 API */}
           <div style={{ marginBottom: 24 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 600, color: "#fff", marginBottom: 12 }}>한국투자증권 API</h3>
+            <h3 style={{ fontSize: 16, fontWeight: 600, color: "#fff", marginBottom: 12 }}>
+              한국투자증권 API <span style={{ color: "#ef4444", fontSize: 12 }}>(필수)</span>
+            </h3>
+            <p style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 12 }}>
+              한국 주식 시장의 실시간 데이터를 받기 위해 필요합니다.
+            </p>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <div>
                 <label style={{ color: "rgba(255,255,255,0.8)", fontSize: 14, marginBottom: 6, display: "block" }}>App Key</label>
@@ -150,70 +185,104 @@ export default function ApiKeysPage() {
             </div>
           </div>
 
-          {/* Alpha Vantage API */}
+          {/* 글로벌 주식 데이터 API (선택사항) */}
           <div style={{ marginBottom: 24 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 600, color: "#fff", marginBottom: 12 }}>Alpha Vantage API</h3>
-            <input
-              type="password"
-              value={apiKeys.alpha_vantage_key}
-              onChange={e => handleInputChange("alpha_vantage_key", e.target.value)}
-              placeholder="Alpha Vantage API Key"
-              style={{
-                width: "100%",
-                padding: "12px 16px",
-                borderRadius: 8,
-                background: "rgba(30,35,50,0.95)",
-                border: "1px solid rgba(255,255,255,0.12)",
-                color: "#fff",
-                fontSize: 14,
-                outline: "none",
-                transition: "border 0.2s",
-              }}
-            />
+            <h3 style={{ fontSize: 16, fontWeight: 600, color: "#fff", marginBottom: 12 }}>
+              글로벌 주식 데이터 API <span style={{ color: "#6b7280", fontSize: 12 }}>(선택사항)</span>
+            </h3>
+            <p style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 12 }}>
+              미국 등 글로벌 주식 시장 데이터를 받기 위해 필요합니다. 나중에 설정에서 추가할 수 있습니다.
+            </p>
+            
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+              <div>
+                <label style={{ color: "rgba(255,255,255,0.8)", fontSize: 14, marginBottom: 6, display: "block" }}>Alpha Vantage</label>
+                <input
+                  type="password"
+                  value={apiKeys.alpha_vantage_key}
+                  onChange={e => handleInputChange("alpha_vantage_key", e.target.value)}
+                  placeholder="Alpha Vantage API Key"
+                  style={{
+                    width: "100%",
+                    padding: "12px 16px",
+                    borderRadius: 8,
+                    background: "rgba(30,35,50,0.95)",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    color: "#fff",
+                    fontSize: 14,
+                    outline: "none",
+                    transition: "border 0.2s",
+                  }}
+                />
+                <p style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginTop: 4 }}>기술적 지표 분석용</p>
+              </div>
+              
+              <div>
+                <label style={{ color: "rgba(255,255,255,0.8)", fontSize: 14, marginBottom: 6, display: "block" }}>Polygon</label>
+                <input
+                  type="password"
+                  value={apiKeys.polygon_key}
+                  onChange={e => handleInputChange("polygon_key", e.target.value)}
+                  placeholder="Polygon API Key"
+                  style={{
+                    width: "100%",
+                    padding: "12px 16px",
+                    borderRadius: 8,
+                    background: "rgba(30,35,50,0.95)",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    color: "#fff",
+                    fontSize: 14,
+                    outline: "none",
+                    transition: "border 0.2s",
+                  }}
+                />
+                <p style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginTop: 4 }}>실시간 글로벌 데이터</p>
+              </div>
+              
+              <div>
+                <label style={{ color: "rgba(255,255,255,0.8)", fontSize: 14, marginBottom: 6, display: "block" }}>Finnhub</label>
+                <input
+                  type="password"
+                  value={apiKeys.finnhub_key}
+                  onChange={e => handleInputChange("finnhub_key", e.target.value)}
+                  placeholder="Finnhub API Key"
+                  style={{
+                    width: "100%",
+                    padding: "12px 16px",
+                    borderRadius: 8,
+                    background: "rgba(30,35,50,0.95)",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    color: "#fff",
+                    fontSize: 14,
+                    outline: "none",
+                    transition: "border 0.2s",
+                  }}
+                />
+                <p style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginTop: 4 }}>뉴스 및 재무 데이터</p>
+              </div>
+            </div>
           </div>
+        </div>
 
-          {/* Polygon API */}
-          <div style={{ marginBottom: 24 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 600, color: "#fff", marginBottom: 12 }}>Polygon API</h3>
-            <input
-              type="password"
-              value={apiKeys.polygon_key}
-              onChange={e => handleInputChange("polygon_key", e.target.value)}
-              placeholder="Polygon API Key"
-              style={{
-                width: "100%",
-                padding: "12px 16px",
-                borderRadius: 8,
-                background: "rgba(30,35,50,0.95)",
-                border: "1px solid rgba(255,255,255,0.12)",
-                color: "#fff",
-                fontSize: 14,
-                outline: "none",
-                transition: "border 0.2s",
-              }}
-            />
-          </div>
-
-          {/* Finnhub API */}
-          <div style={{ marginBottom: 24 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 600, color: "#fff", marginBottom: 12 }}>Finnhub API</h3>
-            <input
-              type="password"
-              value={apiKeys.finnhub_key}
-              onChange={e => handleInputChange("finnhub_key", e.target.value)}
-              placeholder="Finnhub API Key"
-              style={{
-                width: "100%",
-                padding: "12px 16px",
-                borderRadius: 8,
-                background: "rgba(30,35,50,0.95)",
-                border: "1px solid rgba(255,255,255,0.12)",
-                color: "#fff",
-                fontSize: 14,
-                outline: "none",
-                transition: "border 0.2s",
-              }}
-            />
+        {/* API 키 발급 안내 */}
+        <div style={{ 
+          background: "rgba(59, 130, 246, 0.1)", 
+          border: "1px solid rgba(59, 130, 246, 0.3)", 
+          borderRadius: 8, 
+          padding: 16,
+          marginBottom: 24
+        }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+            <AlertCircle style={{ width: 20, height: 20, color: "#3b82f6", marginTop: 2, flexShrink: 0 }} />
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.8)" }}>
+              <p style={{ fontWeight: 600, marginBottom: 8, color: "#3b82f6" }}>API 키 발급 방법:</p>
+              <ul style={{ listStyle: "none", padding: 0, margin: 0, lineHeight: 1.6 }}>
+                <li>• <strong>한국투자증권</strong>: <a href="https://securities.koreainvestment.com/main/index.jsp" target="_blank" rel="noopener noreferrer" style={{ color: "#3b82f6", textDecoration: "underline" }}>Open API 신청</a></li>
+                <li>• <strong>Alpha Vantage</strong>: <a href="https://www.alphavantage.co/support/#api-key" target="_blank" rel="noopener noreferrer" style={{ color: "#3b82f6", textDecoration: "underline" }}>무료 API 키 발급</a></li>
+                <li>• <strong>Polygon</strong>: <a href="https://polygon.io/" target="_blank" rel="noopener noreferrer" style={{ color: "#3b82f6", textDecoration: "underline" }}>API 키 신청</a></li>
+                <li>• <strong>Finnhub</strong>: <a href="https://finnhub.io/" target="_blank" rel="noopener noreferrer" style={{ color: "#3b82f6", textDecoration: "underline" }}>API 키 신청</a></li>
+              </ul>
+            </div>
           </div>
         </div>
 

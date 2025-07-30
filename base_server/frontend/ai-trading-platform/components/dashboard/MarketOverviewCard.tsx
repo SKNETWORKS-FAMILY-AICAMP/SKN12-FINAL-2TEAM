@@ -8,14 +8,19 @@ export function MarketOverviewCard({ markets }: { markets: { label: string; valu
         {markets.map((m) => {
           const isUp = m.change.startsWith("+");
           const isDown = m.change.startsWith("-");
+          const isNA = m.value === 0 || m.change === "N/A";
           const color = isUp ? "text-green-400" : isDown ? "text-red-400" : "text-gray-300";
           return (
             <div key={m.label} className="flex flex-col gap-1 w-full">
               <div className="flex items-center justify-between w-full">
                 <span className="text-sm font-semibold text-white">{m.label}</span>
-                <span className="text-base font-bold text-white">{m.value.toLocaleString()}</span>
+                <span className="text-base font-bold text-white">
+                  {isNA ? "N/A" : m.value.toLocaleString()}
+                </span>
               </div>
-              <div className={`text-xs font-bold ${color} leading-relaxed`}>{m.change}</div>
+              <div className={`text-xs font-bold ${isNA ? "text-gray-500" : color} leading-relaxed`}>
+                {isNA ? "N/A" : m.change}
+              </div>
             </div>
           );
         })}
