@@ -3,6 +3,7 @@ from template.tutorial.common.tutorial_serialize import (
     TutorialCompleteStepRequest, TutorialCompleteStepResponse,
     TutorialGetProgressRequest, TutorialGetProgressResponse
 )
+from template.tutorial.common.tutorial_model import TutorialProgress
 from service.service_container import ServiceContainer
 from service.core.logger import Logger
 
@@ -25,7 +26,7 @@ class TutorialTemplateImpl(BaseTemplate):
         """
         튜토리얼 스텝 완료 저장
         
-        사용자별로 하나의 로우만 유지하며, tutorial_type과 step_number를 덮어씀
+        tutorial_type별로 개별 로우를 유지하며, GREATEST 함수로 스텝 역행 방지
         """
         response = TutorialCompleteStepResponse()
         response.sequence = request.sequence
@@ -65,7 +66,7 @@ class TutorialTemplateImpl(BaseTemplate):
         """
         튜토리얼 진행 상태 조회
         
-        사용자의 현재 튜토리얼 상태를 반환 (사용자당 하나의 로우)
+        사용자의 모든 튜토리얼 타입별 상태를 반환 (복수 로우)
         """
         response = TutorialGetProgressResponse()
         response.sequence = request.sequence
@@ -77,8 +78,7 @@ class TutorialTemplateImpl(BaseTemplate):
             # 사용자 검증
             if account_db_key <= 0:
                 response.errorCode = 400
-                response.tutorial_type = ""
-                response.step_number = 0
+                response.progress_list = []
                 Logger.error(f"Invalid account_db_key: {account_db_key}")
                 return response
             
@@ -89,24 +89,27 @@ class TutorialTemplateImpl(BaseTemplate):
                 (account_db_key,)
             )
             
-            # 사용자의 현재 튜토리얼 상태 반환
+            # 사용자의 모든 튜토리얼 상태 반환
+            progress_list = []
             if result and len(result) > 0:
-                row = result[0]
-                response.tutorial_type = row.get('tutorial_type', '')
-                response.step_number = row.get('completed_step', 0)
-                Logger.debug(f"Tutorial progress found: user={account_db_key}, type='{response.tutorial_type}', step={response.step_number}")
+                for row in result:
+                    progress = TutorialProgress(
+                        tutorial_type=row.get('tutorial_type', ''),
+                        completed_step=row.get('completed_step', 0),
+                        updated_at=str(row.get('updated_at', ''))
+                    )
+                    progress_list.append(progress)
+                Logger.debug(f"Tutorial progress found: user={account_db_key}, count={len(progress_list)}")
             else:
-                # 튜토리얼을 시작하지 않은 사용자
-                response.tutorial_type = ""
-                response.step_number = 0
                 Logger.debug(f"No tutorial progress found for user: {account_db_key}")
+            
+            response.progress_list = progress_list
             
             response.errorCode = 0
             
         except Exception as e:
             response.errorCode = 500
-            response.tutorial_type = ""
-            response.step_number = 0
+            response.progress_list = []
             Logger.error(f"Tutorial get progress error: {e}")
         
         return response

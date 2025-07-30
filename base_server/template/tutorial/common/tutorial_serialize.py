@@ -1,5 +1,6 @@
-from typing import Dict
+from typing import Dict, List
 from service.net.protocol_base import BaseRequest, BaseResponse
+from .tutorial_model import TutorialProgress
 
 # ============================================================================
 # 튜토리얼 저장 전용 - 초간단 API
@@ -19,6 +20,5 @@ class TutorialGetProgressRequest(BaseRequest):
     pass
 
 class TutorialGetProgressResponse(BaseResponse):
-    """진행 상태 응답"""
-    tutorial_type: str = ""
-    step_number: int = 0  # 0이면 시작 안함, N이면 N번째 스텝까지 완료
+    """진행 상태 응답 - 모든 튜토리얼 타입의 상태 반환"""
+    progress_list: List[TutorialProgress] = []

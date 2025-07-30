@@ -9,14 +9,15 @@ USE finance_shard_1;
 -- 기존 테이블이 있으면 삭제하고 새로 생성
 DROP TABLE IF EXISTS `table_tutorial_progress`;
 
--- 사용자별 튜토리얼 완료 상태 저장 테이블 (사용자당 단일 로우)
+-- 사용자별 튜토리얼 완료 상태 저장 테이블 (tutorial_type별 개별 로우)
 CREATE TABLE IF NOT EXISTS `table_tutorial_progress` (
   `account_db_key` bigint unsigned NOT NULL,
-  `tutorial_type` varchar(50) NOT NULL DEFAULT '' COMMENT '현재 튜토리얼 타입 (OVERVIEW, PORTFOLIO, SIGNALS, CHAT, SETTINGS)',
+  `tutorial_type` varchar(50) NOT NULL COMMENT '튜토리얼 타입 (OVERVIEW, PORTFOLIO, SIGNALS, CHAT, SETTINGS)',
   `completed_step` int NOT NULL DEFAULT 0 COMMENT '완료된 최고 스텝 번호 (0=시작안함)',
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`account_db_key`),
+  PRIMARY KEY (`account_db_key`, `tutorial_type`),
+  INDEX `idx_account_db_key` (`account_db_key`),
   INDEX `idx_tutorial_type` (`tutorial_type`),
   INDEX `idx_updated_at` (`updated_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -47,12 +48,11 @@ BEGIN
     END;
     
     -- 사용자별 튜토리얼 상태 저장 (UPSERT)
-    -- 없으면 INSERT, 있으면 tutorial_type과 step을 덮어씀
+    -- 없으면 INSERT, 있으면 completed_step을 더 큰 값으로 업데이트 (스텝 역행 방지)
     INSERT INTO table_tutorial_progress (account_db_key, tutorial_type, completed_step) 
     VALUES (p_account_db_key, p_tutorial_type, p_step_number)
     ON DUPLICATE KEY UPDATE 
-        tutorial_type = p_tutorial_type,
-        completed_step = p_step_number,
+        completed_step = GREATEST(completed_step, p_step_number),
         updated_at = NOW();
     
     SELECT 'SUCCESS' as result, 'Tutorial step completed' as message;
@@ -79,13 +79,14 @@ BEGIN
         RESIGNAL;
     END;
     
-    -- 사용자의 현재 튜토리얼 진행 상태 반환
+    -- 사용자의 모든 튜토리얼 진행 상태 반환 (전체 타입별 상태)
     SELECT 
         tutorial_type,
         completed_step,
         updated_at
     FROM table_tutorial_progress 
-    WHERE account_db_key = p_account_db_key;
+    WHERE account_db_key = p_account_db_key
+    ORDER BY tutorial_type;
     
 END ;;
 DELIMITER ;
@@ -102,14 +103,15 @@ USE finance_shard_2;
 -- 기존 테이블이 있으면 삭제하고 새로 생성
 DROP TABLE IF EXISTS `table_tutorial_progress`;
 
--- 사용자별 튜토리얼 완료 상태 저장 테이블 (사용자당 단일 로우)
+-- 사용자별 튜토리얼 완료 상태 저장 테이블 (tutorial_type별 개별 로우)
 CREATE TABLE IF NOT EXISTS `table_tutorial_progress` (
   `account_db_key` bigint unsigned NOT NULL,
-  `tutorial_type` varchar(50) NOT NULL DEFAULT '' COMMENT '현재 튜토리얼 타입 (OVERVIEW, PORTFOLIO, SIGNALS, CHAT, SETTINGS)',
+  `tutorial_type` varchar(50) NOT NULL COMMENT '튜토리얼 타입 (OVERVIEW, PORTFOLIO, SIGNALS, CHAT, SETTINGS)',
   `completed_step` int NOT NULL DEFAULT 0 COMMENT '완료된 최고 스텝 번호 (0=시작안함)',
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`account_db_key`),
+  PRIMARY KEY (`account_db_key`, `tutorial_type`),
+  INDEX `idx_account_db_key` (`account_db_key`),
   INDEX `idx_tutorial_type` (`tutorial_type`),
   INDEX `idx_updated_at` (`updated_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -140,12 +142,11 @@ BEGIN
     END;
     
     -- 사용자별 튜토리얼 상태 저장 (UPSERT)
-    -- 없으면 INSERT, 있으면 tutorial_type과 step을 덮어씀
+    -- 없으면 INSERT, 있으면 completed_step을 더 큰 값으로 업데이트 (스텝 역행 방지)
     INSERT INTO table_tutorial_progress (account_db_key, tutorial_type, completed_step) 
     VALUES (p_account_db_key, p_tutorial_type, p_step_number)
     ON DUPLICATE KEY UPDATE 
-        tutorial_type = p_tutorial_type,
-        completed_step = p_step_number,
+        completed_step = GREATEST(completed_step, p_step_number),
         updated_at = NOW();
     
     SELECT 'SUCCESS' as result, 'Tutorial step completed' as message;
@@ -172,13 +173,14 @@ BEGIN
         RESIGNAL;
     END;
     
-    -- 사용자의 현재 튜토리얼 진행 상태 반환
+    -- 사용자의 모든 튜토리얼 진행 상태 반환 (전체 타입별 상태)
     SELECT 
         tutorial_type,
         completed_step,
         updated_at
     FROM table_tutorial_progress 
-    WHERE account_db_key = p_account_db_key;
+    WHERE account_db_key = p_account_db_key
+    ORDER BY tutorial_type;
     
 END ;;
 DELIMITER ;
