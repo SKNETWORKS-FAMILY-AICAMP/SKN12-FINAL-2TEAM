@@ -46,6 +46,8 @@ class BedrockVectorDbClient(IVectorDbClient):
         self._bedrock_client = None
         self._bedrock_runtime_client = None
         self._knowledge_base_client = None
+        self._session = None
+        self._bedrock_agent_client = None
         self.metrics = VectorDbMetrics()
         self.connection_state = ConnectionState.HEALTHY
         self._last_health_check = 0
@@ -480,6 +482,252 @@ class BedrockVectorDbClient(IVectorDbClient):
             "success": False,
             "error": "Direct document retrieval not supported"
         }
+
+    # === Knowledge Base 관리 ===
+    async def start_ingestion_job(self, data_source_id: str, **kwargs) -> Dict[str, Any]:
+        """Knowledge Base 동기화 작업 시작"""
+        start_time = time.time()
+        self.metrics.total_operations += 1
+        
+        for attempt in range(self._max_retries):
+            try:
+                if not self.config.knowledge_base_id:
+                    raise ValueError("Knowledge Base ID not configured")
+                
+                # aioboto3 Session 가져오기
+                session = await self._get_session()
+                
+                # 올바른 async with 패턴 사용
+                async with session.client('bedrock-agent', config=Config(
+                    retries={'max_attempts': 3, 'mode': 'adaptive'},
+                    max_pool_connections=50,
+                    region_name=self.config.region_name,
+                    connect_timeout=60,
+                    read_timeout=60,
+                    tcp_keepalive=True
+                )) as client:
+                    response = await client.start_ingestion_job(
+                        knowledgeBaseId=self.config.knowledge_base_id,
+                        dataSourceId=data_source_id
+                    )
+                
+                ingestion_job = response.get('ingestionJob', {})
+                job_id = ingestion_job.get('ingestionJobId', '')
+                
+                # 성공 메트릭
+                operation_time = time.time() - start_time
+                self.metrics.successful_operations += 1
+                
+                Logger.info(f"Bedrock ingestion job started: {job_id} ({operation_time:.3f}s)")
+                return {
+                    "success": True,
+                    "job_id": job_id,
+                    "status": ingestion_job.get('status', 'STARTING'),
+                    "knowledge_base_id": self.config.knowledge_base_id,
+                    "data_source_id": data_source_id,
+                    "operation_time": operation_time
+                }
+                
+            except ClientError as e:
+                error_code = e.response.get('Error', {}).get('Code', 'Unknown')
+                Logger.warn(f"Bedrock start_ingestion_job client error (attempt {attempt + 1}/{self._max_retries}): {error_code} - {e}")
+                
+                if error_code in ['ValidationException', 'AccessDeniedException', 'ResourceNotFoundException']:
+                    break
+                    
+            except Exception as e:
+                Logger.warn(f"Bedrock start_ingestion_job error (attempt {attempt + 1}/{self._max_retries}): {e}")
+            
+            # 재시도 대기
+            if attempt < self._max_retries - 1:
+                delay = self._retry_delay_base * (2 ** attempt) + random.uniform(0, 1)
+                await asyncio.sleep(delay)
+        
+        # 모든 재시도 실패
+        self.metrics.failed_operations += 1
+        total_time = time.time() - start_time
+        Logger.error(f"Bedrock start_ingestion_job failed after {self._max_retries} attempts (total: {total_time:.3f}s)")
+        return {
+            "success": False,
+            "error": f"Ingestion job start failed after {self._max_retries} attempts",
+            "total_time": total_time
+        }
+
+    async def get_ingestion_job(self, data_source_id: str, ingestion_job_id: str, **kwargs) -> Dict[str, Any]:
+        """Knowledge Base 동기화 작업 상태 조회"""
+        start_time = time.time()
+        
+        try:
+            if not self.config.knowledge_base_id:
+                raise ValueError("Knowledge Base ID not configured")
+            
+            # aioboto3 Session 가져오기
+            session = await self._get_session()
+            
+            # 올바른 async with 패턴 사용
+            async with session.client('bedrock-agent', config=Config(
+                retries={'max_attempts': 3, 'mode': 'adaptive'},
+                max_pool_connections=50,
+                region_name=self.config.region_name,
+                connect_timeout=60,
+                read_timeout=60,
+                tcp_keepalive=True
+            )) as client:
+                response = await client.get_ingestion_job(
+                    knowledgeBaseId=self.config.knowledge_base_id,
+                    dataSourceId=data_source_id,
+                    ingestionJobId=ingestion_job_id
+                )
+            
+            ingestion_job = response.get('ingestionJob', {})
+            
+            operation_time = time.time() - start_time
+            Logger.debug(f"Bedrock get_ingestion_job success: {ingestion_job_id} ({operation_time:.3f}s)")
+            
+            return {
+                "success": True,
+                "job_id": ingestion_job_id,
+                "status": ingestion_job.get('status', 'UNKNOWN'),
+                "created_at": ingestion_job.get('createdAt'),
+                "updated_at": ingestion_job.get('updatedAt'),
+                "statistics": ingestion_job.get('statistics', {}),
+                "failure_reasons": ingestion_job.get('failureReasons', []),
+                "operation_time": operation_time
+            }
+            
+        except Exception as e:
+            Logger.error(f"Bedrock get_ingestion_job failed: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
+
+    async def get_knowledge_base_status(self, **kwargs) -> Dict[str, Any]:
+        """Knowledge Base 상태 조회"""
+        start_time = time.time()
+        
+        try:
+            if not self.config.knowledge_base_id:
+                raise ValueError("Knowledge Base ID not configured")
+            
+            # aioboto3 Session 가져오기
+            session = await self._get_session()
+            
+            # 올바른 async with 패턴 사용
+            async with session.client('bedrock-agent', config=Config(
+                retries={'max_attempts': 3, 'mode': 'adaptive'},
+                max_pool_connections=50,
+                region_name=self.config.region_name,
+                connect_timeout=60,
+                read_timeout=60,
+                tcp_keepalive=True
+            )) as client:
+                response = await client.get_knowledge_base(
+                    knowledgeBaseId=self.config.knowledge_base_id
+                )
+            
+            knowledge_base = response.get('knowledgeBase', {})
+            
+            operation_time = time.time() - start_time
+            Logger.debug(f"Bedrock get_knowledge_base_status success ({operation_time:.3f}s)")
+            
+            return {
+                "success": True,
+                "knowledge_base_id": self.config.knowledge_base_id,
+                "name": knowledge_base.get('name', 'Unknown'),
+                "status": knowledge_base.get('status', 'UNKNOWN'),
+                "created_at": knowledge_base.get('createdAt'),
+                "updated_at": knowledge_base.get('updatedAt'),
+                "description": knowledge_base.get('description', ''),
+                "operation_time": operation_time
+            }
+            
+        except Exception as e:
+            Logger.error(f"Bedrock get_knowledge_base_status failed: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
+
+    async def _get_bedrock_agent_client(self):
+        """Bedrock Agent 클라이언트 가져오기"""
+        try:
+            # 기존 클라이언트가 있으면 재사용
+            if hasattr(self, '_bedrock_agent_client') and self._bedrock_agent_client is not None:
+                return self._bedrock_agent_client
+            
+            # region_name을 먼저 추출
+            if isinstance(self.config, dict):
+                aws_access_key_id = self.config.get('aws_access_key_id')
+                aws_secret_access_key = self.config.get('aws_secret_access_key')
+                aws_session_token = self.config.get('aws_session_token')
+                region_name = self.config.get('region_name')
+            else:
+                aws_access_key_id = self.config.aws_access_key_id
+                aws_secret_access_key = self.config.aws_secret_access_key
+                aws_session_token = getattr(self.config, 'aws_session_token', None)
+                region_name = self.config.region_name
+            
+            # session이 없으면 생성
+            if self._session is None:
+                self._session = aioboto3.Session(
+                    aws_access_key_id=aws_access_key_id,
+                    aws_secret_access_key=aws_secret_access_key,
+                    aws_session_token=aws_session_token,
+                    region_name=region_name
+                )
+                Logger.info(f"Bedrock session created for region: {region_name}")
+            
+            # Bedrock Agent 클라이언트 생성
+            self._bedrock_agent_client = self._session.client(
+                'bedrock-agent',
+                config=Config(
+                    retries={'max_attempts': 3, 'mode': 'adaptive'},
+                    max_pool_connections=50,
+                    region_name=region_name,
+                    connect_timeout=60,
+                    read_timeout=60,
+                    tcp_keepalive=True
+                )
+            )
+            
+            Logger.debug("Bedrock Agent client created")
+            return self._bedrock_agent_client
+            
+        except Exception as e:
+            Logger.error(f"Failed to create Bedrock Agent client: {e}")
+            raise RuntimeError(f"Bedrock Agent client creation failed: {e}")
+
+    async def _get_session(self):
+        """aioboto3 Session 가져오기 (Knowledge Base용)"""
+        try:
+            # region_name을 먼저 추출
+            if isinstance(self.config, dict):
+                aws_access_key_id = self.config.get('aws_access_key_id')
+                aws_secret_access_key = self.config.get('aws_secret_access_key')
+                aws_session_token = self.config.get('aws_session_token')
+                region_name = self.config.get('region_name')
+            else:
+                aws_access_key_id = self.config.aws_access_key_id
+                aws_secret_access_key = self.config.aws_secret_access_key
+                aws_session_token = getattr(self.config, 'aws_session_token', None)
+                region_name = self.config.region_name
+            
+            # session이 없으면 생성
+            if self._session is None:
+                self._session = aioboto3.Session(
+                    aws_access_key_id=aws_access_key_id,
+                    aws_secret_access_key=aws_secret_access_key,
+                    aws_session_token=aws_session_token,
+                    region_name=region_name
+                )
+                Logger.info(f"Bedrock session created for region: {region_name}")
+            
+            return self._session
+            
+        except Exception as e:
+            Logger.error(f"Failed to create Bedrock session: {e}")
+            raise RuntimeError(f"Bedrock session creation failed: {e}")
     
     async def generate_text(self, prompt: str, **kwargs) -> Dict[str, Any]:
         """텍스트 생성 (향상된 에러 처리 및 메트릭)"""

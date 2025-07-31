@@ -58,3 +58,19 @@ class IVectorDbClient(ABC):
     async def close(self):
         """클라이언트 종료"""
         pass
+
+    # === Knowledge Base 관리 ===
+    @abstractmethod
+    async def start_ingestion_job(self, data_source_id: str, **kwargs) -> Dict[str, Any]:
+        """Knowledge Base 동기화 작업 시작"""
+        pass
+
+    @abstractmethod
+    async def get_ingestion_job(self, data_source_id: str, ingestion_job_id: str, **kwargs) -> Dict[str, Any]:
+        """Knowledge Base 동기화 작업 상태 조회"""
+        pass
+
+    @abstractmethod
+    async def get_knowledge_base_status(self, **kwargs) -> Dict[str, Any]:
+        """Knowledge Base 상태 조회"""
+        pass

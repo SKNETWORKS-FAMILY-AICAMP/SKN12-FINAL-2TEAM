@@ -29,3 +29,13 @@ class CrawlerData(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
     embedding: Optional[List[float]] = None
     crawled_at: str  # ISO format datetime string
+
+class NewsData(BaseModel):
+    """뉴스 데이터 모델"""
+    data_id: str
+    title: str
+    ticker: str
+    date: str
+    source: str
+    link: str
+    collected_at: str

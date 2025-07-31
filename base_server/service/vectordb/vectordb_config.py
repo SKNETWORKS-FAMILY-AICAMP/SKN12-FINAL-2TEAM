@@ -17,6 +17,11 @@ class VectorDbConfig(BaseModel):
     
     # Knowledge Base 설정
     knowledge_base_id: Optional[str] = None
+    data_source_id: Optional[str] = None  # Knowledge Base의 데이터 소스 ID
+    
+    # S3 설정 (Knowledge Base 데이터 업로드용)
+    s3_bucket: Optional[str] = None  # Knowledge Base 연결된 S3 버킷
+    s3_prefix: str = "knowledge-base-data/"  # S3 키 프리픽스
     
     # 연결 설정
     timeout: int = 60

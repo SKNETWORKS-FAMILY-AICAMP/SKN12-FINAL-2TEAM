@@ -41,6 +41,8 @@ class CrawlerStatusResponse(BaseResponse):
     """크롤러 상태 조회 응답"""
     tasks: List[Dict[str, Any]] = []
     total_count: int = 0
+    scheduler_active: bool = False
+    processed_hashes_count: int = 0
 
 # ============================================================================
 # 크롤러 헬스체크
@@ -59,7 +61,9 @@ class CrawlerHealthResponse(BaseResponse):
     active_tasks: int = 0
     completed_today: int = 0
     failed_today: int = 0
-    services: Dict[str, Any] = {}
+    services: Optional[Dict[str, Any]] = None
+    scheduler_active: bool = False
+    processed_hashes_count: int = 0
 
 # ============================================================================
 # 크롤러 작업 중단
@@ -92,3 +96,38 @@ class CrawlerDataResponse(BaseResponse):
     """크롤러 데이터 조회 응답"""
     data: List[Dict[str, Any]] = []
     total_count: int = 0
+
+# ============================================================================
+# Yahoo Finance 크롤링
+# ============================================================================
+
+class CrawlerYahooFinanceRequest(BaseRequest):
+    """Yahoo Finance 크롤링 요청"""
+    task_id: str
+    task_type: str = "yahoo_finance"
+    symbols: List[str] = []  # 수집할 심볼 리스트 (빈 리스트면 전체)
+
+class CrawlerYahooFinanceResponse(BaseResponse):
+    """Yahoo Finance 크롤링 응답"""
+    task_id: str = ""
+    collected_count: int = 0
+    new_count: int = 0
+    duplicate_count: int = 0
+    opensearch_stored: bool = False
+    vectordb_stored: bool = False
+    message: str = ""
+
+# ============================================================================
+# 크롤러 스케줄 관리
+# ============================================================================
+
+class CrawlerScheduleRequest(BaseRequest):
+    """크롤러 스케줄 요청"""
+    schedule_type: str
+    interval_seconds: int = 3600
+
+class CrawlerScheduleResponse(BaseResponse):
+    """크롤러 스케줄 응답"""
+    schedule_id: str = ""
+    status: str = ""
+    message: str = ""

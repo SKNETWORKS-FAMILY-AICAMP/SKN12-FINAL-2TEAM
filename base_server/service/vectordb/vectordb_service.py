@@ -50,74 +50,117 @@ class VectorDbService:
     @classmethod
     async def embed_text(cls, text: str, **kwargs) -> Dict[str, Any]:
         """텍스트를 벡터로 임베딩"""
-        if hasattr(cls._client_pool, 'get_client'):
-            client = await cls._client_pool.get_client()
-        else:
-            client = cls.get_client()
+        if not cls._initialized:
+            raise RuntimeError("VectorDbService not initialized")
+        if not cls._client_pool:
+            raise RuntimeError("VectorDbService client pool not available")
+        
+        # 항상 비동기 방식으로 클라이언트 가져오기
+        client = await cls._client_pool.get_client()
         return await client.embed_text(text, **kwargs)
     
     @classmethod
     async def embed_texts(cls, texts: List[str], **kwargs) -> Dict[str, Any]:
         """여러 텍스트를 벡터로 임베딩"""
-        client = cls.get_client()
+        if not cls._initialized:
+            raise RuntimeError("VectorDbService not initialized")
+        if not cls._client_pool:
+            raise RuntimeError("VectorDbService client pool not available")
+        client = await cls._client_pool.get_client()
         return await client.embed_texts(texts, **kwargs)
     
     # === 검색 ===
     @classmethod
     async def similarity_search(cls, query: str, top_k: int = 10, **kwargs) -> Dict[str, Any]:
         """유사도 검색"""
-        client = cls.get_client()
+        if not cls._initialized:
+            raise RuntimeError("VectorDbService not initialized")
+        if not cls._client_pool:
+            raise RuntimeError("VectorDbService client pool not available")
+        client = await cls._client_pool.get_client()
         return await client.similarity_search(query, top_k, **kwargs)
     
     @classmethod
     async def similarity_search_by_vector(cls, vector: List[float], top_k: int = 10, **kwargs) -> Dict[str, Any]:
         """벡터로 유사도 검색"""
-        client = cls.get_client()
+        if not cls._initialized:
+            raise RuntimeError("VectorDbService not initialized")
+        if not cls._client_pool:
+            raise RuntimeError("VectorDbService client pool not available")
+        client = await cls._client_pool.get_client()
         return await client.similarity_search_by_vector(vector, top_k, **kwargs)
     
     # === 문서 관리 ===
     @classmethod
     async def add_documents(cls, documents: List[Dict[str, Any]], **kwargs) -> Dict[str, Any]:
         """문서 추가"""
-        client = cls.get_client()
+        if not cls._initialized:
+            raise RuntimeError("VectorDbService not initialized")
+        if not cls._client_pool:
+            raise RuntimeError("VectorDbService client pool not available")
+        client = await cls._client_pool.get_client()
         return await client.add_documents(documents, **kwargs)
     
     @classmethod
     async def delete_documents(cls, document_ids: List[str], **kwargs) -> Dict[str, Any]:
         """문서 삭제"""
-        client = cls.get_client()
+        if not cls._initialized:
+            raise RuntimeError("VectorDbService not initialized")
+        if not cls._client_pool:
+            raise RuntimeError("VectorDbService client pool not available")
+        client = await cls._client_pool.get_client()
         return await client.delete_documents(document_ids, **kwargs)
     
     @classmethod
     async def update_document(cls, document_id: str, document: Dict[str, Any], **kwargs) -> Dict[str, Any]:
         """문서 업데이트"""
-        client = cls.get_client()
+        if not cls._initialized:
+            raise RuntimeError("VectorDbService not initialized")
+        if not cls._client_pool:
+            raise RuntimeError("VectorDbService client pool not available")
+        client = await cls._client_pool.get_client()
         return await client.update_document(document_id, document, **kwargs)
     
     @classmethod
     async def get_document(cls, document_id: str, **kwargs) -> Dict[str, Any]:
         """문서 조회"""
-        client = cls.get_client()
+        if not cls._initialized:
+            raise RuntimeError("VectorDbService not initialized")
+        if not cls._client_pool:
+            raise RuntimeError("VectorDbService client pool not available")
+        client = await cls._client_pool.get_client()
         return await client.get_document(document_id, **kwargs)
     
     # === 텍스트 생성 ===
     @classmethod
     async def generate_text(cls, prompt: str, **kwargs) -> Dict[str, Any]:
         """텍스트 생성"""
-        client = cls.get_client()
+        if not cls._initialized:
+            raise RuntimeError("VectorDbService not initialized")
+        if not cls._client_pool:
+            raise RuntimeError("VectorDbService client pool not available")
+        client = await cls._client_pool.get_client()
         return await client.generate_text(prompt, **kwargs)
     
     @classmethod
     async def chat_completion(cls, messages: List[Dict[str, Any]], **kwargs) -> Dict[str, Any]:
         """채팅 완성"""
-        client = cls.get_client()
+        if not cls._initialized:
+            raise RuntimeError("VectorDbService not initialized")
+        if not cls._client_pool:
+            raise RuntimeError("VectorDbService client pool not available")
+        client = await cls._client_pool.get_client()
         return await client.chat_completion(messages, **kwargs)
     
     # === Knowledge Base 전용 메서드 ===
     @classmethod
     async def retrieve_from_knowledge_base(cls, query: str, top_k: int = 10, **kwargs) -> Dict[str, Any]:
         """Knowledge Base에서 문서 검색"""
-        client = cls.get_client()
+        if not cls._initialized:
+            raise RuntimeError("VectorDbService not initialized")
+        if not cls._client_pool:
+            raise RuntimeError("VectorDbService client pool not available")
+        client = await cls._client_pool.get_client()
         return await client.similarity_search(query, top_k, **kwargs)
     
     @classmethod
@@ -200,6 +243,55 @@ Answer:"""
             }
         except Exception as e:
             return {"error": str(e)}
+
+    # === Knowledge Base 관리 ===
+    @classmethod
+    async def start_ingestion_job(cls, data_source_id: str, **kwargs) -> Dict[str, Any]:
+        """Knowledge Base 동기화 작업 시작"""
+        if not cls._initialized:
+            raise RuntimeError("VectorDbService not initialized")
+        if not cls._client_pool:
+            raise RuntimeError("VectorDbService client pool not available")
+        client = await cls._client_pool.get_client()
+        return await client.start_ingestion_job(data_source_id, **kwargs)
+
+    @classmethod
+    async def get_ingestion_job(cls, data_source_id: str, ingestion_job_id: str, **kwargs) -> Dict[str, Any]:
+        """Knowledge Base 동기화 작업 상태 조회"""
+        if not cls._initialized:
+            raise RuntimeError("VectorDbService not initialized")
+        if not cls._client_pool:
+            raise RuntimeError("VectorDbService client pool not available")
+        client = await cls._client_pool.get_client()
+        return await client.get_ingestion_job(data_source_id, ingestion_job_id, **kwargs)
+
+    @classmethod
+    async def get_knowledge_base_status(cls, **kwargs) -> Dict[str, Any]:
+        """Knowledge Base 상태 조회"""
+        if not cls._initialized:
+            raise RuntimeError("VectorDbService not initialized")
+        if not cls._client_pool:
+            raise RuntimeError("VectorDbService client pool not available")
+        client = await cls._client_pool.get_client()
+        return await client.get_knowledge_base_status(**kwargs)
+
+    @classmethod
+    async def search_similar(cls, query_text: str, filter: Dict[str, Any] = None, limit: int = 10, **kwargs) -> Dict[str, Any]:
+        """유사도 검색 (호환성을 위한 별칭)"""
+        return await cls.similarity_search(query_text, limit, **kwargs)
+
+    @classmethod
+    async def retrieve_from_knowledge_base(cls, query: str, **kwargs) -> Dict[str, Any]:
+        """Knowledge Base에서 문서 검색 (호환성을 위한 별칭)"""
+        search_result = await cls.similarity_search(query, **kwargs)
+        if search_result.get('success'):
+            return {
+                "success": True,
+                "results": search_result.get('results', []),
+                "search_time": search_result.get('search_time', 0)
+            }
+        else:
+            return search_result
     
     # === 모니터링 및 관리 메서드 ===
     @classmethod
