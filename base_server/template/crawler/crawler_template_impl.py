@@ -5,6 +5,7 @@ import time
 import asyncio
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
+from concurrent.futures import ThreadPoolExecutor
 
 # 템플릿 기본 클래스
 from template.base.template.crawler_template import CrawlerTemplate
@@ -54,10 +55,10 @@ class CrawlerTemplateImpl(CrawlerTemplate):
             Logger.info("Crawler 템플릿 데이터 로드 시작")
             
             # 캐시에서 기존 해시키 복원
-            self._restore_hash_cache()
+            # self._restore_hash_cache()
             
             # 스케줄러 초기화
-            self._initialize_scheduler()
+            # self._initialize_scheduler()
             
             Logger.info("Crawler 템플릿 데이터 로드 완료")
         except Exception as e:
@@ -102,10 +103,18 @@ class CrawlerTemplateImpl(CrawlerTemplate):
                 # 동기 메서드에서 비동기 호출 처리
                 import asyncio
                 try:
-                    asyncio.create_task(restore_hashes())
+                    # 현재 실행 중인 이벤트 루프가 있는지 확인
+                    loop = asyncio.get_running_loop()
+                    # 백그라운드 태스크로 실행 (기다리지 않음)
+                    loop.create_task(restore_hashes())
+                    Logger.debug("해시키 복원 작업을 백그라운드에서 시작")
                 except RuntimeError:
-                    # 이벤트 루프가 없는 경우 기본값으로 처리
-                    Logger.warn("이벤트 루프가 없어 해시키 캐시 복원을 건너뜀")
+                    # 이벤트 루프가 없는 경우 새로 실행
+                    try:
+                        asyncio.run(restore_hashes())
+                        Logger.debug("해시키 복원 작업 완료")
+                    except Exception as run_error:
+                        Logger.warn(f"해시키 캐시 복원 실행 실패: {run_error}")
                     
         except Exception as e:
             Logger.error(f"해시키 캐시 복원 실패: {e}")
@@ -148,10 +157,18 @@ class CrawlerTemplateImpl(CrawlerTemplate):
                 # 비동기 작업 스케줄링
                 import asyncio
                 try:
-                    asyncio.create_task(add_crawler_job())
+                    # 현재 실행 중인 이벤트 루프가 있는지 확인
+                    loop = asyncio.get_running_loop()
+                    # 백그라운드 태스크로 실행 (기다리지 않음)
+                    loop.create_task(add_crawler_job())
+                    Logger.debug("스케줄러 초기화 작업을 백그라운드에서 시작")
                 except RuntimeError:
-                    # 이벤트 루프가 없는 경우 경고 표시
-                    Logger.warn("이벤트 루프가 없어 스케줄러 초기화를 건너뜀")
+                    # 이벤트 루프가 없는 경우 새로 실행
+                    try:
+                        asyncio.run(add_crawler_job())
+                        Logger.debug("스케줄러 초기화 작업 완료")
+                    except Exception as run_error:
+                        Logger.warn(f"스케줄러 초기화 실행 실패: {run_error}")
             else:
                 Logger.warn("SchedulerService가 초기화되지 않았습니다")
                 
@@ -340,9 +357,10 @@ class CrawlerTemplateImpl(CrawlerTemplate):
                     v_processed_symbols += 1
                     Logger.info(f"[{v_processed_symbols}/{v_total_symbols}] {v_symbol} 뉴스 수집 중...")
                     
-                    # yfinance로 뉴스 수집
-                    v_ticker = yf.Ticker(v_symbol)
-                    v_news_list = v_ticker.news
+                    # yfinance로 뉴스 수집 (스레드풀에서 실행)
+                    loop = asyncio.get_running_loop()
+                    v_ticker = await loop.run_in_executor(None, yf.Ticker, v_symbol)
+                    v_news_list = await loop.run_in_executor(None, lambda: v_ticker.news)
                     
                     if not v_news_list:
                         Logger.info(f"{v_symbol}: 뉴스 없음")
@@ -361,7 +379,7 @@ class CrawlerTemplateImpl(CrawlerTemplate):
                             continue
                     
                     Logger.info(f"{v_symbol}: {v_parsed_count}개 뉴스 수집 완료")
-                    time.sleep(0.5)  # API 호출 간격 조절
+                    await asyncio.sleep(0.5)  # API 호출 간격 조절
                     
                 except Exception as e:
                     Logger.error(f"{v_symbol} 수집 오류: {e}")

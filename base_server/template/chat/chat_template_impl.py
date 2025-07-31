@@ -536,6 +536,21 @@ class ChatTemplateImpl(BaseTemplate):
             response.has_more = len(messages) >= getattr(request, 'limit', 50)
             response.errorCode = 0
             
+            # 메시지 목록 조회 성공 시 AI 히스토리도 함께 로드
+            if messages:
+                try:
+                    ai_service: AIChatService = ServiceContainer.get_ai_chat_service()
+                    session_id = request.room_id
+                    
+                    # AI 메모리가 비어있으면 히스토리 로드
+                    memory = ai_service.mem(session_id)
+                    if len(memory.buffer) == 0:
+                        await ai_service.load_chat_history(session_id, messages)
+                        Logger.info(f"AI history loaded for session {session_id}: {len(messages)} messages")
+                except Exception as ai_load_error:
+                    Logger.warn(f"Failed to load AI history for session {request.room_id}: {ai_load_error}")
+                    # AI 히스토리 로드 실패해도 메시지 목록 조회는 성공
+            
         except Exception as e:
             Logger.error(f"Chatbot message list error: {e}")
             response.messages = []

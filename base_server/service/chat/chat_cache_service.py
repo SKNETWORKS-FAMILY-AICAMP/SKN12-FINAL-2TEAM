@@ -21,7 +21,9 @@ class AIChatService:
             raise RuntimeError("CacheService is not initialized. Please initialize CacheService first.")
 
         self.cache_service = CacheService.get_instance()
-        self.KEY_PREFIX = "chat:"
+        # CacheService의 네임스페이스를 가져와서 사용
+        cache_client = self.cache_service.get_client()
+        self.KEY_PREFIX = f"{cache_client.cache_key}:chat:"
 
     def mem(self, session_id: str) -> ConversationBufferMemory:
         """세션별 대화 메모리 관리 (Redis 기반)"""
