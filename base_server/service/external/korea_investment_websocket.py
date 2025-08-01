@@ -1,7 +1,7 @@
 import asyncio
 import json
 import websockets
-from typing import Dict, List, Optional, Callable
+from typing import Dict, List, Optional, Callable, Any
 from service.core.logger import Logger
 
 class KoreaInvestmentWebSocket:
@@ -236,6 +236,41 @@ class KoreaInvestmentWebSocket:
         if self.websocket:
             await self.websocket.close()
             Logger.info("한국투자증권 웹소켓 연결 해제")
+    
+    async def health_check(self, app_key: str, app_secret: str) -> Dict[str, Any]:
+        """WebSocket 연결 상태 확인"""
+        try:
+            # 기존 연결이 있으면 해제
+            if self.is_connected:
+                await self.disconnect()
+            
+            # WebSocket 연결 테스트
+            connection_success = await self.connect(app_key, app_secret)
+            
+            if connection_success and self.is_connected:
+                # 연결 성공 후 즉시 해제 (테스트 목적)
+                await self.disconnect()
+                
+                return {
+                    "healthy": True,
+                    "status": "websocket_connected",
+                    "test_result": "WebSocket 연결 테스트 성공",
+                    "websocket_url": self.ws_url
+                }
+            else:
+                return {
+                    "healthy": False,
+                    "error": "WebSocket 연결 실패",
+                    "status": "connection_failed",
+                    "websocket_url": self.ws_url
+                }
+                
+        except Exception as e:
+            return {
+                "healthy": False,
+                "error": f"WebSocket 연결 테스트 실패: {str(e)}",
+                "status": "test_failed"
+            }
 
 # 싱글톤 인스턴스
 _korea_investment_websocket = None

@@ -22,6 +22,46 @@ class ExternalService:
             await client.start()
             Logger.info(f"External client initialized for API: {api_name}")
             
+        # Korea Investment 서비스 초기화 (있는 경우에만)
+        if config.korea_investment:
+            try:
+                from service.external.korea_investment_service import KoreaInvestmentService
+                from service.external.korea_investment_websocket import get_korea_investment_websocket
+                from service.service_container import ServiceContainer
+                
+                ki_config = config.korea_investment
+                if await KoreaInvestmentService.init(ki_config.app_key, ki_config.app_secret):
+                    # REST API 연결 테스트 수행
+                    health_result = await KoreaInvestmentService.health_check()
+                    if health_result.get("healthy"):
+                        Logger.info(f"✅ Korea Investment REST API 테스트 완료: {health_result.get('test_result', '')}")
+                        
+                        # WebSocket 서비스 초기화 및 테스트
+                        korea_websocket = await get_korea_investment_websocket()
+                        ws_health_result = await korea_websocket.health_check(ki_config.app_key, ki_config.app_secret)
+                        
+                        if ws_health_result.get("healthy"):
+                            Logger.info(f"✅ Korea Investment WebSocket 테스트 완료: {ws_health_result.get('test_result', '')}")
+                            
+                            # ServiceContainer에 등록
+                            ServiceContainer.set_korea_investment_service(
+                                KoreaInvestmentService, 
+                                korea_websocket
+                            )
+                            Logger.info("✅ Korea Investment 서비스 (REST + WebSocket) 초기화 완료")
+                        else:
+                            Logger.error(f"❌ Korea Investment WebSocket 테스트 실패: {ws_health_result.get('error', '')}")
+                            Logger.warn("⚠️ REST API만 사용 가능, WebSocket 실시간 데이터 제한됨")
+                            
+                            # REST API만 등록
+                            ServiceContainer.set_korea_investment_service(KoreaInvestmentService, None)
+                    else:
+                        Logger.error(f"❌ Korea Investment REST API 테스트 실패: {health_result.get('error', '')}")
+                else:
+                    Logger.error("❌ Korea Investment 서비스 인증 실패")
+            except Exception as e:
+                Logger.error(f"❌ Korea Investment 서비스 초기화 실패: {e}")
+            
         cls._initialized = True
         Logger.info("External service initialized")
         

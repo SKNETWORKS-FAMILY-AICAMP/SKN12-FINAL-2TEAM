@@ -23,6 +23,10 @@ class ServiceContainer:
 
     # AIChatService 인스턴스 (forward reference)
     _ai_chat_service = None  # type: ignore
+    
+    # Korea Investment 서비스 인스턴스들
+    _korea_investment_service = None  # type: ignore
+    _korea_investment_websocket = None  # type: ignore
 
     # 초기화 상태 플래그
     _cache_service_initialized: bool = False
@@ -30,6 +34,7 @@ class ServiceContainer:
     _scheduler_service_initialized: bool = False
     _queue_service_initialized: bool = False
     _websocket_service_initialized: bool = False
+    _korea_investment_service_initialized: bool = False
     
     def __new__(cls):
         if cls._instance is None:
@@ -129,6 +134,34 @@ class ServiceContainer:
         return getattr(cls(), "_queue_service_initialized", False)
 
     @classmethod
+    def set_korea_investment_service(cls, service, websocket_service) -> None:
+        """Korea Investment 서비스 인스턴스 설정"""
+        container = cls()
+        container._korea_investment_service = service
+        container._korea_investment_websocket = websocket_service
+        container._korea_investment_service_initialized = True
+
+    @classmethod
+    def get_korea_investment_service(cls):
+        """Korea Investment 서비스 인스턴스 반환"""
+        container = cls()
+        if container._korea_investment_service is None:
+            raise RuntimeError("Korea Investment Service not initialized in ServiceContainer")
+        return container._korea_investment_service
+
+    @classmethod
+    def get_korea_investment_websocket(cls):
+        """Korea Investment WebSocket 서비스 인스턴스 반환"""
+        container = cls()
+        if container._korea_investment_websocket is None:
+            raise RuntimeError("Korea Investment WebSocket Service not initialized in ServiceContainer")
+        return container._korea_investment_websocket
+
+    @classmethod
+    def is_korea_investment_service_initialized(cls) -> bool:
+        return getattr(cls(), "_korea_investment_service_initialized", False)
+
+    @classmethod
     def get_service_status(cls) -> dict:
         container = cls()
         return {
@@ -142,7 +175,8 @@ class ServiceContainer:
             "search": container._search_service is not None,
             "vectordb": container._vectordb_service is not None,
             "ai_chat": container._ai_chat_service is not None,
-            "websocket": container._websocket_service_initialized
+            "websocket": container._websocket_service_initialized,
+            "korea_investment": container._korea_investment_service_initialized
         }
 
     @classmethod
