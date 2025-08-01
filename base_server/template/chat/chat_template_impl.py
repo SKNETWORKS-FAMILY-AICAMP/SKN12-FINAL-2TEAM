@@ -86,6 +86,11 @@ class ChatTemplateImpl(BaseTemplate):
                                 Logger.debug(f"DB 조회 시 삭제 중/삭제된 방 필터링: room_id={room_id}, state={room_state.value if room_state else 'UNKNOWN'}")
                                 continue  # 삭제 중이거나 삭제된 방은 목록에서 제외
                             
+                            # DB에서 가져온 방은 이미 활성 상태이므로 State Machine에 ACTIVE 설정
+                            if room_state is None:
+                                await state_machine.transition_room(room_id, RoomState.ACTIVE)
+                                Logger.debug(f"DB에서 가져온 방 ACTIVE 상태 설정: room_id={room_id}")
+                            
                             room_data = {
                                 "room_id": room_id,
                                 "title": str(row.get('title', '')),  # 챗봇 세션 제목
@@ -495,7 +500,16 @@ class ChatTemplateImpl(BaseTemplate):
                     if db_result:
                         # DB 데이터를 ChatMessage 형식으로 변환
                         db_messages = []
+                        state_machine = get_chat_state_machine()
+                        
                         for row in db_result:
+                            message_id = str(row.get('message_id', ''))
+                            
+                            # DB에서 가져온 메시지는 이미 전송된 상태이므로 State Machine에 SENT 설정
+                            msg_state = await state_machine.get_message_state(message_id)
+                            if msg_state is None:
+                                await state_machine.transition_message(message_id, MessageState.SENT)
+                                Logger.debug(f"DB에서 가져온 메시지 SENT 상태 설정: message_id={message_id}")
                             # metadata JSON 문자열을 딕셔너리로 변환
                             metadata_raw = row.get('metadata', {})
                             if isinstance(metadata_raw, str):
