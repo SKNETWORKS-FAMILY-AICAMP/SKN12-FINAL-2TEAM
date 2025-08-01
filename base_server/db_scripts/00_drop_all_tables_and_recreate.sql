@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS `table_errorlog` (
   PRIMARY KEY (`idx`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- 2. 계정 테이블 (idx 제거, accㅇount_db_key가 PRIMARY KEY)
+-- 2. 계정 테이블 (개인정보 설정 필드 포함)
 CREATE TABLE IF NOT EXISTS `table_accountid` (
   `account_db_key` bigint unsigned NOT NULL AUTO_INCREMENT,
   `platform_type` tinyint NOT NULL DEFAULT 1,
@@ -42,6 +42,11 @@ CREATE TABLE IF NOT EXISTS `table_accountid` (
   `password_hash` varchar(255) NOT NULL,
   `nickname` varchar(50) NOT NULL,
   `email` varchar(100),
+  `phone_number` varchar(20) DEFAULT NULL,
+  `email_verified` bit(1) NOT NULL DEFAULT b'0',
+  `phone_verified` bit(1) NOT NULL DEFAULT b'0',
+  `payment_plan` enum('FREE','BASIC','PREMIUM','ENTERPRISE') DEFAULT 'FREE',
+  `plan_expires_at` datetime DEFAULT NULL,
   `account_level` int DEFAULT 1,
   `login_count` int DEFAULT 0,
   `birth_year` INT DEFAULT NULL,
@@ -50,7 +55,10 @@ CREATE TABLE IF NOT EXISTS `table_accountid` (
   `gender` ENUM('M','F','OTHER') DEFAULT NULL,
   PRIMARY KEY (`account_db_key`),
   UNIQUE KEY `ix_accountid_platform_accountid` (`platform_type`,`account_id`),
-  KEY `ix_accountid_accountdbkey` (`account_db_key`)
+  KEY `ix_accountid_accountdbkey` (`account_db_key`),
+  INDEX `idx_email` (`email`),
+  INDEX `idx_phone_number` (`phone_number`),
+  INDEX `idx_payment_plan` (`payment_plan`)
 ) ENGINE=InnoDB AUTO_INCREMENT=1000 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- 3. 사용자 샤드 매핑 테이블
@@ -89,7 +97,7 @@ CREATE TABLE IF NOT EXISTS `table_shard_stats` (
   PRIMARY KEY (`shard_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- 6. 사용자 프로필 테이블
+-- 6. 사용자 프로필 테이블 (알림 설정 포함)
 CREATE TABLE IF NOT EXISTS `table_user_profiles` (
   `account_db_key` bigint unsigned NOT NULL,
   `investment_experience` enum('BEGINNER','INTERMEDIATE','EXPERT') DEFAULT 'BEGINNER',
@@ -99,12 +107,58 @@ CREATE TABLE IF NOT EXISTS `table_user_profiles` (
   `profile_completed` tinyint(1) DEFAULT 0,
   `country` varchar(3) DEFAULT 'KOR',
   `timezone` varchar(50) DEFAULT 'Asia/Seoul',
+  `email_notifications_enabled` bit(1) NOT NULL DEFAULT b'1',
+  `sms_notifications_enabled` bit(1) NOT NULL DEFAULT b'0',
+  `push_notifications_enabled` bit(1) NOT NULL DEFAULT b'1',
+  `price_alert_enabled` bit(1) NOT NULL DEFAULT b'1',
+  `news_alert_enabled` bit(1) NOT NULL DEFAULT b'1',
+  `portfolio_alert_enabled` bit(1) NOT NULL DEFAULT b'0',
+  `trade_alert_enabled` bit(1) NOT NULL DEFAULT b'1',
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`account_db_key`)
+  PRIMARY KEY (`account_db_key`),
+  FOREIGN KEY (`account_db_key`) REFERENCES `table_accountid`(`account_db_key`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- 7. 사용자 API 키 테이블
+-- 7. 결제 정보 테이블
+CREATE TABLE IF NOT EXISTS `table_user_payments` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `account_db_key` bigint unsigned NOT NULL,
+  `payment_plan` enum('FREE','BASIC','PREMIUM','ENTERPRISE') NOT NULL DEFAULT 'FREE',
+  `plan_name` varchar(50) NOT NULL,
+  `plan_price` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `currency` varchar(3) NOT NULL DEFAULT 'KRW',
+  `billing_cycle` enum('MONTHLY','YEARLY') DEFAULT 'MONTHLY',
+  `starts_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `expires_at` datetime DEFAULT NULL,
+  `auto_renewal` bit(1) NOT NULL DEFAULT b'0',
+  `payment_method` varchar(50) DEFAULT NULL,
+  `payment_status` enum('ACTIVE','EXPIRED','CANCELLED','PENDING') DEFAULT 'PENDING',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_account_payment` (`account_db_key`),
+  FOREIGN KEY (`account_db_key`) REFERENCES `table_accountid`(`account_db_key`) ON DELETE CASCADE,
+  INDEX `idx_payment_plan` (`payment_plan`),
+  INDEX `idx_expires_at` (`expires_at`),
+  INDEX `idx_payment_status` (`payment_status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- 8. 비밀번호 변경 이력 테이블
+CREATE TABLE IF NOT EXISTS `table_password_history` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `account_db_key` bigint unsigned NOT NULL,
+  `old_password_hash` varchar(255) NOT NULL,
+  `new_password_hash` varchar(255) NOT NULL,
+  `change_reason` varchar(100) DEFAULT 'USER_REQUESTED',
+  `changed_by_ip` varchar(45) DEFAULT NULL,
+  `changed_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  FOREIGN KEY (`account_db_key`) REFERENCES `table_accountid`(`account_db_key`) ON DELETE CASCADE,
+  INDEX `idx_account_changed_at` (`account_db_key`, `changed_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- 9. 사용자 API 키 테이블
 CREATE TABLE IF NOT EXISTS `table_user_api_keys` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `account_db_key` bigint unsigned NOT NULL,
@@ -497,6 +551,312 @@ END ;;
 DELIMITER ;
 
 -- =====================================
+-- 개인정보 설정 관련 프로시저
+-- =====================================
+
+-- 마이페이지 전체 정보 조회
+DROP PROCEDURE IF EXISTS `fp_get_user_profile_settings`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_get_user_profile_settings`(
+    IN p_account_db_key BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE ProcParam VARCHAR(4000);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET ProcParam = CONCAT(p_account_db_key);
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        ROLLBACK;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_get_user_profile_settings', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        RESIGNAL;
+    END;
+    
+    SELECT 
+        -- 기본 계정 정보
+        a.account_db_key,
+        a.account_id,
+        a.nickname,
+        a.email,
+        a.phone_number,
+        a.email_verified,
+        a.phone_verified,
+        a.payment_plan,
+        a.plan_expires_at,
+        a.account_level,
+        a.create_time,
+        a.birth_year,
+        a.birth_month,
+        a.birth_day,
+        a.gender,
+        
+        -- 프로필 정보
+        COALESCE(p.investment_experience, 'BEGINNER') as investment_experience,
+        COALESCE(p.risk_tolerance, 'MODERATE') as risk_tolerance,
+        COALESCE(p.investment_goal, 'GROWTH') as investment_goal,
+        COALESCE(p.monthly_budget, 0.00) as monthly_budget,
+        COALESCE(p.profile_completed, 0) as profile_completed,
+        p.country,
+        p.timezone,
+        
+        -- 알림 설정
+        COALESCE(p.email_notifications_enabled, 1) as email_notifications_enabled,
+        COALESCE(p.sms_notifications_enabled, 0) as sms_notifications_enabled,
+        COALESCE(p.push_notifications_enabled, 1) as push_notifications_enabled,
+        COALESCE(p.price_alert_enabled, 1) as price_alert_enabled,
+        COALESCE(p.news_alert_enabled, 1) as news_alert_enabled,
+        COALESCE(p.portfolio_alert_enabled, 0) as portfolio_alert_enabled,
+        COALESCE(p.trade_alert_enabled, 1) as trade_alert_enabled,
+        
+        -- 결제 정보
+        py.plan_name,
+        py.plan_price,
+        py.currency,
+        py.billing_cycle,
+        py.auto_renewal,
+        py.payment_status
+        
+    FROM table_accountid a
+    LEFT JOIN table_user_profiles p ON a.account_db_key = p.account_db_key
+    LEFT JOIN table_user_payments py ON a.account_db_key = py.account_db_key
+    WHERE a.account_db_key = p_account_db_key;
+    
+END ;;
+DELIMITER ;
+
+-- 기본 프로필 정보 업데이트 (이메일, 전화번호, 닉네임)
+DROP PROCEDURE IF EXISTS `fp_update_basic_profile`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_update_basic_profile`(
+    IN p_account_db_key BIGINT UNSIGNED,
+    IN p_nickname VARCHAR(50),
+    IN p_email VARCHAR(100),
+    IN p_phone_number VARCHAR(20)
+)
+BEGIN
+    DECLARE ProcParam VARCHAR(4000);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET ProcParam = CONCAT(p_account_db_key, ',', p_nickname, ',', p_email, ',', p_phone_number);
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        ROLLBACK;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_update_basic_profile', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        RESIGNAL;
+    END;
+    
+    -- 기본 프로필 정보 업데이트
+    UPDATE table_accountid 
+    SET nickname = p_nickname,
+        email = p_email,
+        phone_number = p_phone_number
+    WHERE account_db_key = p_account_db_key;
+    
+    SELECT 'SUCCESS' as result, 'Basic profile updated successfully' as message;
+    
+END ;;
+DELIMITER ;
+
+-- 알림 설정 업데이트
+DROP PROCEDURE IF EXISTS `fp_update_notification_settings`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_update_notification_settings`(
+    IN p_account_db_key BIGINT UNSIGNED,
+    IN p_email_notifications_enabled BIT(1),
+    IN p_sms_notifications_enabled BIT(1),
+    IN p_push_notifications_enabled BIT(1),
+    IN p_price_alert_enabled BIT(1),
+    IN p_news_alert_enabled BIT(1),
+    IN p_portfolio_alert_enabled BIT(1),
+    IN p_trade_alert_enabled BIT(1)
+)
+BEGIN
+    DECLARE v_existing_count INT DEFAULT 0;
+    DECLARE ProcParam VARCHAR(4000);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET ProcParam = CONCAT(p_account_db_key, ',', p_email_notifications_enabled);
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        ROLLBACK;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_update_notification_settings', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        RESIGNAL;
+    END;
+    
+    -- 프로필 존재 확인
+    SELECT COUNT(*) INTO v_existing_count
+    FROM table_user_profiles 
+    WHERE account_db_key = p_account_db_key;
+    
+    IF v_existing_count = 0 THEN
+        -- 프로필이 없으면 기본 프로필 생성
+        INSERT INTO table_user_profiles (account_db_key, profile_completed)
+        VALUES (p_account_db_key, 0);
+    END IF;
+    
+    -- 알림 설정 업데이트
+    UPDATE table_user_profiles 
+    SET email_notifications_enabled = p_email_notifications_enabled,
+        sms_notifications_enabled = p_sms_notifications_enabled,
+        push_notifications_enabled = p_push_notifications_enabled,
+        price_alert_enabled = p_price_alert_enabled,
+        news_alert_enabled = p_news_alert_enabled,
+        portfolio_alert_enabled = p_portfolio_alert_enabled,
+        trade_alert_enabled = p_trade_alert_enabled,
+        updated_at = NOW()
+    WHERE account_db_key = p_account_db_key;
+    
+    SELECT 'SUCCESS' as result, 'Notification settings updated successfully' as message;
+    
+END ;;
+DELIMITER ;
+
+-- 비밀번호 변경 (bcrypt 지원 - 검증은 Python에서)
+DROP PROCEDURE IF EXISTS `fp_change_password`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_change_password`(
+    IN p_account_db_key BIGINT UNSIGNED,
+    IN p_new_password_hash VARCHAR(255),
+    IN p_changed_by_ip VARCHAR(45)
+)
+BEGIN
+    DECLARE v_stored_password VARCHAR(255);
+    DECLARE ProcParam VARCHAR(4000);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET ProcParam = CONCAT(p_account_db_key, ',', p_changed_by_ip);
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        ROLLBACK;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_change_password', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        RESIGNAL;
+    END;
+    
+    -- 현재 비밀번호 해시 가져오기 (이력 저장용)
+    SELECT password_hash INTO v_stored_password
+    FROM table_accountid 
+    WHERE account_db_key = p_account_db_key;
+    
+    -- 비밀번호 변경 이력 저장
+    INSERT INTO table_password_history (
+        account_db_key, old_password_hash, new_password_hash, 
+        change_reason, changed_by_ip
+    ) VALUES (
+        p_account_db_key, v_stored_password, p_new_password_hash,
+        'USER_REQUESTED', p_changed_by_ip
+    );
+    
+    -- 새 비밀번호로 업데이트
+    UPDATE table_accountid
+    SET password_hash = p_new_password_hash
+    WHERE account_db_key = p_account_db_key;
+    
+    SELECT 'SUCCESS' as result, 'Password changed successfully' as message;
+    
+END ;;
+DELIMITER ;
+
+-- 결제 플랜 정보 조회
+DROP PROCEDURE IF EXISTS `fp_get_payment_plan`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_get_payment_plan`(
+    IN p_account_db_key BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE ProcParam VARCHAR(4000);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET ProcParam = CONCAT(p_account_db_key);
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        ROLLBACK;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_get_payment_plan', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        RESIGNAL;
+    END;
+    
+    SELECT 
+        a.payment_plan as current_plan,
+        a.plan_expires_at,
+        COALESCE(p.plan_name, 'Free Plan') as plan_name,
+        COALESCE(p.plan_price, 0.00) as plan_price,
+        COALESCE(p.currency, 'KRW') as currency,
+        p.billing_cycle,
+        p.auto_renewal,
+        p.payment_status,
+        p.starts_at,
+        p.expires_at as payment_expires_at
+    FROM table_accountid a
+    LEFT JOIN table_user_payments p ON a.account_db_key = p.account_db_key
+    WHERE a.account_db_key = p_account_db_key;
+    
+END ;;
+DELIMITER ;
+
+-- 사용자 기본 설정 초기화
+DROP PROCEDURE IF EXISTS `fp_initialize_user_defaults`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_initialize_user_defaults`(
+    IN p_account_db_key BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_profile_exists INT DEFAULT 0;
+    DECLARE v_payment_exists INT DEFAULT 0;
+    DECLARE ProcParam VARCHAR(4000);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET ProcParam = CONCAT(p_account_db_key);
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        ROLLBACK;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_initialize_user_defaults', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        RESIGNAL;
+    END;
+    
+    -- 프로필 존재 확인
+    SELECT COUNT(*) INTO v_profile_exists
+    FROM table_user_profiles 
+    WHERE account_db_key = p_account_db_key;
+    
+    -- 결제 정보 존재 확인
+    SELECT COUNT(*) INTO v_payment_exists
+    FROM table_user_payments 
+    WHERE account_db_key = p_account_db_key;
+    
+    -- 기본 프로필 생성
+    IF v_profile_exists = 0 THEN
+        INSERT INTO table_user_profiles (
+            account_db_key, profile_completed,
+            email_notifications_enabled, sms_notifications_enabled,
+            push_notifications_enabled, price_alert_enabled,
+            news_alert_enabled, portfolio_alert_enabled, trade_alert_enabled
+        ) VALUES (
+            p_account_db_key, 0, 1, 0, 1, 1, 1, 0, 1
+        );
+    END IF;
+    
+    -- 기본 결제 정보 생성 (FREE 플랜)
+    IF v_payment_exists = 0 THEN
+        INSERT INTO table_user_payments (
+            account_db_key, payment_plan, plan_name, plan_price,
+            currency, payment_status
+        ) VALUES (
+            p_account_db_key, 'FREE', 'Free Plan', 0.00,
+            'KRW', 'ACTIVE'
+        );
+    END IF;
+    
+    SELECT 'SUCCESS' as result, 'User defaults initialized' as message;
+    
+END ;;
+DELIMITER ;
+
+-- =====================================
 -- API 키 조회 프로시저
 -- =====================================
 DROP PROCEDURE IF EXISTS `fp_get_api_keys`;
@@ -528,6 +888,138 @@ BEGIN
         updated_at
     FROM table_user_api_keys 
     WHERE account_db_key = p_account_db_key;
+    
+END ;;
+DELIMITER ;
+
+-- =====================================
+-- 통합 프로필 업데이트 프로시저 (트랜잭션 처리)
+-- =====================================
+
+-- 모든 프로필 설정을 한번에 업데이트하는 통합 프로시저
+DROP PROCEDURE IF EXISTS `fp_update_profile_all`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_update_profile_all`(
+    IN p_account_db_key BIGINT UNSIGNED,
+    -- 기본 프로필
+    IN p_nickname VARCHAR(50),
+    IN p_email VARCHAR(100),
+    IN p_phone_number VARCHAR(20),
+    -- 알림 설정
+    IN p_email_notifications_enabled BIT(1),
+    IN p_sms_notifications_enabled BIT(1),
+    IN p_push_notifications_enabled BIT(1),
+    IN p_price_alert_enabled BIT(1),
+    IN p_news_alert_enabled BIT(1),
+    IN p_portfolio_alert_enabled BIT(1),
+    IN p_trade_alert_enabled BIT(1),
+    -- 비밀번호 변경 (선택사항 - NULL이면 변경 안함)
+    IN p_current_password VARCHAR(255),
+    IN p_new_password VARCHAR(255),
+    -- API 키 (선택사항 - NULL이면 저장 안함)
+    IN p_korea_investment_app_key VARCHAR(255),
+    IN p_korea_investment_app_secret VARCHAR(255),
+    IN p_alpha_vantage_key VARCHAR(255),
+    IN p_polygon_key VARCHAR(255),
+    IN p_finnhub_key VARCHAR(255)
+)
+sp_label:BEGIN
+    DECLARE v_password_check_result VARCHAR(10) DEFAULT 'FAILED';
+    DECLARE v_password_changed BIT(1) DEFAULT 0;
+    DECLARE v_api_keys_saved BIT(1) DEFAULT 0;
+    DECLARE v_current_account_id VARCHAR(100) DEFAULT '';
+    DECLARE ProcParam VARCHAR(4000);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET ProcParam = CONCAT(p_account_db_key, ',', p_nickname, ',', p_email);
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        ROLLBACK;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_update_profile_all', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        RESIGNAL;
+    END;
+    
+    START TRANSACTION;
+    
+    -- account_id 조회 (비밀번호 해싱용)
+    SELECT account_id INTO v_current_account_id
+    FROM table_accountid 
+    WHERE account_db_key = p_account_db_key;
+    
+    -- 1. 기본 프로필 업데이트 (table_accountid)
+    UPDATE table_accountid 
+    SET nickname = p_nickname,
+        email = p_email,
+        phone_number = p_phone_number
+    WHERE account_db_key = p_account_db_key;
+    
+    -- 2. 알림 설정 업데이트 (table_user_profiles - UPSERT)
+    INSERT INTO table_user_profiles (
+        account_db_key, email_notifications_enabled, sms_notifications_enabled,
+        push_notifications_enabled, price_alert_enabled, news_alert_enabled,
+        portfolio_alert_enabled, trade_alert_enabled
+    ) VALUES (
+        p_account_db_key, p_email_notifications_enabled, p_sms_notifications_enabled,
+        p_push_notifications_enabled, p_price_alert_enabled, p_news_alert_enabled,
+        p_portfolio_alert_enabled, p_trade_alert_enabled
+    ) ON DUPLICATE KEY UPDATE
+        email_notifications_enabled = p_email_notifications_enabled,
+        sms_notifications_enabled = p_sms_notifications_enabled,
+        push_notifications_enabled = p_push_notifications_enabled,
+        price_alert_enabled = p_price_alert_enabled,
+        news_alert_enabled = p_news_alert_enabled,
+        portfolio_alert_enabled = p_portfolio_alert_enabled,
+        trade_alert_enabled = p_trade_alert_enabled,
+        updated_at = NOW();
+    
+    -- 3. 비밀번호 변경 (선택사항) - 주의: bcrypt 검증은 Python에서 수행됨
+    IF p_current_password IS NOT NULL AND p_new_password IS NOT NULL THEN
+        -- p_new_password는 이미 bcrypt로 해싱된 상태로 전달됨
+        -- 비밀번호 변경 이력 저장
+        INSERT INTO table_password_history (
+            account_db_key, old_password_hash, new_password_hash, 
+            change_reason, changed_by_ip
+        ) VALUES (
+            p_account_db_key, 
+            (SELECT password_hash FROM table_accountid WHERE account_db_key = p_account_db_key),
+            p_new_password,
+            'USER_REQUESTED', '127.0.0.1'
+        );
+        
+        -- 새 비밀번호로 업데이트 (이미 해싱된 상태)
+        UPDATE table_accountid 
+        SET password_hash = p_new_password
+        WHERE account_db_key = p_account_db_key;
+        
+        SET v_password_changed = 1;
+    END IF;
+    
+    -- 4. API 키 저장 (선택사항)
+    IF p_korea_investment_app_key IS NOT NULL AND p_korea_investment_app_secret IS NOT NULL THEN
+        INSERT INTO table_user_api_keys (
+            account_db_key, korea_investment_app_key, korea_investment_app_secret,
+            alpha_vantage_key, polygon_key, finnhub_key
+        ) VALUES (
+            p_account_db_key, p_korea_investment_app_key, p_korea_investment_app_secret,
+            COALESCE(p_alpha_vantage_key, ''), COALESCE(p_polygon_key, ''), COALESCE(p_finnhub_key, '')
+        ) ON DUPLICATE KEY UPDATE
+            korea_investment_app_key = p_korea_investment_app_key,
+            korea_investment_app_secret = p_korea_investment_app_secret,
+            alpha_vantage_key = COALESCE(p_alpha_vantage_key, alpha_vantage_key),
+            polygon_key = COALESCE(p_polygon_key, polygon_key),
+            finnhub_key = COALESCE(p_finnhub_key, finnhub_key),
+            updated_at = NOW();
+        
+        SET v_api_keys_saved = 1;
+    END IF;
+    
+    -- 모든 작업 성공 시 커밋
+    COMMIT;
+    
+    -- 성공 응답
+    SELECT 'SUCCESS' as result, 'All profile settings updated successfully' as message,
+           v_password_changed as password_changed, v_api_keys_saved as api_keys_saved;
     
 END ;;
 DELIMITER ;

@@ -14,3 +14,4 @@ class TemplateType(Enum):
     NOTIFICATION = auto()
     CRAWLER = auto()
     MODEL = auto()
+    PROFILE = auto()

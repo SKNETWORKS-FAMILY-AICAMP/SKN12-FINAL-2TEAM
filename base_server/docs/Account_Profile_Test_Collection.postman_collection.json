@@ -1,0 +1,398 @@
+{
+	"info": {
+		"_postman_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+		"name": "Account & Profile API Test Collection",
+		"description": "회원가입부터 프로필 테스트까지 완전한 테스트 컬렉션",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. 회원가입",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"accessToken\": \"\",\n    \"sequence\": 0,\n    \"platform_type\": 1,\n    \"account_id\": \"testuser001\",\n    \"password\": \"Test1234!\",\n    \"password_confirm\": \"Test1234!\",\n    \"nickname\": \"테스트유저\",\n    \"email\": \"test@example.com\",\n    \"name\": \"홍길동\",\n    \"birth_year\": 1990,\n    \"birth_month\": 5,\n    \"birth_day\": 15,\n    \"gender\": \"M\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/account/signup",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"account",
+						"signup"
+					]
+				}
+			}
+		},
+		{
+			"name": "2. 로그인",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"if (pm.response.json().errorCode === 0) {",
+							"    pm.environment.set(\"accessToken\", pm.response.json().accessToken);",
+							"    console.log(\"AccessToken saved:\", pm.response.json().accessToken);",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"accessToken\": \"\",\n    \"sequence\": 0,\n    \"platform_type\": 1,\n    \"account_id\": \"testuser001\",\n    \"password\": \"Test1234!\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/account/login",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"account",
+						"login"
+					]
+				}
+			}
+		},
+		{
+			"name": "3. 투자 프로필 설정",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{accessToken}}"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"accessToken\": \"{{accessToken}}\",\n    \"sequence\": 0,\n    \"investment_experience\": \"BEGINNER\",\n    \"risk_tolerance\": \"MODERATE\",\n    \"investment_goal\": \"GROWTH\",\n    \"monthly_budget\": 1000000\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/account/profile/setup",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"account",
+						"profile",
+						"setup"
+					]
+				}
+			}
+		},
+		{
+			"name": "4. 계정 정보 조회",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{accessToken}}"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"accessToken\": \"{{accessToken}}\",\n    \"sequence\": 0\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/account/info",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"account",
+						"info"
+					]
+				}
+			}
+		},
+		{
+			"name": "5. 개인정보 프로필 조회",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{accessToken}}"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"accessToken\": \"{{accessToken}}\",\n    \"sequence\": 0\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/profile/get",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"profile",
+						"get"
+					]
+				}
+			}
+		},
+		{
+			"name": "6. 프로필 전체 업데이트",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{accessToken}}"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"accessToken\": \"{{accessToken}}\",\n    \"sequence\": 0,\n    \"nickname\": \"새로운닉네임\",\n    \"email\": \"newemail@example.com\",\n    \"phone_number\": \"010-1234-5678\",\n    \"email_notifications_enabled\": false,\n    \"sms_notifications_enabled\": true,\n    \"push_notifications_enabled\": true,\n    \"price_alert_enabled\": false,\n    \"news_alert_enabled\": true,\n    \"portfolio_alert_enabled\": true,\n    \"trade_alert_enabled\": false,\n    \"current_password\": null,\n    \"new_password\": null,\n    \"korea_investment_app_key\": \"PSA000001\",\n    \"korea_investment_app_secret\": \"secret123456\",\n    \"alpha_vantage_key\": \"ALPHA123\",\n    \"polygon_key\": \"POLY456\",\n    \"finnhub_key\": \"FINN789\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/profile/update-all",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"profile",
+						"update-all"
+					]
+				}
+			}
+		},
+		{
+			"name": "7. 업데이트 확인",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{accessToken}}"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"accessToken\": \"{{accessToken}}\",\n    \"sequence\": 0\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/profile/get",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"profile",
+						"get"
+					]
+				}
+			}
+		},
+		{
+			"name": "8. 투자정보 프로필 조회",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{accessToken}}"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"accessToken\": \"{{accessToken}}\",\n    \"sequence\": 0\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/account/profile/get",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"account",
+						"profile",
+						"get"
+					]
+				}
+			}
+		},
+		{
+			"name": "9. 투자정보 수정",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{accessToken}}"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"accessToken\": \"{{accessToken}}\",\n    \"sequence\": 0,\n    \"investment_experience\": \"INTERMEDIATE\",\n    \"risk_tolerance\": \"AGGRESSIVE\",\n    \"investment_goal\": \"INCOME\",\n    \"monthly_budget\": 2000000\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/account/profile/update",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"account",
+						"profile",
+						"update"
+					]
+				}
+			}
+		},
+		{
+			"name": "10. 비밀번호 변경",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{accessToken}}"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"accessToken\": \"{{accessToken}}\",\n    \"sequence\": 0,\n    \"current_password\": \"Test1234!\",\n    \"new_password\": \"NewPass1234!\",\n    \"new_password_confirm\": \"NewPass1234!\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/profile/change-password",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"profile",
+						"change-password"
+					]
+				}
+			}
+		},
+		{
+			"name": "11. API 키 조회",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{accessToken}}"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"accessToken\": \"{{accessToken}}\",\n    \"sequence\": 0\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/profile/api-keys/get",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"profile",
+						"api-keys",
+						"get"
+					]
+				}
+			}
+		},
+		{
+			"name": "12. 로그아웃",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{accessToken}}"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"accessToken\": \"{{accessToken}}\",\n    \"sequence\": 0\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/account/logout",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"account",
+						"logout"
+					]
+				}
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8000"
+		}
+	]
+}

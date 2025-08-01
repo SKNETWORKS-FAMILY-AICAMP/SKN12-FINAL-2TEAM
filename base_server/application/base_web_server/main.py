@@ -27,6 +27,7 @@ from template.market.market_template_impl import MarketTemplateImpl
 from template.settings.settings_template_impl import SettingsTemplateImpl
 from template.notification.notification_template_impl import NotificationTemplateImpl
 from template.crawler.crawler_template_impl import CrawlerTemplateImpl
+from template.profile.profile_template_impl import ProfileTemplateImpl
 from template.base.template_config import AppConfig
 from template.base.template_service import TemplateService
 from service.db.database_service import DatabaseService
@@ -642,7 +643,8 @@ async def lifespan(app: FastAPI):
         (TemplateType.MARKET, MarketTemplateImpl, "마켓"),
         (TemplateType.SETTINGS, SettingsTemplateImpl, "설정"),
         (TemplateType.NOTIFICATION, NotificationTemplateImpl, "알림"),
-        (TemplateType.CRAWLER, CrawlerTemplateImpl, "크롤러")
+        (TemplateType.CRAWLER, CrawlerTemplateImpl, "크롤러"),
+        (TemplateType.PROFILE, ProfileTemplateImpl, "프로필")
     ]
     
     for template_type, template_class, template_name in template_configs:
@@ -683,6 +685,7 @@ async def lifespan(app: FastAPI):
         ("settings", "설정"),
         ("notification", "알림"),
         ("crawler", "크롤러"),
+        ("profile", "프로필"),
         ("websocket", "웹소켓")
     ]
     
@@ -723,6 +726,9 @@ async def lifespan(app: FastAPI):
             elif protocol_name == "crawler":
                 from .routers.crawler import setup_crawler_protocol_callbacks
                 setup_crawler_protocol_callbacks()
+            elif protocol_name == "profile":
+                from .routers.profile import setup_profile_protocol_callbacks
+                setup_profile_protocol_callbacks()
             elif protocol_name == "websocket":
                 from .routers.websocket import setup_websocket_protocol_callbacks
                 setup_websocket_protocol_callbacks()
@@ -1298,7 +1304,7 @@ except Exception as e:
     Logger.warn("⚠️ 미들웨어 없이 서버 실행")
 
 # 라우터 등록
-from .routers import account, admin, tutorial, dashboard, portfolio, chat, autotrade, market, settings, notification, crawler, websocket
+from .routers import account, admin, tutorial, dashboard, portfolio, chat, autotrade, market, settings, notification, crawler, websocket, profile
 app.include_router(account.router, prefix="/api/account", tags=["account"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 app.include_router(tutorial.router, prefix="/api/tutorial", tags=["tutorial"])
@@ -1310,6 +1316,7 @@ app.include_router(market.router, prefix="/api/market", tags=["market"])
 app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(notification.router, prefix="/api/notification", tags=["notification"])
 app.include_router(crawler.router, prefix="/api/crawler", tags=["crawler"])
+app.include_router(profile.router, prefix="/api/profile", tags=["profile"])
 app.include_router(websocket.router, tags=["websocket"])
 
 @app.get("/")
