@@ -110,38 +110,29 @@ class KalmanRegimeFilterTool(BaseFinanceTool):
         kwargs['end_date'] = today_str  
         inp = KalmanRegimeFilterInput(**kwargs)
 
-        # 1️⃣ 데이터 수집
-        macro = MacroEconomicTool(self.ai_chat_service).get_data(series_ids=["GDP", "CPIAUCSL", "DEXKOUS"])
-        gdp = self._find_value(macro.data, 'GDP')
-        cpi = self._find_value(macro.data, 'CPIAUCSL')
-        exchange_rate = self._find_value(macro.data, 'DEXKOUS', default=0.00072)
+        # 1️⃣ 데이터 수집 (FeaturePipelineTool 사용)
+        from service.llm.AIChat.tool.FeaturePipelineTool import FeaturePipelineTool
+        
+        features = FeaturePipelineTool(self.ai_chat_service).transform(
+            tickers=inp.tickers,
+            start_date=inp.start_date,
+            end_date=inp.end_date,
+            feature_set=["GDP", "CPIAUCSL", "DEXKOUS", "RSI", "MACD", "VIX", "PRICE"]
+        )
+
+        gdp = features.get("GDP", 0.0)
+        cpi = features.get("CPIAUCSL", 0.0)
+        exchange_rate = features.get("DEXKOUS", 0.00072)
+        rsi = features.get("RSI", 0.0)
+        macd = features.get("MACD", 0.0)
+        vix = features.get("VIX", 0.0)
+        entry_price = features.get("PRICE", 0.0)
+
         if inp.exchange_rate.upper() == "KWR":
-            inp.account_value *= exchange_rate 
-             
-        results = TechnicalAnalysisTool(self.ai_chat_service).get_data(tickers=inp.tickers).results
-        if isinstance(results, list):
-            ta_res = results[0]
-        elif isinstance(results, dict):
-            ta_res = next(iter(results.values()))
-        else:
-            raise RuntimeError("results 타입이 예상과 다릅니다.")
-        rsi, macd = ta_res.rsi, ta_res.macd
+            inp.account_value *= exchange_rate
 
-        md_inp = MarketDataInput(tickers=inp.tickers,
-                                 start_date=inp.start_date,
-                                 end_date=inp.end_date)
-        md_out = MarketDataTool(self.ai_chat_service).get_data(**md_inp.dict())
-        vix = md_out.vix
-        df = md_out.price_data.get(inp.tickers[0])
-        if not df:
+        if entry_price == 0.0:
             raise RuntimeError(f"{inp.tickers[0]}의 가격 데이터를 찾을 수 없습니다.")
-        entry_price = float(df[-1].get("Adj Close", 0))
-
-        gdp = gdp if gdp is not None else 0.0
-        cpi = cpi if cpi is not None else 0.0
-        vix = vix if vix is not None else 0.0
-        rsi = rsi if rsi is not None else 0.0
-        macd = macd if macd is not None else 0.0
 
         z = np.array([
             gdp, cpi, vix,
