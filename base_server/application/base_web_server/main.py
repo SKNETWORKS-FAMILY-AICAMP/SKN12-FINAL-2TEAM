@@ -24,7 +24,6 @@ from template.portfolio.portfolio_template_impl import PortfolioTemplateImpl
 from template.chat.chat_template_impl import ChatTemplateImpl
 from template.autotrade.autotrade_template_impl import AutoTradeTemplateImpl
 from template.market.market_template_impl import MarketTemplateImpl
-from template.settings.settings_template_impl import SettingsTemplateImpl
 from template.notification.notification_template_impl import NotificationTemplateImpl
 from template.crawler.crawler_template_impl import CrawlerTemplateImpl
 from template.profile.profile_template_impl import ProfileTemplateImpl
@@ -641,7 +640,6 @@ async def lifespan(app: FastAPI):
         (TemplateType.CHAT, ChatTemplateImpl, "채팅"),
         (TemplateType.AUTOTRADE, AutoTradeTemplateImpl, "자동매매"),
         (TemplateType.MARKET, MarketTemplateImpl, "마켓"),
-        (TemplateType.SETTINGS, SettingsTemplateImpl, "설정"),
         (TemplateType.NOTIFICATION, NotificationTemplateImpl, "알림"),
         (TemplateType.CRAWLER, CrawlerTemplateImpl, "크롤러"),
         (TemplateType.PROFILE, ProfileTemplateImpl, "프로필")
@@ -682,7 +680,6 @@ async def lifespan(app: FastAPI):
         ("chat", "채팅"),
         ("autotrade", "자동매매"),
         ("market", "마켓"),
-        ("settings", "설정"),
         ("notification", "알림"),
         ("crawler", "크롤러"),
         ("profile", "프로필"),
@@ -717,9 +714,6 @@ async def lifespan(app: FastAPI):
             elif protocol_name == "market":
                 from .routers.market import setup_market_protocol_callbacks
                 setup_market_protocol_callbacks()
-            elif protocol_name == "settings":
-                from .routers.settings import setup_settings_protocol_callbacks
-                setup_settings_protocol_callbacks()
             elif protocol_name == "notification":
                 from .routers.notification import setup_notification_protocol_callbacks
                 setup_notification_protocol_callbacks()
@@ -1304,7 +1298,7 @@ except Exception as e:
     Logger.warn("⚠️ 미들웨어 없이 서버 실행")
 
 # 라우터 등록
-from .routers import account, admin, tutorial, dashboard, portfolio, chat, autotrade, market, settings, notification, crawler, websocket, profile
+from .routers import account, admin, tutorial, dashboard, portfolio, chat, autotrade, market, notification, crawler, websocket, profile
 app.include_router(account.router, prefix="/api/account", tags=["account"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 app.include_router(tutorial.router, prefix="/api/tutorial", tags=["tutorial"])
@@ -1313,7 +1307,6 @@ app.include_router(portfolio.router, prefix="/api/portfolio", tags=["portfolio"]
 app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
 app.include_router(autotrade.router, prefix="/api/autotrade", tags=["autotrade"])
 app.include_router(market.router, prefix="/api/market", tags=["market"])
-app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(notification.router, prefix="/api/notification", tags=["notification"])
 app.include_router(crawler.router, prefix="/api/crawler", tags=["crawler"])
 app.include_router(profile.router, prefix="/api/profile", tags=["profile"])

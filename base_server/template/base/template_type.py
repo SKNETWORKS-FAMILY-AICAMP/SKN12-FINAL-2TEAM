@@ -10,7 +10,6 @@ class TemplateType(Enum):
     CHAT = auto()
     AUTOTRADE = auto()
     MARKET = auto()
-    SETTINGS = auto()
     NOTIFICATION = auto()
     CRAWLER = auto()
     MODEL = auto()
