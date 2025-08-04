@@ -19,7 +19,7 @@ import json
 from contextlib import asynccontextmanager
 
 # 프로젝트 모듈 import
-from data_collector import StockDataCollector
+from manual_data_collector import ManualStockDataCollector
 from data_preprocessor import StockDataPreprocessor
 from pytorch_lstm_model import PyTorchStockLSTM
 from config import get_model_paths
@@ -131,7 +131,7 @@ async def load_model_and_preprocessor():
             preprocessor = StockDataPreprocessor()
         
         # 데이터 수집기 초기화
-        data_collector = StockDataCollector()
+        data_collector = ManualStockDataCollector()
         
         logger.info("All components loaded successfully")
         
