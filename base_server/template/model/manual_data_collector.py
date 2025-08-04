@@ -229,6 +229,51 @@ class ManualStockDataCollector:
         success_rate = len(results) / len(symbols) * 100 if symbols else 0
         self.logger.info(f"🎯 Manual API collection completed: {len(results)}/{len(symbols)} symbols ({success_rate:.1f}% success rate)")
         return results
+    
+    def get_recent_data(self, symbol: str, days: int = 60) -> Optional[pd.DataFrame]:
+        """
+        특정 종목의 최근 N일 데이터 수집 (추론용)
+        
+        Args:
+            symbol: 주식 심볼
+            days: 수집할 일수 (기본 60일)
+            
+        Returns:
+            pandas DataFrame with recent OHLCV data
+        """
+        try:
+            # 충분한 데이터를 얻기 위해 조금 더 긴 기간으로 수집
+            if days <= 30:
+                period = "3mo"
+            elif days <= 90:
+                period = "6mo"
+            elif days <= 180:
+                period = "1y"
+            else:
+                period = "3y"
+            
+            self.logger.info(f"📡 Collecting recent {days} days data for {symbol} (using {period} period)")
+            
+            # 전체 데이터 수집
+            full_data = self.get_stock_data(symbol, period=period)
+            
+            if full_data is None or len(full_data) == 0:
+                self.logger.error(f"❌ Failed to collect data for {symbol}")
+                return None
+            
+            # 최근 N일만 추출
+            if len(full_data) >= days:
+                recent_data = full_data.tail(days).reset_index(drop=True)
+                self.logger.info(f"✅ Successfully collected {len(recent_data)} days for {symbol}")
+                self.logger.info(f"📅 Date range: {recent_data['Date'].iloc[0].date()} to {recent_data['Date'].iloc[-1].date()}")
+                return recent_data
+            else:
+                self.logger.warning(f"⚠️ Only {len(full_data)} days available for {symbol} (requested {days})")
+                return full_data
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error collecting recent data for {symbol}: {str(e)}")
+            return None
 
 def test_manual_collector():
     """Manual collector 테스트"""
