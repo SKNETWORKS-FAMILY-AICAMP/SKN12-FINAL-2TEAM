@@ -24,8 +24,26 @@ apt-get install -y \
     nano \
     vim
 
-# Python 환경 확인
+# Python 환경 확인 및 설정
 echo "🐍 Checking Python environment..."
+
+# python3가 있는지 확인하고 python 심볼릭 링크 생성
+if command -v python3 &> /dev/null; then
+    echo "✅ python3 found, creating python symlink..."
+    ln -sf $(which python3) /usr/local/bin/python
+    echo "✅ python symlink created"
+else
+    echo "❌ python3 not found!"
+    exit 1
+fi
+
+# pip3가 있는지 확인하고 pip 심볼릭 링크 생성
+if command -v pip3 &> /dev/null; then
+    echo "✅ pip3 found, creating pip symlink..."
+    ln -sf $(which pip3) /usr/local/bin/pip
+    echo "✅ pip symlink created"
+fi
+
 python --version
 python -m pip --version
 
@@ -38,13 +56,23 @@ echo "📚 Installing Python dependencies..."
 pip install --upgrade pip setuptools wheel
 pip install -r requirements.txt
 
-# CUDA 호환성 확인 및 TensorFlow GPU 테스트
-echo "🔍 Testing TensorFlow GPU support..."
+# CUDA 호환성 확인 및 PyTorch GPU 테스트
+echo "🔍 Testing PyTorch GPU support..."
 python -c "
-import tensorflow as tf
-print('TensorFlow version:', tf.__version__)
-print('GPU available:', tf.config.list_physical_devices('GPU'))
-print('CUDA available:', tf.test.is_built_with_cuda())
+try:
+    import torch
+    print('✅ PyTorch version:', torch.__version__)
+    print('✅ CUDA available:', torch.cuda.is_available())
+    if torch.cuda.is_available():
+        print('✅ GPU device:', torch.cuda.get_device_name(0))
+        print('✅ GPU count:', torch.cuda.device_count())
+        print('✅ CUDA version:', torch.version.cuda)
+    else:
+        print('⚠️ CUDA not available (will use CPU)')
+except ImportError:
+    print('⚠️ PyTorch not installed yet (will be installed with requirements.txt)')
+except Exception as e:
+    print('⚠️ PyTorch test failed:', str(e))
 "
 
 # 작업 디렉토리를 /workspace로 이동
