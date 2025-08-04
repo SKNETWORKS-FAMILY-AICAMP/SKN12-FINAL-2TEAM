@@ -145,13 +145,16 @@ class MarketRegimeDetectorTool(BaseFinanceTool):
         input_data = MarketRegimeDetectorInput(**kwargs)
         print("  [1] input_data:", input_data)
 
-        # [2] FeaturePipelineTool 호출
+        # [2] FeaturePipelineTool 호출 (거시경제 중심 선택적 정규화)
         from service.llm.AIChat.tool.FeaturePipelineTool import FeaturePipelineTool
         features = FeaturePipelineTool(self.ai_chat_service).transform(
             tickers=input_data.tickers,
             start_date=input_data.start_date,
             end_date=input_data.end_date,
-            feature_set=input_data.series_ids + ["RSI", "MACD", "VIX"]
+            feature_set=input_data.series_ids + ["RSI", "MACD", "VIX"],
+            normalize=True,  # ✅ 정규화 활성화
+            normalize_targets=input_data.series_ids + ["RSI", "MACD", "VIX"],  # ✅ 거시경제 + 기술지표 정규화
+            debug=False
         )
 
         macro_data = {

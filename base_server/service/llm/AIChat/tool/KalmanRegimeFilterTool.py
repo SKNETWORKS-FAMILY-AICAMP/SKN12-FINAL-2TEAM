@@ -35,30 +35,32 @@ class KalmanRegimeFilterActionOutput(BaseModel):
     start_time: str
     end_time: str
 
-# ─────────────────────── Kalman Filter Core ─────────────────────── #
+# ─────────────────────────── Kalman Filter Core ───────────────────────── #
 
 class KalmanRegimeFilterCore:
-    """
-    상태벡터 x = [trend, macro drift, volatility]
-    F, H, Q, R는 예시 상수이며 EM 학습으로 교체 가능
-    """
     def __init__(self) -> None:
-        self.F: NDArray = np.array([[0.9, 0.1, 0.0],
-                                    [0.0, 0.8, 0.2],
-                                    [0.1, 0.0, 0.9]])
-        self.H: NDArray = np.array([
-            [1,   0,   0],   # GDP
-            [0,   1,   0],   # CPI
-            [0,   0,   1],   # VIX
-            [0.5, 0.5, 0],   # GDP+CPI
-            [0,  0.7, 0.3],  # CPI&VIX
-            [0.2,0.2, 0.6],  # RSI
-            [0.4,0.3, 0.3]   # MACD
+        # 상태 벡터: [trend, momentum, volatility]
+        self.x = np.array([0.0, 0.0, 0.5])
+        
+        # 공분산 행렬
+        self.P = np.eye(3) * 0.1
+        
+        # 시스템 노이즈
+        self.Q = np.eye(3) * 0.01
+        
+        # 측정 노이즈
+        self.R = np.eye(7) * 0.1  # 7개 피처
+        
+        # 상태 전이 행렬
+        self.F = np.eye(3)
+        self.F[0, 1] = 0.1  # trend ← momentum
+        
+        # 측정 행렬 (7개 피처 → 3개 상태)
+        self.H = np.array([
+            [1, 0, 0, 0.5, 0, 0, 0],  # trend
+            [0, 0, 0, 0, 0, 1, 0],    # momentum
+            [0, 0, 1, 0, 0.3, 0, 0]   # volatility
         ])
-        self.Q: NDArray = np.eye(3) * 0.01
-        self.R: NDArray = np.eye(7) * 0.10
-        self.x: NDArray = np.array([0.0, 1.0, 0.5])
-        self.P: NDArray = np.eye(3)
 
     def _predict(self) -> None:
         self.x = self.F @ self.x
@@ -68,7 +70,8 @@ class KalmanRegimeFilterCore:
         y = z - self.H @ self.x
         S = self.H @ self.P @ self.H.T + self.R
         K = self.P @ self.H.T @ np.linalg.inv(S)
-        self.x += K @ y
+        
+        self.x = self.x + K @ y
         self.P = (np.eye(3) - K @ self.H) @ self.P
 
     def step(self, z: NDArray) -> None:
@@ -80,9 +83,10 @@ class KalmanRegimeFilterCore:
 class KalmanRegimeFilterTool(BaseFinanceTool):
     """
     매 호출 시:
-      1) 거시·기술·가격 데이터 수집
-      2) 칼만 필터 업데이트
-      3) 트레이딩 신호·리스크·경고 생성
+      1) 거시·기술·가격 데이터 수집 (raw 값)
+      2) 피처 조합 후 정규화
+      3) 칼만 필터 업데이트
+      4) 트레이딩 신호·리스크·경고 생성
     """
     def __init__(self, ai_chat_service):
         from service.llm.AIChat_service import AIChatService
@@ -91,6 +95,10 @@ class KalmanRegimeFilterTool(BaseFinanceTool):
         self.ai_chat_service = ai_chat_service
         self.filter = KalmanRegimeFilterCore()
         self.max_latency = 5.0  # seconds
+
+    # ---------- 정규화 유틸리티 함수들 ----------
+    # ❌ 중복 정규화 메서드 제거 - FeaturePipelineTool에서 처리
+    # _log1p_normalize, _zscore_normalize 메서드 삭제
 
     # ---------- 유틸 ----------
     @staticmethod
@@ -104,30 +112,61 @@ class KalmanRegimeFilterTool(BaseFinanceTool):
 
     # ---------- main ----------
     def get_data(self, **kwargs) -> KalmanRegimeFilterActionOutput:
+        """
+        칼만 필터 기반 시장 체제 감지 + 자동 트레이딩 신호 생성
+        
+        Returns:
+            KalmanRegimeFilterActionOutput: 트레이딩 추천사항
+        """
         t_start = time.time()
-        start_ts = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(t_start))
-        today_str = datetime.today().strftime("%Y-%m-%d")
-        kwargs['end_date'] = today_str  
+        
+        # 1️⃣ kwargs → input class 파싱
         inp = KalmanRegimeFilterInput(**kwargs)
+        
+        # 🆕 칼만 필터 전용 Composite 공식 정의
+        kalman_composite_formulas = {
+            # 거시경제 + 변동성 복합 지표 (칼만 필터의 trend 추정용)
+            "kalman_macro_vol": lambda feats: (
+                0.4 * feats.get("GDP", 0.0) + 
+                0.3 * feats.get("CPIAUCSL", 0.0) + 
+                0.3 * feats.get("VIX", 0.0)
+            ),
+            # 기술적 + 거시경제 복합 지표 (momentum 추정용)
+            "kalman_tech_macro": lambda feats: (
+                0.5 * feats.get("RSI", 0.0) + 
+                0.3 * feats.get("MACD", 0.0) + 
+                0.2 * feats.get("CPIAUCSL", 0.0)
+            ),
+            # 변동성 + 환율 복합 지표 (volatility 추정용)
+            "kalman_vol_fx": lambda feats: (
+                0.7 * feats.get("VIX", 0.0) + 
+                0.3 * feats.get("DEXKOUS", 0.0)
+            )
+        }
 
-        # 1️⃣ 데이터 수집 (FeaturePipelineTool 사용)
+        # 2️⃣ 완전한 피처 파이프라인 활용 (칼만 전용 composite 공식 사용)
         from service.llm.AIChat.tool.FeaturePipelineTool import FeaturePipelineTool
         
-        features = FeaturePipelineTool(self.ai_chat_service).transform(
+        pipeline_result = FeaturePipelineTool(self.ai_chat_service).transform(
             tickers=inp.tickers,
             start_date=inp.start_date,
             end_date=inp.end_date,
             feature_set=["GDP", "CPIAUCSL", "DEXKOUS", "RSI", "MACD", "VIX", "PRICE"],
-            normalize=True # 칼만 필터는 무조건 켜야 함
+            normalize=True,  # ✅ 정규화 활성화
+            normalize_targets=["GDP", "CPIAUCSL", "VIX", "RSI", "MACD"],  # ✅ Composite 자동 추가됨
+            generate_composites=True,  # ✅ 복합 피처 생성
+            composite_formula_map=kalman_composite_formulas,  # 🆕 칼만 전용 공식 사용
+            return_raw=True,  # 🆕 Raw + Normalized 동시 반환
+            debug=False
         )
 
-        gdp = features.get("GDP", 0.0)
-        cpi = features.get("CPIAUCSL", 0.0)
-        exchange_rate = features.get("DEXKOUS", 0.00072)
-        rsi = features.get("RSI", 0.0)
-        macd = features.get("MACD", 0.0)
-        vix = features.get("VIX", 0.0)
-        entry_price = features.get("PRICE", 0.0)
+        # 3️⃣ Raw 값과 Normalized 값 분리
+        raw_features = pipeline_result["raw"]      # 계산용 (가격, 환율)
+        norm_features = pipeline_result["normalized"]  # 신호용 (모델 입력)
+        
+        # Raw 값으로 계산용 데이터 추출
+        exchange_rate = raw_features.get("DEXKOUS", 0.00072)
+        entry_price = raw_features.get("PRICE", 0.0)
 
         if inp.exchange_rate.upper() == "KWR":
             inp.account_value *= exchange_rate
@@ -135,19 +174,24 @@ class KalmanRegimeFilterTool(BaseFinanceTool):
         if entry_price == 0.0:
             raise RuntimeError(f"{inp.tickers[0]}의 가격 데이터를 찾을 수 없습니다.")
 
+        # 4️⃣ 정규화된 피처들로 관측값 벡터 구성 (칼만 전용 composite 사용)
         z = np.array([
-            gdp, cpi, vix,
-            0.5 * (gdp + cpi),
-            0.7 * cpi + 0.3 * vix,
-            rsi, macd
+            norm_features.get("GDP"),                    # ✅ log1p 정규화됨
+            norm_features.get("CPIAUCSL"),               # ✅ z-score 정규화됨  
+            norm_features.get("VIX"),                    # ✅ z-score 정규화됨
+            norm_features.get("kalman_macro_vol"),       # 🆕 칼만 전용 composite (자동 정규화됨)
+            norm_features.get("kalman_tech_macro"),      # 🆕 칼만 전용 composite (자동 정규화됨)
+            norm_features.get("kalman_vol_fx"),          # 🆕 칼만 전용 composite (자동 정규화됨)
+            norm_features.get("RSI"),                    # ✅ z-score 정규화됨
+            norm_features.get("MACD")                    # ✅ z-score 정규화됨
         ])
 
-        # 2️⃣ 칼만 필터
+        # 5️⃣ 칼만 필터
         self.filter.step(z)
         state, cov = self.filter.x.copy(), self.filter.P.copy()
         raw_vol = float(state[2])
 
-        # 3️⃣ 액션 엔진
+        # 6️⃣ 액션 엔진
         rec: Dict[str, Any] = {}
         warnings: List[str] = []
 
@@ -203,24 +247,10 @@ class KalmanRegimeFilterTool(BaseFinanceTool):
         if warnings:
             rec["warnings"] = warnings
 
-        # 4️⃣ 요약 문자열
-        lines = [
-            "📈 [Kalman Regime Filter Action Engine]",
-            f"Signal:{signal}  Strategy:{rec['strategy']}",
-            f"PosSize:{pos_size:.4f}  Lev:{leverage:.2f}",
-            f"SL:{stop_loss:.2f}  TP:{take_profit:.2f}",
-            f"Risk:{rec['risk_score']:.3f}  Market:{rec['market_stability']}",
-            f"Elapsed:{latency:.3f}s"
-        ]
-        if warnings:
-            lines.append("⚠️ " + " | ".join(warnings))
-        summary = "\n".join(lines)
-
-        end_ts = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
-
+        # 7️⃣ 결과 반환
         return KalmanRegimeFilterActionOutput(
-            summary=summary,
+            summary=f"칼만 필터 분석 완료 - {signal} 신호, 변동성: {vol:.3f}",
             recommendations=rec,
-            start_time=start_ts,
-            end_time=end_ts
+            start_time=inp.start_date,
+            end_time=inp.end_date
         )

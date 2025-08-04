@@ -159,17 +159,46 @@ class MLSignalEnsemble(BaseFinanceTool):
 
         t0 = time.time()
 
-        # FeaturePipelineTool을 사용하여 필요한 피처 추출
+        # FeaturePipelineTool을 사용하여 필요한 피처 추출 (Raw + Normalized 동시 반환)
         from service.llm.AIChat.tool.FeaturePipelineTool import FeaturePipelineTool
-        features = FeaturePipelineTool(self.ai_chat_service).transform(
+        
+        # 🆕 ML 앙상블 전용 Composite 공식 정의
+        ml_ensemble_composite_formulas = {
+            # 기술적 + 거시경제 복합 지표 (XGBoost용)
+            "ml_tech_macro": lambda feats: (
+                0.4 * feats.get("RSI", 0.0) + 
+                0.3 * feats.get("MACD", 0.0) + 
+                0.3 * feats.get("GDP", 0.0)
+            ),
+            # 변동성 + 펀더멘털 복합 지표 (LSTM용)
+            "ml_vol_fundamental": lambda feats: (
+                0.5 * feats.get("VIX", 0.0) + 
+                0.3 * feats.get("CPIAUCSL", 0.0) + 
+                0.2 * feats.get("DEXKOUS", 0.0)
+            ),
+            # 모멘텀 + 밸류 복합 지표 (앙상블 가중치 조정용)
+            "ml_momentum_value": lambda feats: (
+                0.6 * feats.get("RSI", 0.0) + 
+                0.4 * feats.get("MACD", 0.0)
+            )
+        }
+        
+        pipeline_result = FeaturePipelineTool(self.ai_chat_service).transform(
             tickers=tickers,
             start_date=start_date,
             end_date=end_date,
-            feature_set=["RSI", "MACD", "PRICE_HISTORY", "GDP", "CPIAUCSL", "DEXKOUS"]
+            feature_set=["RSI", "MACD", "PRICE_HISTORY", "GDP", "CPIAUCSL", "DEXKOUS", "VIX"],
+            normalize=True,  # ✅ 정규화 활성화
+            normalize_targets=["GDP", "CPIAUCSL", "RSI", "MACD", "VIX"],  # ✅ ML 모델용 선택적 정규화
+            generate_composites=True,  # ✅ 복합 피처 생성
+            composite_formula_map=ml_ensemble_composite_formulas,  # 🆕 ML 앙상블 전용 공식 사용
+            return_raw=True,  # 🆕 Raw + Normalized 동시 반환
+            debug=False
         )
 
-        # feature_engineering 함수를 features 딕셔너리를 직접 사용하도록 수정
-        X, _ = self._feature_engineering_from_features(features)
+        # 정규화된 피처로 ML 모델 입력 생성
+        norm_features = pipeline_result["normalized"]
+        X, _ = self._feature_engineering_from_features(norm_features)
 
         xgb_sig = (
             float(self.xgb_model.predict(X[:1])[0]) if self.xgb_model else 0.0
@@ -202,19 +231,44 @@ class MLSignalEnsemble(BaseFinanceTool):
         """
         FeaturePipelineTool에서 얻은 features 딕셔너리를 사용하여
         ML 모델의 입력 X, y를 생성합니다.
-        실제 구현에서는 features 딕셔너리의 값들을 적절히 가공하여 X를 구성해야 합니다.
+        새로운 composite 피처들을 포함하여 더 풍부한 특성 엔지니어링을 수행합니다.
         """
-        # 예시: features 딕셔너리에서 몇 가지 값을 가져와 더미 X를 생성
-        # 실제로는 더 복잡한 로직이 필요합니다.
+        # 기본 피처들
         gdp = features.get("GDP", 0.0)
         cpi = features.get("CPIAUCSL", 0.0)
         rsi = features.get("RSI", 0.0)
         macd = features.get("MACD", 0.0)
+        vix = features.get("VIX", 0.0)
         price_history = features.get("PRICE_HISTORY", pd.DataFrame())
+        
+        # 🆕 ML 앙상블 전용 composite 피처들
+        ml_tech_macro = features.get("ml_tech_macro", 0.0)
+        ml_vol_fundamental = features.get("ml_vol_fundamental", 0.0)
+        ml_momentum_value = features.get("ml_momentum_value", 0.0)
+        
+        # 가격 데이터에서 추가 특성 추출
+        price_feature = 0.0
+        if not price_history.empty and len(price_history) > 0:
+            latest_price = price_history.iloc[-1].get("Adj Close", 0.0)
+            if len(price_history) > 1:
+                prev_price = price_history.iloc[-2].get("Adj Close", latest_price)
+                price_feature = (latest_price - prev_price) / prev_price if prev_price > 0 else 0.0
+            else:
+                price_feature = latest_price
 
-        # 간단한 더미 X 생성 (실제 모델에 맞게 수정 필요)
-        X = np.array([[gdp, cpi, rsi, macd, price_history.iloc[-1].get("Adj Close", 0.0) if not price_history.empty else 0.0, 0, 0, 0]])
-        y = np.array([0.0]) # 예측 대상 y는 여기서는 사용되지 않으므로 더미 값
+        # 🆕 8차원 특성 벡터 구성 (기존 5차원에서 확장)
+        X = np.array([[
+            gdp,                    # 1. GDP
+            cpi,                    # 2. CPI
+            rsi,                    # 3. RSI
+            macd,                   # 4. MACD
+            vix,                    # 5. VIX
+            ml_tech_macro,          # 6. 🆕 기술적+거시경제 복합지표
+            ml_vol_fundamental,     # 7. 🆕 변동성+펀더멘털 복합지표
+            price_feature           # 8. 🆕 가격 변화율
+        ]])
+        
+        y = np.array([0.0])  # 예측 대상 y는 여기서는 사용되지 않으므로 더미 값
         return X, y
 
 
