@@ -15,6 +15,8 @@ class StockDataPreprocessor:
     def __init__(self):
         self.logger = logging.getLogger(__name__)
         self.scaler = MinMaxScaler()
+        self.symbol_scalers = {}  # 종목별 개별 스케일러
+        self.target_scalers = {}  # 타겟용 개별 스케일러
     
     def calculate_moving_averages(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -163,12 +165,13 @@ class StockDataPreprocessor:
         self.logger.info(f"Preprocessing completed. Final shape: {df_processed.shape}")
         return df_processed
     
-    def create_sequences(self, df: pd.DataFrame, sequence_length: int = 60, prediction_length: int = 5) -> Tuple[np.ndarray, np.ndarray]:
+    def create_sequences(self, df: pd.DataFrame, symbol: str, sequence_length: int = 60, prediction_length: int = 5) -> Tuple[np.ndarray, np.ndarray]:
         """
-        LSTM 학습용 시퀀스 데이터 생성
+        LSTM 학습용 시퀀스 데이터 생성 (종목별 개별 정규화)
         
         Args:
             df: 전처리된 데이터프레임
+            symbol: 종목 심볼 (개별 정규화용)
             sequence_length: 입력 시퀀스 길이 (60일)
             prediction_length: 예측 길이 (5일)
             
@@ -190,23 +193,62 @@ class StockDataPreprocessor:
         feature_data = df[feature_columns].values
         target_data = df[target_columns].values
         
-        # 정규화
-        feature_data_scaled = self.scaler.fit_transform(feature_data)
+        # 종목별 개별 스케일러 생성 및 피처 정규화
+        if symbol not in self.symbol_scalers:
+            self.symbol_scalers[symbol] = MinMaxScaler()
+        
+        feature_data_scaled = self.symbol_scalers[symbol].fit_transform(feature_data)
+        
+        # 종목별 개별 타겟 스케일러 생성 및 타겟 정규화
+        if symbol not in self.target_scalers:
+            self.target_scalers[symbol] = MinMaxScaler()
+        
+        target_data_scaled = self.target_scalers[symbol].fit_transform(target_data)
         
         X, y = [], []
         
         for i in range(len(feature_data_scaled) - sequence_length - prediction_length + 1):
-            # 입력: 과거 60일의 모든 피처
+            # 입력: 과거 60일의 모든 피처 (정규화됨)
             X.append(feature_data_scaled[i:(i + sequence_length)])
             
-            # 타겟: 다음 5일의 Close, BB_Upper, BB_Lower
-            y.append(target_data[(i + sequence_length):(i + sequence_length + prediction_length)])
+            # 타겟: 다음 5일의 Close, BB_Upper, BB_Lower (정규화됨)
+            y.append(target_data_scaled[(i + sequence_length):(i + sequence_length + prediction_length)])
         
         X = np.array(X)
         y = np.array(y)
         
-        self.logger.info(f"Created sequences - X shape: {X.shape}, y shape: {y.shape}")
+        self.logger.info(f"Created sequences for {symbol} - X shape: {X.shape}, y shape: {y.shape}")
+        self.logger.info(f"  Feature range: [{feature_data_scaled.min():.3f}, {feature_data_scaled.max():.3f}]")
+        self.logger.info(f"  Target range: [{target_data_scaled.min():.3f}, {target_data_scaled.max():.3f}]")
+        
         return X, y
+    
+    def inverse_transform_predictions(self, predictions: np.ndarray, symbol: str) -> np.ndarray:
+        """
+        정규화된 예측값을 원래 스케일로 역변환
+        
+        Args:
+            predictions: 정규화된 예측값 (batch_size, prediction_length, num_targets)
+            symbol: 종목 심볼
+            
+        Returns:
+            역변환된 예측값
+        """
+        if symbol not in self.target_scalers:
+            self.logger.warning(f"No target scaler found for {symbol}")
+            return predictions
+        
+        # 3D → 2D 변환
+        original_shape = predictions.shape
+        predictions_2d = predictions.reshape(-1, predictions.shape[-1])
+        
+        # 역변환
+        predictions_original = self.target_scalers[symbol].inverse_transform(predictions_2d)
+        
+        # 원래 shape로 복원
+        predictions_original = predictions_original.reshape(original_shape)
+        
+        return predictions_original
     
     def preprocess_for_inference(self, df: pd.DataFrame) -> np.ndarray:
         """

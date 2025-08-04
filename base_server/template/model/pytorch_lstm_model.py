@@ -331,26 +331,69 @@ class PyTorchStockLSTM:
         return predictions.cpu().numpy()
     
     def evaluate(self, X_test: np.ndarray, y_test: np.ndarray) -> Dict[str, float]:
-        """모델 평가"""
+        """
+        모델 평가 (정규화 고려한 다양한 메트릭)
+        
+        Args:
+            X_test: 테스트 입력 데이터
+            y_test: 테스트 타겟 데이터 (정규화된 상태)
+            
+        Returns:
+            평가 메트릭 딕셔너리
+        """
         predictions = self.predict(X_test)
         
-        # 전체 평가
-        mse = mean_squared_error(y_test.reshape(-1), predictions.reshape(-1))
-        mae = mean_absolute_error(y_test.reshape(-1), predictions.reshape(-1))
+        # 1. 정규화된 상태에서의 기본 메트릭 (0-1 스케일)
+        normalized_mse = mean_squared_error(y_test.reshape(-1), predictions.reshape(-1))
+        normalized_mae = mean_absolute_error(y_test.reshape(-1), predictions.reshape(-1))
         
-        # 타겟별 평가
+        # 2. MAPE (Mean Absolute Percentage Error) - 스케일 무관
+        epsilon = 1e-8  # 0으로 나누기 방지
+        mape = np.mean(np.abs((y_test - predictions) / (y_test + epsilon))) * 100
+        
+        # 3. 방향성 정확도 (상승/하락 예측 정확도)
+        # 시계열의 연속적인 값 간 변화 방향 예측
+        pred_direction = np.sign(np.diff(predictions, axis=1))
+        true_direction = np.sign(np.diff(y_test, axis=1))
+        direction_accuracy = np.mean(pred_direction == true_direction) * 100
+        
+        # 4. 타겟별 상세 평가
         target_names = ['Close', 'BB_Upper', 'BB_Lower']
-        metrics = {'Overall_MSE': mse, 'Overall_MAE': mae}
+        metrics = {
+            'Normalized_Overall_MSE': normalized_mse,
+            'Normalized_Overall_MAE': normalized_mae,
+            'Overall_MAPE': mape,
+            'Direction_Accuracy': direction_accuracy
+        }
         
         for i, target_name in enumerate(target_names):
-            target_true = y_test[:, :, i].reshape(-1)
-            target_pred = predictions[:, :, i].reshape(-1)
+            target_true = y_test[:, :, i]
+            target_pred = predictions[:, :, i]
             
-            target_mse = mean_squared_error(target_true, target_pred)
-            target_mae = mean_absolute_error(target_true, target_pred)
+            # 정규화된 상태 메트릭
+            target_mse = mean_squared_error(target_true.reshape(-1), target_pred.reshape(-1))
+            target_mae = mean_absolute_error(target_true.reshape(-1), target_pred.reshape(-1))
             
-            metrics[f'{target_name}_MSE'] = target_mse
-            metrics[f'{target_name}_MAE'] = target_mae
+            # MAPE (타겟별)
+            target_mape = np.mean(np.abs((target_true - target_pred) / (target_true + epsilon))) * 100
+            
+            # 방향성 정확도 (타겟별)
+            pred_dir = np.sign(np.diff(target_pred, axis=1))
+            true_dir = np.sign(np.diff(target_true, axis=1))
+            target_direction_acc = np.mean(pred_dir == true_dir) * 100
+            
+            # R² Score (결정계수)
+            ss_res = np.sum((target_true - target_pred) ** 2)
+            ss_tot = np.sum((target_true - np.mean(target_true)) ** 2)
+            r2_score = 1 - (ss_res / (ss_tot + epsilon))
+            
+            metrics.update({
+                f'Normalized_{target_name}_MSE': target_mse,
+                f'Normalized_{target_name}_MAE': target_mae,
+                f'{target_name}_MAPE': target_mape,
+                f'{target_name}_Direction_Accuracy': target_direction_acc,
+                f'{target_name}_R2_Score': r2_score
+            })
         
         return metrics
     

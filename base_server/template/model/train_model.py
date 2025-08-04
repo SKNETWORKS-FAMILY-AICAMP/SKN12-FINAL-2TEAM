@@ -133,8 +133,8 @@ class ModelTrainer:
                 # 전처리
                 processed_df = self.preprocessor.preprocess_data(df)
                 
-                # 시퀀스 생성
-                X, y = self.preprocessor.create_sequences(processed_df)
+                # 시퀀스 생성 (종목별 개별 정규화)
+                X, y = self.preprocessor.create_sequences(processed_df, symbol)
                 
                 if len(X) > 0:
                     all_X.append(X)
@@ -154,13 +154,15 @@ class ModelTrainer:
         
         self.logger.info(f"Combined sequences - X: {X_combined.shape}, y: {y_combined.shape}")
         
-        # 전처리된 데이터 저장
+        # 전처리된 데이터 저장 (종목별 스케일러 포함)
         processed_data_file = os.path.join(self.data_dir, "processed_sequences.pkl")
         with open(processed_data_file, 'wb') as f:
             pickle.dump({
                 'X': X_combined,
                 'y': y_combined,
-                'scaler': self.preprocessor.scaler
+                'scaler': self.preprocessor.scaler,  # 기존 호환성
+                'symbol_scalers': self.preprocessor.symbol_scalers,  # 종목별 피처 스케일러
+                'target_scalers': self.preprocessor.target_scalers   # 종목별 타겟 스케일러
             }, f)
         
         return X_combined, y_combined
