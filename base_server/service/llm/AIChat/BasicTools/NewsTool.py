@@ -67,7 +67,9 @@ class NewsTool(BaseFinanceTool):
                 "title": a.get("title", "제목 없음"),
                 "url": a.get("url", ""),
                 "source": a.get("source", {}).get("name", "알 수 없음"),
-                "date": a.get("publishedAt", "")[:10]
+                "date": a.get("publishedAt", "")[:10],
+                "sentiment": "positive" if any(keyword in a.get("title", "").lower() for keyword in ["상승", "호재", "증가", "강세"]) else \
+                             "negative" if any(keyword in a.get("title", "").lower() for keyword in ["하락", "악재", "감소", "약세"]) else "neutral"
             }
             for a in articles
         ]

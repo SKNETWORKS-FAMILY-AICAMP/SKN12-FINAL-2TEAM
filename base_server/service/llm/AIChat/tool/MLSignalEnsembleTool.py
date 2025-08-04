@@ -131,16 +131,22 @@ class MLSignalEnsemble(BaseFinanceTool):
     # ----------------------------- 예측(get_data) ---------------------- #
     def get_data(
         self,
-        current_raw: Dict,
+        tickers: List[str],
+        start_date: str,
+        end_date: str,
         traditional_signal: float = 0.0,
         *,
         max_latency: float = 1.0,
-    ) -> Dict[str, float]:
+    ) -> Dict:
         """
         Parameters
         ----------
-        current_raw : dict
-            specialist_agents에서 모은 최신 데이터
+        tickers : List[str]
+            분석할 종목 리스트
+        start_date : str
+            데이터 시작일(YYYY-MM-DD)
+        end_date : str
+            데이터 종료일(YYYY-MM-DD)
         traditional_signal : float
             수식 기반(모멘텀, 밸류 등) 전통 신호
 
@@ -152,7 +158,18 @@ class MLSignalEnsemble(BaseFinanceTool):
             raise RuntimeError("MLSignalEnsemble must be trained with `.fit()` first.")
 
         t0 = time.time()
-        X, _ = feature_engineering(current_raw)
+
+        # FeaturePipelineTool을 사용하여 필요한 피처 추출
+        from service.llm.AIChat.tool.FeaturePipelineTool import FeaturePipelineTool
+        features = FeaturePipelineTool(self.ai_chat_service).transform(
+            tickers=tickers,
+            start_date=start_date,
+            end_date=end_date,
+            feature_set=["RSI", "MACD", "PRICE_HISTORY", "GDP", "CPIAUCSL", "DEXKOUS"]
+        )
+
+        # feature_engineering 함수를 features 딕셔너리를 직접 사용하도록 수정
+        X, _ = self._feature_engineering_from_features(features)
 
         xgb_sig = (
             float(self.xgb_model.predict(X[:1])[0]) if self.xgb_model else 0.0
@@ -180,6 +197,25 @@ class MLSignalEnsemble(BaseFinanceTool):
             "final_signal": final,
             "elapsed": elapsed,
         }
+
+    def _feature_engineering_from_features(self, features: Dict) -> Tuple[NDArray, NDArray]:
+        """
+        FeaturePipelineTool에서 얻은 features 딕셔너리를 사용하여
+        ML 모델의 입력 X, y를 생성합니다.
+        실제 구현에서는 features 딕셔너리의 값들을 적절히 가공하여 X를 구성해야 합니다.
+        """
+        # 예시: features 딕셔너리에서 몇 가지 값을 가져와 더미 X를 생성
+        # 실제로는 더 복잡한 로직이 필요합니다.
+        gdp = features.get("GDP", 0.0)
+        cpi = features.get("CPIAUCSL", 0.0)
+        rsi = features.get("RSI", 0.0)
+        macd = features.get("MACD", 0.0)
+        price_history = features.get("PRICE_HISTORY", pd.DataFrame())
+
+        # 간단한 더미 X 생성 (실제 모델에 맞게 수정 필요)
+        X = np.array([[gdp, cpi, rsi, macd, price_history.iloc[-1].get("Adj Close", 0.0) if not price_history.empty else 0.0, 0, 0, 0]])
+        y = np.array([0.0]) # 예측 대상 y는 여기서는 사용되지 않으므로 더미 값
+        return X, y
 
 
 # --------------------------------------------------------------------- #

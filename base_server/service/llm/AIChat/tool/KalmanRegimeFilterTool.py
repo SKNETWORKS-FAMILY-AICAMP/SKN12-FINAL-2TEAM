@@ -117,7 +117,8 @@ class KalmanRegimeFilterTool(BaseFinanceTool):
             tickers=inp.tickers,
             start_date=inp.start_date,
             end_date=inp.end_date,
-            feature_set=["GDP", "CPIAUCSL", "DEXKOUS", "RSI", "MACD", "VIX", "PRICE"]
+            feature_set=["GDP", "CPIAUCSL", "DEXKOUS", "RSI", "MACD", "VIX", "PRICE"],
+            normalize=True # 칼만 필터는 무조건 켜야 함
         )
 
         gdp = features.get("GDP", 0.0)

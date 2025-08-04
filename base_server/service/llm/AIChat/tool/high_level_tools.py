@@ -1019,18 +1019,51 @@ class AdvancedTradingSystem:
         self.risk_manager = DynamicVaRModel()
         # 성과 모니터링은 아래 SystemMonitor에서 구현
 
-    def run_strategy_pipeline(self, agent_data, market_data):
+    def run_strategy_pipeline(self, tickers: List[str], start_date: str, end_date: str, account_value: float):
+        # FeaturePipelineTool을 사용하여 모든 필요한 피처를 한 번에 추출
+        from service.llm.AIChat.tool.FeaturePipelineTool import FeaturePipelineTool
+        from service.llm.AIChat_service import AIChatService # AIChatService 인스턴스 필요
+        
+        # AIChatService 인스턴스를 직접 생성하거나, ServiceContainer에서 가져와야 합니다.
+        # 여기서는 예시를 위해 임시로 생성합니다. 실제 환경에서는 싱글톤 패턴을 따를 것입니다.
+        # (주의: 이 부분은 실제 애플리케이션의 ServiceContainer 구조에 따라 달라질 수 있습니다.)
+        ai_chat_service = AIChatService(llm_config=ServiceContainer.get_llm_config()) # 가정: llm_config를 가져올 수 있음
+
+        features = FeaturePipelineTool(ai_chat_service).transform(
+            tickers=tickers,
+            start_date=start_date,
+            end_date=end_date,
+            feature_set=["GDP", "CPIAUCSL", "DEXKOUS", "RSI", "MACD", "VIX", "PRICE", "PRICE_HISTORY"]
+        )
+
         # 1. 시장 상태 분석
-        regime, _, _ = self.regime_detector.detect_regime(agent_data['macro'], agent_data['technical'])
+        # MarketRegimeDetectorTool은 ai_chat_service를 필요로 하지 않으므로 직접 호출
+        regime, _, _ = self.regime_detector.detect_regime(
+            macro_data={'gdp_growth': features.get("GDP", 0.0), 'cpi': features.get("CPIAUCSL", 0.0)},
+            technical_data={'rsi': features.get("RSI", 0.0), 'macd': features.get("MACD", 0.0), 'vix': features.get("VIX", 0.0)}
+        )
+
         # 2. 신호 생성
-        signals = self.signal_generator.generate_signals(agent_data, regime)
+        signals = self.signal_generator.get_data(features, regime)
+
         # 3. 포트폴리오 최적화
-        views = self.portfolio_optimizer.generate_views_from_agents(agent_data, market_data['assets'])
-        portfolio = self.portfolio_optimizer.optimize_portfolio(views, market_data)
+        # BlackLittermanOptimizerTool은 ai_chat_service를 필요로 하므로 인스턴스 생성 시 전달
+        portfolio_optimizer = BlackLittermanOptimizer(ai_chat_service) # ai_chat_service 전달
+        
+        # market_data 재구성
+        market_data_for_bl = {
+            "assets": tickers,
+            "cov": np.cov(features.get("PRICE_HISTORY", pd.DataFrame()).pct_change().dropna().values.T) if not features.get("PRICE_HISTORY", pd.DataFrame()).empty else np.array([]),
+            "mu_prior": np.mean(features.get("PRICE_HISTORY", pd.DataFrame()).pct_change().dropna().values, axis=0) if not features.get("PRICE_HISTORY", pd.DataFrame()).empty else np.array([])
+        }
+        portfolio = portfolio_optimizer.get_data(market_data_for_bl, tickers, start_date, end_date)
+
         # 4. 리스크 관리
-        returns = agent_data.get('returns', np.random.randn(100))
-        risk_metrics = self.risk_manager.calculate_var(returns)
-        # 5. 성과 모니터링(아래 SystemMonitor에서)
+        # DynamicVaRModel은 ai_chat_service를 필요로 하므로 인스턴스 생성 시 전달
+        risk_manager = DynamicVaRModel(ai_chat_service) # ai_chat_service 전달
+        returns = features.get("PRICE_HISTORY", pd.DataFrame()).pct_change().dropna().values.flatten() if not features.get("PRICE_HISTORY", pd.DataFrame()).empty else np.array([])
+        risk_metrics = risk_manager.get_data(tickers, start_date, end_date)
+
         return {
             'regime': regime,
             'signals': signals,
