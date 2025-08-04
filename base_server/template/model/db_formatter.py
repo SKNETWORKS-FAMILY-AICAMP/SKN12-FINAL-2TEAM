@@ -53,9 +53,6 @@ class DatabaseFormatter:
                 'current_rsi': pred.current_rsi,
                 
                 # 신호 정보
-                'buy_signal': pred.buy_signal,
-                'sell_signal': pred.sell_signal,
-                'signal_strength': pred.signal_strength,
                 'trend_direction': pred.trend_direction,
                 'volatility_level': pred.volatility_level,
                 
@@ -124,16 +121,7 @@ class DatabaseFormatter:
                 },
                 'rsi': pred.current_rsi
             }
-            
-            # 트레이딩 신호를 별도 객체로 구조화
-            doc['trading_signals'] = {
-                'buy_signal': pred.buy_signal,
-                'sell_signal': pred.sell_signal,
-                'signal_strength': pred.signal_strength,
-                'trend_direction': pred.trend_direction,
-                'volatility_level': pred.volatility_level
-            }
-            
+
             documents.append(doc)
         
         return documents
@@ -186,31 +174,13 @@ class DatabaseFormatter:
                     'bollinger_lower': pred.predicted_bb_lower,
                     'dates': pred.predicted_dates
                 },
-                
-                # 트레이딩 신호
-                'signals': {
-                    'buy': pred.buy_signal,
-                    'sell': pred.sell_signal,
-                    'strength': pred.signal_strength,
-                    'trend': pred.trend_direction,
-                    'volatility': pred.volatility_level
-                },
-                
+
                 # 모델 정보
                 'model_info': {
                     'version': pred.model_version,
                     'confidence': pred.confidence_score,
                     'data_quality': pred.data_quality_score
                 },
-                
-                # 검색용 키워드
-                'tags': [
-                    pred.symbol,
-                    pred.trend_direction,
-                    pred.volatility_level,
-                    'buy' if pred.buy_signal else '',
-                    'sell' if pred.sell_signal else ''
-                ]
             }
             
             documents.append(doc)
@@ -245,11 +215,6 @@ class DatabaseFormatter:
                 'current_bb_middle': pred.current_bb_middle,
                 'current_bb_lower': pred.current_bb_lower,
                 'current_rsi': pred.current_rsi,
-                'buy_signal': pred.buy_signal,
-                'sell_signal': pred.sell_signal,
-                'signal_strength': pred.signal_strength,
-                'trend_direction': pred.trend_direction,
-                'volatility_level': pred.volatility_level,
                 'confidence_score': pred.confidence_score,
                 'model_version': pred.model_version,
                 'data_quality_score': pred.data_quality_score
@@ -335,6 +300,47 @@ class DatabaseFormatter:
         except Exception as e:
             self.logger.error(f"Error saving to SQLite: {str(e)}")
     
+    def save_to_mysql(self, predictions: List[PredictionOutput], 
+                     connection_string: str, 
+                     table_name: str = 'stock_predictions'):
+        """
+        MySQL 데이터베이스에 저장
+        
+        Args:
+            predictions: 예측 결과 리스트
+            connection_string: MySQL 연결 문자열 (예: mysql+pymysql://user:pass@host:port/db)
+            table_name: 테이블 명
+        """
+        try:
+            # MySQL용 포맷 변환
+            formatted_records = self.format_for_mysql(predictions)
+            
+            if not formatted_records:
+                self.logger.warning("No data to save to MySQL")
+                return
+            
+            # SQLAlchemy를 사용한 MySQL 연결 및 저장
+            engine = create_engine(connection_string)
+            
+            # DataFrame으로 변환하여 bulk insert
+            df = pd.DataFrame(formatted_records)
+            
+            # JSON 문자열을 다시 딕셔너리로 변환 (pandas가 JSON을 처리하도록)
+            json_columns = ['predicted_prices', 'predicted_bb_upper', 'predicted_bb_lower', 'predicted_dates']
+            for col in json_columns:
+                if col in df.columns:
+                    df[col] = df[col].apply(lambda x: json.loads(x) if isinstance(x, str) else x)
+            
+            # MySQL에 저장 (replace: 중복 시 업데이트)
+            df.to_sql(table_name, engine, if_exists='append', index=False, method='multi')
+            
+            self.logger.info(f"Data saved to MySQL: {len(formatted_records)} records, table: {table_name}")
+            
+        except SQLAlchemyError as e:
+            self.logger.error(f"SQLAlchemy error saving to MySQL: {str(e)}")
+        except Exception as e:
+            self.logger.error(f"Error saving to MySQL: {str(e)}")
+    
     def generate_sql_insert_statements(self, predictions: List[PredictionOutput], table_name: str = 'stock_predictions') -> List[str]:
         """
         SQL INSERT 문 생성
@@ -401,11 +407,6 @@ class DatabaseFormatter:
                 current_bb_middle DECIMAL(10,4),
                 current_bb_lower DECIMAL(10,4),
                 current_rsi DECIMAL(5,2),
-                buy_signal BOOLEAN NOT NULL,
-                sell_signal BOOLEAN NOT NULL,
-                signal_strength DECIMAL(5,4),
-                trend_direction VARCHAR(20),
-                volatility_level VARCHAR(20),
                 confidence_score DECIMAL(5,4),
                 model_version VARCHAR(20),
                 data_quality_score DECIMAL(5,4),
@@ -416,7 +417,6 @@ class DatabaseFormatter:
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 INDEX idx_symbol_date (symbol, current_date),
-                INDEX idx_signals (buy_signal, sell_signal),
                 INDEX idx_timestamp (prediction_timestamp)
             );
             """
@@ -437,11 +437,6 @@ class DatabaseFormatter:
                 current_bb_middle DECIMAL(10,4),
                 current_bb_lower DECIMAL(10,4),
                 current_rsi DECIMAL(5,2),
-                buy_signal BOOLEAN NOT NULL,
-                sell_signal BOOLEAN NOT NULL,
-                signal_strength DECIMAL(5,4),
-                trend_direction VARCHAR(20),
-                volatility_level VARCHAR(20),
                 confidence_score DECIMAL(5,4),
                 model_version VARCHAR(20),
                 data_quality_score DECIMAL(5,4),
@@ -454,7 +449,6 @@ class DatabaseFormatter:
             );
             
             CREATE INDEX IF NOT EXISTS idx_symbol_date ON stock_predictions (symbol, current_date);
-            CREATE INDEX IF NOT EXISTS idx_signals ON stock_predictions (buy_signal, sell_signal);
             CREATE INDEX IF NOT EXISTS idx_timestamp ON stock_predictions (prediction_timestamp);
             """
         
@@ -474,11 +468,6 @@ class DatabaseFormatter:
                 current_bb_middle REAL,
                 current_bb_lower REAL,
                 current_rsi REAL,
-                buy_signal INTEGER NOT NULL,
-                sell_signal INTEGER NOT NULL,
-                signal_strength REAL,
-                trend_direction TEXT,
-                volatility_level TEXT,
                 confidence_score REAL,
                 model_version TEXT,
                 data_quality_score REAL,
@@ -491,7 +480,6 @@ class DatabaseFormatter:
             );
             
             CREATE INDEX IF NOT EXISTS idx_symbol_date ON stock_predictions (symbol, current_date);
-            CREATE INDEX IF NOT EXISTS idx_signals ON stock_predictions (buy_signal, sell_signal);
             CREATE INDEX IF NOT EXISTS idx_timestamp ON stock_predictions (prediction_timestamp);
             """
         
@@ -507,6 +495,12 @@ def main():
     parser.add_argument("--input", required=True, help="Input JSON file with predictions")
     parser.add_argument("--output-csv", help="Output CSV file")
     parser.add_argument("--output-sqlite", help="Output SQLite database file")
+    parser.add_argument("--output-mysql", action="store_true", help="Save to MySQL database")
+    parser.add_argument("--mysql-host", default="localhost", help="MySQL host")
+    parser.add_argument("--mysql-port", default="3306", help="MySQL port")
+    parser.add_argument("--mysql-user", default="stockuser", help="MySQL username")
+    parser.add_argument("--mysql-password", default="stockpass", help="MySQL password")
+    parser.add_argument("--mysql-database", default="stock_predictions", help="MySQL database name")
     parser.add_argument("--db-type", default="mysql", choices=["mysql", "postgresql", "sqlite"], 
                        help="Database type for schema generation")
     
@@ -533,6 +527,11 @@ def main():
         # SQLite 저장
         if args.output_sqlite:
             formatter.save_to_sqlite(predictions, args.output_sqlite)
+        
+        # MySQL 저장
+        if args.output_mysql:
+            mysql_connection_string = f"mysql+pymysql://{args.mysql_user}:{args.mysql_password}@{args.mysql_host}:{args.mysql_port}/{args.mysql_database}"
+            formatter.save_to_mysql(predictions, mysql_connection_string)
         
         # 스키마 출력
         print(f"\n{args.db_type.upper()} Table Schema:")

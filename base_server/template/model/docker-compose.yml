@@ -24,6 +24,22 @@ services:
       retries: 3
       start_period: 40s
     
+  # MySQL database for storing predictions
+  mysql:
+    image: mysql:8.0
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpassword
+      - MYSQL_DATABASE=stock_predictions
+      - MYSQL_USER=stockuser
+      - MYSQL_PASSWORD=stockpass
+    restart: unless-stopped
+    command: --default-authentication-plugin=mysql_native_password
+
   # Optional: MongoDB for storing predictions
   mongodb:
     image: mongo:7.0
@@ -47,5 +63,6 @@ services:
     command: redis-server --appendonly yes
 
 volumes:
+  mysql_data:
   mongodb_data:
   redis_data:

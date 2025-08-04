@@ -19,6 +19,7 @@ from concurrent.futures import ThreadPoolExecutor
 from data_collector import StockDataCollector
 from data_preprocessor import StockDataPreprocessor
 from pytorch_lstm_model import PyTorchStockLSTM
+from config import get_model_paths
 
 @dataclass
 class PredictionOutput:
@@ -45,8 +46,6 @@ class PredictionOutput:
     predicted_dates: List[str]  # 예측 날짜들
     
     # 신호 및 분석
-    buy_signal: bool
-    sell_signal: bool
     signal_strength: float  # 0-1 사이의 신호 강도
     trend_direction: str  # "up", "down", "sideways"
     volatility_level: str  # "low", "medium", "high"
@@ -58,17 +57,23 @@ class PredictionOutput:
 
 class InferencePipeline:
     def __init__(self, 
-                 model_path: str = "models/final_model.pth",
-                 preprocessor_path: str = "models/preprocessor.pkl"):
+                 model_path: str = None,
+                 preprocessor_path: str = None):
         """
         추론 파이프라인 초기화
         
         Args:
-            model_path: 학습된 모델 경로
-            preprocessor_path: 전처리기 경로
+            model_path: 학습된 모델 경로 (None시 환경에 따라 자동 설정)
+            preprocessor_path: 전처리기 경로 (None시 환경에 따라 자동 설정)
         """
-        self.model_path = model_path
-        self.preprocessor_path = preprocessor_path
+        # 경로 자동 설정 (RunPod 환경 고려)
+        if model_path is None or preprocessor_path is None:
+            auto_model_path, auto_preprocessor_path = get_model_paths()
+            self.model_path = model_path or auto_model_path
+            self.preprocessor_path = preprocessor_path or auto_preprocessor_path
+        else:
+            self.model_path = model_path
+            self.preprocessor_path = preprocessor_path
         self.logger = logging.getLogger(__name__)
         
         # 컴포넌트 초기화
@@ -167,54 +172,6 @@ class InferencePipeline:
         
         return max(0.0, min(1.0, quality_score))
     
-    def analyze_signals(self, current_data: pd.DataFrame, predictions: np.ndarray) -> Tuple[bool, bool, float, str]:
-        """
-        매수/매도 신호 분석
-        
-        Args:
-            current_data: 현재까지의 데이터
-            predictions: 모델 예측 결과
-            
-        Returns:
-            (buy_signal, sell_signal, signal_strength, trend_direction)
-        """
-        current_price = current_data['Close'].iloc[-1]
-        current_bb_upper = current_data['BB_Upper'].iloc[-1] if 'BB_Upper' in current_data.columns else None
-        current_bb_lower = current_data['BB_Lower'].iloc[-1] if 'BB_Lower' in current_data.columns else None
-        
-        # 예측된 가격과 볼린저 밴드
-        predicted_prices = predictions[0, :, 0]  # 5일간 종가 예측
-        predicted_bb_upper = predictions[0, :, 1]  # 5일간 상한 예측
-        predicted_bb_lower = predictions[0, :, 2]  # 5일간 하한 예측
-        
-        buy_signal = False
-        sell_signal = False
-        signal_strength = 0.0
-        
-        # 현재 가격과 볼린저 밴드 비교
-        if current_bb_upper is not None and current_bb_lower is not None:
-            bb_position = (current_price - current_bb_lower) / (current_bb_upper - current_bb_lower)
-            
-            # 매수 신호: 현재 가격이 하한에 가깝고, 향후 상승 예상
-            if bb_position < 0.2 and predicted_prices[0] > current_price:
-                buy_signal = True
-                signal_strength = min(1.0, (0.2 - bb_position) * 5 + (predicted_prices[0] - current_price) / current_price)
-            
-            # 매도 신호: 현재 가격이 상한에 가깝고, 향후 하락 예상
-            elif bb_position > 0.8 and predicted_prices[0] < current_price:
-                sell_signal = True
-                signal_strength = min(1.0, (bb_position - 0.8) * 5 + (current_price - predicted_prices[0]) / current_price)
-        
-        # 추세 방향 분석
-        price_trend = np.mean(predicted_prices) - current_price
-        if price_trend > current_price * 0.02:  # 2% 이상 상승
-            trend_direction = "up"
-        elif price_trend < -current_price * 0.02:  # 2% 이상 하락
-            trend_direction = "down"
-        else:
-            trend_direction = "sideways"
-        
-        return buy_signal, sell_signal, signal_strength, trend_direction
     
     def calculate_volatility_level(self, data: pd.DataFrame) -> str:
         """
@@ -279,8 +236,7 @@ class InferencePipeline:
             # 5. 모델 추론
             predictions = self.model.predict(input_sequence)
             
-            # 6. 신호 분석
-            buy_signal, sell_signal, signal_strength, trend_direction = self.analyze_signals(processed_data, predictions)
+         
             
             # 7. 변동성 수준 계산
             volatility_level = self.calculate_volatility_level(processed_data)
@@ -318,21 +274,12 @@ class InferencePipeline:
                 predicted_bb_lower=predictions[0, :, 2].tolist(),
                 predicted_dates=predicted_dates,
                 
-                # 신호 및 분석
-                buy_signal=buy_signal,
-                sell_signal=sell_signal,
-                signal_strength=float(signal_strength),
-                trend_direction=trend_direction,
-                volatility_level=volatility_level,
-                
                 # 메타데이터
                 confidence_score=float(confidence_score),
                 model_version=self.model_version,
                 data_quality_score=float(data_quality_score)
             )
             
-            self.logger.info(f"Inference completed for {symbol} - Buy: {buy_signal}, Sell: {sell_signal}")
-            return result
             
         except Exception as e:
             self.logger.error(f"Error during inference for {symbol}: {str(e)}")
@@ -410,7 +357,6 @@ def main():
         if result:
             pipeline.save_results_to_json([result], args.output)
             print(f"Prediction completed for {args.symbols[0]}")
-            print(f"Buy Signal: {result.buy_signal}, Sell Signal: {result.sell_signal}")
         else:
             print(f"Failed to generate prediction for {args.symbols[0]}")
     else:
@@ -421,9 +367,7 @@ def main():
             print(f"Batch prediction completed: {len(results)}/{len(args.symbols)} successful")
             
             # 신호 요약
-            buy_signals = sum(1 for r in results if r.buy_signal)
-            sell_signals = sum(1 for r in results if r.sell_signal)
-            print(f"Buy signals: {buy_signals}, Sell signals: {sell_signals}")
+
         else:
             print("No successful predictions")
 

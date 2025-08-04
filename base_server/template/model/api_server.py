@@ -22,6 +22,7 @@ from contextlib import asynccontextmanager
 from data_collector import StockDataCollector
 from data_preprocessor import StockDataPreprocessor
 from pytorch_lstm_model import PyTorchStockLSTM
+from config import get_model_paths
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -103,8 +104,9 @@ async def load_model_and_preprocessor():
     try:
         logger.info("Loading model and preprocessor...")
         
-        # 🚀 PyTorch 모델 로드
-        model_path = "models/final_model.pth"
+        # 🚀 PyTorch 모델 로드 (환경별 경로 자동 감지)
+        model_path, preprocessor_path = get_model_paths()
+        
         if os.path.exists(model_path):
             # PyTorch 모델 초기화 후 로드
             model = PyTorchStockLSTM(
@@ -114,13 +116,12 @@ async def load_model_and_preprocessor():
                 num_targets=3
             )
             model.load_model(model_path, hidden_size=512)  # 🔥 RTX 4090 최적화
-            logger.info("🚀 PyTorch model loaded successfully")
+            logger.info(f"🚀 PyTorch model loaded from: {model_path}")
         else:
             logger.warning(f"Model file not found: {model_path}")
             model = None
         
         # 전처리기 로드
-        preprocessor_path = "models/preprocessor.pkl"
         if os.path.exists(preprocessor_path):
             with open(preprocessor_path, 'rb') as f:
                 preprocessor = pickle.load(f)

@@ -19,26 +19,34 @@ warnings.filterwarnings('ignore')
 from data_collector import StockDataCollector
 from data_preprocessor import StockDataPreprocessor
 from pytorch_lstm_model import PyTorchStockLSTM
+from config import get_model_save_dir, get_workspace_path, is_runpod_environment
 
 class ModelTrainer:
     def __init__(self, 
-                 data_dir: str = "data",
-                 model_dir: str = "models",
-                 log_dir: str = "logs"):
+                 data_dir: str = None,
+                 model_dir: str = None,
+                 log_dir: str = None):
         """
         모델 학습기 초기화
         
         Args:
-            data_dir: 데이터 저장 디렉토리
-            model_dir: 모델 저장 디렉토리
-            log_dir: 로그 저장 디렉토리
+            data_dir: 데이터 저장 디렉토리 (None시 환경에 따라 자동 설정)
+            model_dir: 모델 저장 디렉토리 (None시 환경에 따라 자동 설정)
+            log_dir: 로그 저장 디렉토리 (None시 환경에 따라 자동 설정)
         """
-        self.data_dir = data_dir
-        self.model_dir = model_dir
-        self.log_dir = log_dir
+        # RunPod 환경 고려한 기본 경로 설정
+        if is_runpod_environment():
+            workspace = get_workspace_path()
+            self.data_dir = data_dir or f"{workspace}/data"
+            self.model_dir = model_dir or f"{workspace}/models"
+            self.log_dir = log_dir or f"{workspace}/logs"
+        else:
+            self.data_dir = data_dir or "data"
+            self.model_dir = model_dir or "models"
+            self.log_dir = log_dir or "logs"
         
         # 디렉토리 생성
-        for directory in [data_dir, model_dir, log_dir]:
+        for directory in [self.data_dir, self.model_dir, self.log_dir]:
             os.makedirs(directory, exist_ok=True)
         
         # 로깅 설정
@@ -343,9 +351,9 @@ class ModelTrainer:
 
 def main():
     parser = argparse.ArgumentParser(description="Stock LSTM Model Training")
-    parser.add_argument("--data-dir", default="data", help="Data directory")
-    parser.add_argument("--model-dir", default="models", help="Model save directory")
-    parser.add_argument("--log-dir", default="logs", help="Log directory")
+    parser.add_argument("--data-dir", default=None, help="Data directory (auto-detect if not specified)")
+    parser.add_argument("--model-dir", default=None, help="Model save directory (auto-detect if not specified)")
+    parser.add_argument("--log-dir", default=None, help="Log directory (auto-detect if not specified)")
     parser.add_argument("--force-reload", action="store_true", help="Force reload data")
     parser.add_argument("--model-type", default="lstm_attention", 
                        choices=["lstm", "lstm_attention", "lstm_ensemble"],

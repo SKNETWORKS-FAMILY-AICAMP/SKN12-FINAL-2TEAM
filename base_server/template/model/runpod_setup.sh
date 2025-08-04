@@ -47,9 +47,13 @@ print('GPU available:', tf.config.list_physical_devices('GPU'))
 print('CUDA available:', tf.test.is_built_with_cuda())
 "
 
-# 디렉토리 구조 생성
-echo "📁 Creating directory structure..."
-mkdir -p data models logs outputs temp
+# 작업 디렉토리를 /workspace로 이동
+echo "📁 Setting up workspace directory..."
+cd /workspace
+
+# 디렉토리 구조 생성 (/workspace 하위에)
+echo "📁 Creating directory structure in /workspace..."
+mkdir -p /workspace/data /workspace/models /workspace/logs /workspace/outputs /workspace/temp
 
 # 권한 설정
 echo "🔐 Setting permissions..."
@@ -94,7 +98,10 @@ echo "📝 Creating RunPod execution scripts..."
 cat > train_model_runpod.sh << 'EOF'
 #!/bin/bash
 echo "🔥 Starting model training on RunPod..."
-tmux new-session -d -s training 'python train_model.py --epochs 50 --batch-size 64 --model-type lstm_attention'
+cd /workspace
+echo "📁 Current directory: $(pwd)"
+echo "📊 Models will be saved to: /workspace/models/"
+tmux new-session -d -s training 'cd /workspace && python train_model.py --epochs 50 --batch-size 64 --model-type lstm_attention'
 echo "✅ Training started in tmux session 'training'"
 echo "Use 'tmux attach -t training' to monitor progress"
 EOF
@@ -103,7 +110,10 @@ EOF
 cat > start_api_runpod.sh << 'EOF'
 #!/bin/bash
 echo "🌐 Starting API server on RunPod..."
-tmux new-session -d -s api 'python api_server.py'
+cd /workspace
+echo "📁 Current directory: $(pwd)"
+echo "📊 Loading models from: /workspace/models/"
+tmux new-session -d -s api 'cd /workspace && python api_server.py'
 echo "✅ API server started in tmux session 'api'"
 echo "Server is running on http://0.0.0.0:8000"
 echo "Use 'tmux attach -t api' to monitor server"
@@ -113,8 +123,11 @@ EOF
 cat > batch_inference_runpod.sh << 'EOF'
 #!/bin/bash
 echo "🔮 Starting batch inference on RunPod..."
+cd /workspace
+echo "📁 Current directory: $(pwd)"
+echo "📊 Loading models from: /workspace/models/"
 SYMBOLS="AAPL MSFT GOOGL AMZN NVDA TSLA META NFLX AMD INTC"
-tmux new-session -d -s inference "python inference_pipeline.py --symbols $SYMBOLS --batch-size 5 --output batch_predictions.json"
+tmux new-session -d -s inference "cd /workspace && python inference_pipeline.py --symbols $SYMBOLS --batch-size 5 --output /workspace/outputs/batch_predictions.json"
 echo "✅ Batch inference started in tmux session 'inference'"
 echo "Use 'tmux attach -t inference' to monitor progress"
 EOF
@@ -167,9 +180,14 @@ chmod +x monitor_system.sh
 echo ""
 echo "🎉 RunPod setup completed successfully!"
 echo ""
+echo "📁 Working directory: /workspace (persistent storage)"
+echo "📊 Models will be saved to: /workspace/models/ (persistent)"
+echo "📈 Data will be stored in: /workspace/data/ (persistent)"
+echo "📋 Logs will be saved to: /workspace/logs/ (persistent)"
+echo ""
 echo "Available commands:"
-echo "  🔥 ./train_model_runpod.sh     - Start model training"
-echo "  🌐 ./start_api_runpod.sh       - Start API server"
+echo "  🔥 ./train_model_runpod.sh     - Start model training (saves to /workspace/models/)"
+echo "  🌐 ./start_api_runpod.sh       - Start API server (loads from /workspace/models/)"
 echo "  🔮 ./batch_inference_runpod.sh - Run batch inference"
 echo "  🖥️ ./monitor_system.sh         - Monitor system resources"
 echo ""
