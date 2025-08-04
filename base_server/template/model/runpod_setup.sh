@@ -27,25 +27,71 @@ apt-get install -y \
 # Python 환경 확인 및 설정
 echo "🐍 Checking Python environment..."
 
-# python3가 있는지 확인하고 python 심볼릭 링크 생성
-if command -v python3 &> /dev/null; then
-    echo "✅ python3 found, creating python symlink..."
-    ln -sf $(which python3) /usr/local/bin/python
-    echo "✅ python symlink created"
+# 사용 가능한 Python 버전 확인
+echo "🔍 Available Python versions:"
+ls -la /usr/bin/python* 2>/dev/null || echo "No python in /usr/bin/"
+which python3.11 2>/dev/null && echo "✅ python3.11 found: $(which python3.11)"
+which python3 2>/dev/null && echo "✅ python3 found: $(which python3)"
+which python 2>/dev/null && echo "✅ python found: $(which python)"
+
+# Python 실행 가능한 명령어 찾기 (우선순위: python3.11 > python3 > python)
+PYTHON_CMD=""
+if command -v python3.11 &> /dev/null; then
+    PYTHON_CMD="python3.11"
+    echo "✅ Using python3.11"
+elif command -v python3 &> /dev/null; then
+    PYTHON_CMD="python3"
+    echo "✅ Using python3"
+elif command -v python &> /dev/null; then
+    PYTHON_CMD="python"
+    echo "✅ Using python"
 else
-    echo "❌ python3 not found!"
+    echo "❌ No Python found!"
     exit 1
 fi
 
-# pip3가 있는지 확인하고 pip 심볼릭 링크 생성
-if command -v pip3 &> /dev/null; then
-    echo "✅ pip3 found, creating pip symlink..."
-    ln -sf $(which pip3) /usr/local/bin/pip
-    echo "✅ pip symlink created"
+# python 명령어가 없으면 심볼릭 링크 생성 (로컬 bin 디렉토리 사용)
+if ! command -v python &> /dev/null; then
+    echo "🔗 Creating python symlink..."
+    mkdir -p ~/bin
+    ln -sf $(which $PYTHON_CMD) ~/bin/python
+    export PATH="$HOME/bin:$PATH"
+    echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
+    echo "✅ python symlink created in ~/bin/"
 fi
 
-python --version
-python -m pip --version
+# pip 명령어 확인 및 설정
+if command -v pip3 &> /dev/null; then
+    PIP_CMD="pip3"
+    echo "✅ Using pip3"
+elif command -v pip &> /dev/null; then
+    PIP_CMD="pip"
+    echo "✅ Using pip"
+else
+    echo "❌ No pip found!"
+    exit 1
+fi
+
+# pip 명령어가 없으면 심볼릭 링크 생성
+if ! command -v pip &> /dev/null; then
+    echo "🔗 Creating pip symlink..."
+    mkdir -p ~/bin
+    ln -sf $(which $PIP_CMD) ~/bin/pip
+    echo "✅ pip symlink created in ~/bin/"
+fi
+
+# Python 및 pip 버전 확인 (감지된 명령어 사용)
+echo "📋 Python and pip versions:"
+$PYTHON_CMD --version
+$PYTHON_CMD -m pip --version
+
+# python 명령어 최종 확인
+if command -v python &> /dev/null; then
+    echo "✅ 'python' command is now available"
+    python --version
+else
+    echo "⚠️ 'python' command not available, using $PYTHON_CMD"
+fi
 
 # GPU 확인
 echo "🎮 Checking GPU availability..."
@@ -53,12 +99,12 @@ nvidia-smi
 
 # 프로젝트 의존성 설치
 echo "📚 Installing Python dependencies..."
-pip install --upgrade pip setuptools wheel
-pip install -r requirements.txt
+$PYTHON_CMD -m pip install --upgrade pip setuptools wheel
+$PYTHON_CMD -m pip install -r requirements.txt
 
 # CUDA 호환성 확인 및 PyTorch GPU 테스트
 echo "🔍 Testing PyTorch GPU support..."
-python -c "
+$PYTHON_CMD -c "
 try:
     import torch
     print('✅ PyTorch version:', torch.__version__)
@@ -106,7 +152,7 @@ export TF_CPP_MIN_LOG_LEVEL=1
 
 # 데이터 수집 테스트 (옵션)
 echo "📊 Testing data collection (optional)..."
-python -c "
+$PYTHON_CMD -c "
 try:
     from data_collector import StockDataCollector
     collector = StockDataCollector()
@@ -122,40 +168,43 @@ except Exception as e:
 # RunPod용 실행 스크립트 생성
 echo "📝 Creating RunPod execution scripts..."
 
-# 학습 스크립트
-cat > train_model_runpod.sh << 'EOF'
+# 학습 스크립트 (동적 생성)
+cat > train_model_runpod.sh << EOF
 #!/bin/bash
 echo "🔥 Starting model training on RunPod..."
 cd /workspace
-echo "📁 Current directory: $(pwd)"
+echo "📁 Current directory: \$(pwd)"
 echo "📊 Models will be saved to: /workspace/models/"
-tmux new-session -d -s training 'cd /workspace && python train_model.py --epochs 50 --batch-size 64 --model-type lstm_attention'
+echo "🐍 Using Python: $PYTHON_CMD"
+tmux new-session -d -s training 'cd /workspace && $PYTHON_CMD train_model.py --epochs 50 --batch-size 64 --model-type lstm_attention'
 echo "✅ Training started in tmux session 'training'"
 echo "Use 'tmux attach -t training' to monitor progress"
 EOF
 
-# API 서버 실행 스크립트
-cat > start_api_runpod.sh << 'EOF'
+# API 서버 실행 스크립트 (동적 생성)
+cat > start_api_runpod.sh << EOF
 #!/bin/bash
 echo "🌐 Starting API server on RunPod..."
 cd /workspace
-echo "📁 Current directory: $(pwd)"
+echo "📁 Current directory: \$(pwd)"
 echo "📊 Loading models from: /workspace/models/"
-tmux new-session -d -s api 'cd /workspace && python api_server.py'
+echo "🐍 Using Python: $PYTHON_CMD"
+tmux new-session -d -s api 'cd /workspace && $PYTHON_CMD api_server.py'
 echo "✅ API server started in tmux session 'api'"
 echo "Server is running on http://0.0.0.0:8000"
 echo "Use 'tmux attach -t api' to monitor server"
 EOF
 
-# 배치 추론 스크립트
-cat > batch_inference_runpod.sh << 'EOF'
+# 배치 추론 스크립트 (동적 생성)
+cat > batch_inference_runpod.sh << EOF
 #!/bin/bash
 echo "🔮 Starting batch inference on RunPod..."
 cd /workspace
-echo "📁 Current directory: $(pwd)"
+echo "📁 Current directory: \$(pwd)"
 echo "📊 Loading models from: /workspace/models/"
+echo "🐍 Using Python: $PYTHON_CMD"
 SYMBOLS="AAPL MSFT GOOGL AMZN NVDA TSLA META NFLX AMD INTC"
-tmux new-session -d -s inference "cd /workspace && python inference_pipeline.py --symbols $SYMBOLS --batch-size 5 --output /workspace/outputs/batch_predictions.json"
+tmux new-session -d -s inference "cd /workspace && $PYTHON_CMD inference_pipeline.py --symbols \$SYMBOLS --batch-size 5 --output /workspace/outputs/batch_predictions.json"
 echo "✅ Batch inference started in tmux session 'inference'"
 echo "Use 'tmux attach -t inference' to monitor progress"
 EOF
@@ -172,7 +221,7 @@ echo "Make sure to expose port 8000 in your RunPod configuration!"
 
 # Jupyter 노트북 설정 (선택사항)
 echo "📓 Setting up Jupyter notebook (optional)..."
-pip install jupyter jupyterlab
+$PYTHON_CMD -m pip install jupyter jupyterlab
 
 # Jupyter 설정
 cat > jupyter_config.py << 'EOF'
