@@ -127,8 +127,9 @@ async def load_model_and_preprocessor():
                 preprocessor = pickle.load(f)
             logger.info("Preprocessor loaded successfully")
         else:
-            logger.warning(f"Preprocessor file not found: {preprocessor_path}")
-            preprocessor = StockDataPreprocessor()
+            logger.error(f"❌ Preprocessor file not found: {preprocessor_path}")
+            logger.error("❌ Please train the model first to generate preprocessor.pkl")
+            preprocessor = None
         
         # 데이터 수집기 초기화
         data_collector = ManualStockDataCollector()

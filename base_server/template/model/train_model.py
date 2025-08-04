@@ -37,9 +37,9 @@ class ModelTrainer:
         # RunPod 환경 고려한 기본 경로 설정
         if is_runpod_environment():
             workspace = get_workspace_path()
-            self.data_dir = data_dir or f"{workspace}/data"
-            self.model_dir = model_dir or f"{workspace}/models"
-            self.log_dir = log_dir or f"{workspace}/logs"
+            self.data_dir = data_dir or f"{workspace}/SKN12-FINAL-2TEAM/base_server/template/model/data"
+            self.model_dir = model_dir or f"{workspace}/SKN12-FINAL-2TEAM/base_server/template/model/models"
+            self.log_dir = log_dir or f"{workspace}/SKN12-FINAL-2TEAM/base_server/template/model/logs"
         else:
             self.data_dir = data_dir or "data"
             self.model_dir = model_dir or "models"
