@@ -185,9 +185,9 @@ def format_prediction_result(symbol: str,
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
     """헬스 체크 엔드포인트"""
-    import tensorflow as tf
+    import torch
     
-    gpu_available = len(tf.config.experimental.list_physical_devices('GPU')) > 0
+    gpu_available = torch.cuda.is_available()
     
     return HealthResponse(
         status="healthy",

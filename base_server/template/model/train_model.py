@@ -72,9 +72,9 @@ class ModelTrainer:
             ]
         )
         
-        # TensorFlow 로그 레벨 설정
-        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-        logging.getLogger('tensorflow').setLevel(logging.WARNING)
+        # PyTorch 사용으로 TensorFlow 로깅 설정 제거
+        # os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+        # logging.getLogger('tensorflow').setLevel(logging.WARNING)
     
     def collect_data(self, force_reload: bool = False) -> dict[str, pd.DataFrame]:
         """
