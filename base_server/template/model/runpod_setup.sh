@@ -129,10 +129,10 @@ cd /workspace
 echo "📁 Creating directory structure in /workspace..."
 mkdir -p /workspace/data /workspace/models /workspace/logs /workspace/outputs /workspace/temp
 
-# 권한 설정
+# 권한 설정 (Python 파일은 실행 권한 불필요)
 echo "🔐 Setting permissions..."
-chmod +x *.py
-chmod +x *.sh
+# chmod +x *.py  # Python 파일은 실행 권한 불필요
+# chmod +x *.sh  # 스크립트 파일들은 생성 후 권한 설정
 
 # 환경 변수 설정
 echo "⚙️ Setting up environment variables..."
@@ -209,7 +209,13 @@ echo "✅ Batch inference started in tmux session 'inference'"
 echo "Use 'tmux attach -t inference' to monitor progress"
 EOF
 
-chmod +x *.sh
+# 생성된 스크립트 파일들에 실행 권한 부여
+if ls *.sh 1> /dev/null 2>&1; then
+    chmod +x *.sh
+    echo "✅ Shell scripts permissions set"
+else
+    echo "⚠️ No shell scripts found to set permissions"
+fi
 
 # RunPod 포트 설정 안내
 echo "🌐 Port Configuration for RunPod:"
