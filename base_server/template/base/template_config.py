@@ -12,6 +12,7 @@ from service.net.fastapi_config import FastApiConfig
 from service.websocket.websocket_config import WebSocketConfig
 from service.email.email_config import EmailConfig
 from service.sms.sms_config import SmsConfig
+from service.rag.rag_config import RagConfig
 
 class TemplateConfig(BaseModel):
     appId: str
@@ -37,3 +38,4 @@ class AppConfig(BaseModel):
     websocketConfig: WebSocketConfig
     emailConfig: EmailConfig
     smsConfig: SmsConfig
+    ragConfig: RagConfig

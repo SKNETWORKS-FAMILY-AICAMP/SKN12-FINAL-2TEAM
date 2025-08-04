@@ -2,6 +2,7 @@ import os
 import json
 from typing import Optional, List, Dict, Any
 from service.llm.AIChat.BaseFinanceTool import BaseFinanceTool
+from service.rag.rag_config import RagConfig
 from pydantic import BaseModel, Field
 
 class RagInput(BaseModel):
@@ -31,27 +32,35 @@ class RagOutput(BaseModel):
 
 class RagTool(BaseFinanceTool):
     
-    def __init__(self, ai_chat_service):
+    def __init__(self, ai_chat_service, rag_config: Optional[RagConfig] = None):
         from service.llm.AIChat_service import AIChatService
         if not isinstance(ai_chat_service, AIChatService):
             raise TypeError("Expected AIChatService instance")
         self.ai_chat_service = ai_chat_service
         
-        # 벡터 DB 초기화 (예: ChromaDB, Faiss, Pinecone 등)
+        # RAG 설정 (매개변수 → 서비스 → 기본값 순서로 우선순위)
+        self.rag_config = rag_config or getattr(ai_chat_service, 'rag_config', None) or RagConfig()
+        
+        # 벡터 DB 초기화
         self._initialize_vector_db()
     
     def _initialize_vector_db(self):
         """벡터 데이터베이스 초기화"""
         try:
-            # 임베딩 모델 설정 (예: OpenAI embeddings, SentenceTransformers 등)
+            if not self.rag_config.enable_vector_db:
+                self.embedding_model = None
+                self.collection = None
+                return
+                
+            # 임베딩 모델 설정
             from sentence_transformers import SentenceTransformer
-            self.embedding_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
+            self.embedding_model = SentenceTransformer(self.rag_config.embedding_model)
             
-            # 벡터 DB 연결 설정 (예시: ChromaDB)
+            # 벡터 DB 연결 설정
             import chromadb
-            self.chroma_client = chromadb.PersistentClient(path="./vector_db")
+            self.chroma_client = chromadb.PersistentClient(path=self.rag_config.vector_db_path)
             self.collection = self.chroma_client.get_or_create_collection(
-                name="financial_news_collection",
+                name=self.rag_config.collection_name,
                 metadata={"hnsw:space": "cosine"}
             )
             
@@ -153,7 +162,7 @@ class RagTool(BaseFinanceTool):
             )
             
             # 벡터 DB 검색 결과가 없으면 대체 검색 수행
-            if not documents:
+            if not documents and self.rag_config.enable_fallback_search:
                 documents = self._fallback_search(input_data.query, input_data.k)
             
             if not documents:
@@ -173,10 +182,11 @@ class RagTool(BaseFinanceTool):
             summary = "\n".join(summary_lines)
             
             # 문서 리스트 정리 (응답에 포함할 핵심 정보만)
+            max_length = self.rag_config.max_content_length
             document_list = [
                 {
                     "title": doc["title"],
-                    "content": doc["content"][:200] + "..." if len(doc["content"]) > 200 else doc["content"],
+                    "content": doc["content"][:max_length] + "..." if len(doc["content"]) > max_length else doc["content"],
                     "similarity": doc["similarity"],
                     "source": doc["source"]
                 }
