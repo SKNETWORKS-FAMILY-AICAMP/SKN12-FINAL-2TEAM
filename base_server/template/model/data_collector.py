@@ -38,9 +38,8 @@ class StockDataCollector:
         self.session = requests.Session()
         self.session.headers.update(self.headers)
         
-        # yfinance 세션 설정 (429 오류 방지)
-        import yfinance as yf
-        yf.pdr_override()  # pandas_datareader override
+        # yfinance 설정 (429 오류 방지)
+        # 추가적인 yfinance 설정은 필요 없음 - curl_cffi가 자동으로 처리
         
         # 요청 간 지연시간 설정 (초) - 429 오류 방지를 위해 증가
         self.request_delay = (2.0, 4.0)  # 2-4초 랜덤 지연 (기존 0.5-1.5초에서 증가)
@@ -87,8 +86,9 @@ class StockDataCollector:
                 else:
                     self._add_request_delay()
                 
-                stock = yf.Ticker(symbol)
-                data = stock.history(period=period)
+                # yfinance 인스턴스 생성 시 session 파라미터 사용
+                stock = yf.Ticker(symbol, session=self.session)
+                data = stock.history(period=period, timeout=30)
                 
                 if data.empty:
                     self.logger.warning(f"No data found for symbol: {symbol}")
@@ -156,8 +156,9 @@ class StockDataCollector:
                 end_date = datetime.now()
                 start_date = end_date - timedelta(days=days + 10)  # 여유분 추가
                 
-                stock = yf.Ticker(symbol)
-                data = stock.history(start=start_date, end=end_date)
+                # yfinance 인스턴스 생성 시 session 파라미터 사용
+                stock = yf.Ticker(symbol, session=self.session)
+                data = stock.history(start=start_date, end=end_date, timeout=30)
                 
                 if data.empty:
                     self.logger.warning(f"No recent data found for symbol: {symbol}")
