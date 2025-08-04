@@ -86,9 +86,9 @@ class StockDataCollector:
                 else:
                     self._add_request_delay()
                 
-                # yfinance 인스턴스 생성 시 session 파라미터 사용
-                stock = yf.Ticker(symbol, session=self.session)
-                data = stock.history(period=period, timeout=30)
+                # 기본 yfinance 사용 (세션 문제 방지)
+                stock = yf.Ticker(symbol)
+                data = stock.history(period=period)
                 
                 if data.empty:
                     self.logger.warning(f"No data found for symbol: {symbol}")
@@ -156,9 +156,9 @@ class StockDataCollector:
                 end_date = datetime.now()
                 start_date = end_date - timedelta(days=days + 10)  # 여유분 추가
                 
-                # yfinance 인스턴스 생성 시 session 파라미터 사용
-                stock = yf.Ticker(symbol, session=self.session)
-                data = stock.history(start=start_date, end=end_date, timeout=30)
+                # 기본 yfinance 사용 (세션 문제 방지)
+                stock = yf.Ticker(symbol)
+                data = stock.history(start=start_date, end=end_date)
                 
                 if data.empty:
                     self.logger.warning(f"No recent data found for symbol: {symbol}")
