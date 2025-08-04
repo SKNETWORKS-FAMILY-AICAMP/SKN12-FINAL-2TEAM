@@ -40,6 +40,7 @@ from service.external.external_service import ExternalService
 from service.storage.storage_service import StorageService
 from service.search.search_service import SearchService
 from service.vectordb.vectordb_service import VectorDbService
+from service.rag.rag_service import RagService
 from service.service_container import ServiceContainer
 from service.lock.lock_service import LockService
 from service.scheduler.scheduler_service import SchedulerService
@@ -397,6 +398,36 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             Logger.error(f"VectorDB 서비스 초기화 실패: {e}")
             Logger.info("VectorDB 서비스 없이 계속 진행")
+        
+        # RAG 서비스 초기화 (SearchService와 VectorDbService 초기화 완료 후)
+        try:
+            # SearchService와 VectorDbService 상태 확인
+            search_ready = SearchService.is_initialized()
+            vector_ready = VectorDbService.is_initialized()
+            
+            Logger.info(f"RAG 서비스 초기화 전 의존성 확인 - Search: {search_ready}, Vector: {vector_ready}")
+            
+            if search_ready or vector_ready:
+                if RagService.init(app_config.ragConfig):
+                    Logger.info("✅ RAG 서비스 초기화 완료")
+                    
+                    # RAG 서비스 상태 확인
+                    health_status = await RagService.health_check()
+                    Logger.info(f"RAG 서비스 상태: {health_status['status']}")
+                    
+                    if health_status['status'] == 'healthy':
+                        Logger.info("🔍 하이브리드 검색 시스템 준비 완료")
+                    elif health_status['status'] == 'degraded':
+                        Logger.warn("⚠️ RAG 서비스 제한적 동작 (일부 검색 기능 비활성화)")
+                    
+                else:
+                    Logger.error("❌ RAG 서비스 초기화 실패")
+            else:
+                Logger.warn("⚠️ Search와 Vector 서비스 모두 사용할 수 없어 RAG 서비스 스킵")
+                
+        except Exception as e:
+            Logger.error(f"RAG 서비스 초기화 실패: {e}")
+            Logger.info("RAG 서비스 없이 계속 진행")
         
         # EmailService 초기화 (AWS SES) - 새로 추가
         try:
@@ -1080,6 +1111,14 @@ async def lifespan(app: FastAPI):
             Logger.info("VectorDB 서비스 종료")
     except Exception as e:
         Logger.error(f"VectorDB 서비스 종료 오류: {e}")
+    
+    # RAG 서비스 종료 (VectorDB 종료 직후)
+    try:
+        if RagService.is_initialized():
+            await RagService.shutdown()
+            Logger.info("RAG 서비스 종료")
+    except Exception as e:
+        Logger.error(f"RAG 서비스 종료 오류: {e}")
     
     # Search 서비스 종료 (OpenSearch 세션)
     try:
