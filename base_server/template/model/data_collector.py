@@ -1,50 +1,43 @@
 """
 미국 주식 데이터 수집 모듈
-yfinance를 사용해 거래량 상위 100개 종목의 3년치 OHLCV 데이터 수집
-User-Agent 헤더와 지연시간을 추가하여 Rate Limiting 방지
+yfinance 라이브러리 문제로 인해 Yahoo Finance API를 직접 호출
+Manual API 방식으로 거래량 상위 100개 종목의 3년치 OHLCV 데이터 수집
 """
 
-import yfinance as yf
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Tuple
 import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 import requests
 import random
+import json
 
 class StockDataCollector:
     def __init__(self):
         self.logger = logging.getLogger(__name__)
         
-        # User-Agent 헤더 설정 (브라우저로 위장하여 Rate Limiting 방지)
+        # Manual API 방식용 헤더 설정
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'en-US,en;q=0.9',
             'Accept-Encoding': 'gzip, deflate, br',
-            'DNT': '1',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
             'Referer': 'https://finance.yahoo.com/',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'same-origin',
+            'Origin': 'https://finance.yahoo.com',
         }
         
-        # requests 세션 설정 (직접 API 호출용)
-        self.session = requests.Session()
-        self.session.headers.update(self.headers)
+        # Yahoo Finance API URLs
+        self.base_urls = [
+            "https://query1.finance.yahoo.com/v8/finance/chart",
+            "https://query2.finance.yahoo.com/v8/finance/chart",
+        ]
         
-        # yfinance 설정 (429 오류 방지)
-        # 추가적인 yfinance 설정은 필요 없음 - curl_cffi가 자동으로 처리
-        
-        # 요청 간 지연시간 설정 (초) - 429 오류 방지를 위해 증가
-        self.request_delay = (2.0, 4.0)  # 2-4초 랜덤 지연 (기존 0.5-1.5초에서 증가)
-        self.retry_attempts = 5  # 재시도 횟수 증가 (기존 3회에서 5회)
-        self.max_concurrent_requests = 1  # 동시 요청 수 제한 (순차 처리)
+        # 요청 설정
+        self.request_delay = (2.0, 4.0)
+        self.retry_attempts = 3
+        self.timeout = 30
         
         # 미국 주식 거래량 상위 100개 종목 (예시 - 실제로는 동적으로 가져와야 함)
         self.top_100_symbols = [
@@ -65,72 +58,151 @@ class StockDataCollector:
         delay = random.uniform(*self.request_delay)
         time.sleep(delay)
     
+    def _convert_period_to_timestamps(self, period: str) -> Tuple[int, int]:
+        """
+        period 문자열을 timestamp로 변환
+        
+        Args:
+            period: "1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "3y"
+            
+        Returns:
+            (start_timestamp, end_timestamp)
+        """
+        end_time = datetime.now()
+        
+        if period == "1d":
+            start_time = end_time - timedelta(days=1)
+        elif period == "5d":
+            start_time = end_time - timedelta(days=5)
+        elif period == "1mo":
+            start_time = end_time - timedelta(days=30)
+        elif period == "3mo":
+            start_time = end_time - timedelta(days=90)
+        elif period == "6mo":
+            start_time = end_time - timedelta(days=180)
+        elif period == "1y":
+            start_time = end_time - timedelta(days=365)
+        elif period == "2y":
+            start_time = end_time - timedelta(days=730)
+        elif period == "3y":
+            start_time = end_time - timedelta(days=1095)
+        else:
+            # 기본값: 1년
+            start_time = end_time - timedelta(days=365)
+        
+        return int(start_time.timestamp()), int(end_time.timestamp())
+    
     def get_stock_data(self, symbol: str, period: str = "3y") -> Optional[pd.DataFrame]:
         """
-        특정 종목의 OHLCV 데이터 수집 (재시도 로직 포함)
+        Manual API를 사용해 주식 데이터 수집
         
         Args:
             symbol: 주식 심볼 (e.g., "AAPL")
-            period: 데이터 기간 ("3y" = 3년)
+            period: 데이터 기간 ("1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "3y")
             
         Returns:
             pandas DataFrame with OHLCV data
         """
+        start_ts, end_ts = self._convert_period_to_timestamps(period)
+        
         for attempt in range(self.retry_attempts):
             try:
-                # 요청 전 지연시간 추가
                 if attempt > 0:
                     self.logger.info(f"Retrying {symbol} (attempt {attempt + 1}/{self.retry_attempts})")
-                    # 재시도 시 더 긴 지연시간
-                    time.sleep(random.uniform(2, 5))
+                    time.sleep(random.uniform(3, 7))
                 else:
                     self._add_request_delay()
                 
-                # 기본 yfinance 사용 (세션 문제 방지)
-                stock = yf.Ticker(symbol)
-                data = stock.history(period=period)
+                # API URL 순환 사용
+                base_url = self.base_urls[attempt % len(self.base_urls)]
                 
-                if data.empty:
-                    self.logger.warning(f"No data found for symbol: {symbol}")
-                    return None
+                # API 호출
+                url = f"{base_url}/{symbol}"
+                params = {
+                    'period1': start_ts,
+                    'period2': end_ts,
+                    'interval': '1d',
+                    'includePrePost': 'true',
+                    'events': 'div%2Csplit',
+                    'corsDomain': 'finance.yahoo.com'
+                }
                 
-                # 실제 컬럼 구조 확인 및 로그
-                self.logger.info(f"Original columns for {symbol}: {list(data.columns)}")
+                self.logger.info(f"📡 Calling Manual API: {url}")
+                response = requests.get(url, headers=self.headers, params=params, timeout=self.timeout)
                 
-                # 필요한 컬럼만 선택 (OHLCV)
-                required_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
+                if response.status_code != 200:
+                    self.logger.warning(f"HTTP {response.status_code} for {symbol}")
+                    continue
                 
-                # 컬럼이 존재하는지 확인하고 선택
-                available_columns = [col for col in required_columns if col in data.columns]
-                if len(available_columns) < 5:
-                    self.logger.error(f"Missing required columns for {symbol}. Available: {available_columns}")
-                    return None
+                # JSON 파싱
+                data = response.json()
                 
-                # 필요한 컬럼만 선택
-                data = data[available_columns].copy()
-                data['Symbol'] = symbol
-                data.reset_index(inplace=True)
+                if 'chart' not in data or 'result' not in data['chart']:
+                    self.logger.warning(f"Invalid response structure for {symbol}")
+                    continue
                 
-                self.logger.info(f"✅ Successfully collected data for {symbol}: {len(data)} records")
-                return data
+                results = data['chart']['result']
+                if not results:
+                    self.logger.warning(f"No results in response for {symbol}")
+                    continue
                 
+                result = results[0]
+                
+                # 타임스탬프 확인
+                if 'timestamp' not in result:
+                    self.logger.warning(f"No timestamp data for {symbol}")
+                    continue
+                
+                timestamps = result['timestamp']
+                if not timestamps:
+                    self.logger.warning(f"Empty timestamp data for {symbol}")
+                    continue
+                
+                # OHLCV 데이터 추출
+                indicators = result.get('indicators', {})
+                quote = indicators.get('quote', [{}])[0]
+                
+                # 필수 데이터 확인
+                required_fields = ['open', 'high', 'low', 'close', 'volume']
+                for field in required_fields:
+                    if field not in quote:
+                        self.logger.warning(f"Missing {field} data for {symbol}")
+                        continue
+                
+                # DataFrame 생성
+                df_data = {
+                    'Date': [datetime.fromtimestamp(ts) for ts in timestamps],
+                    'Open': quote['open'],
+                    'High': quote['high'],
+                    'Low': quote['low'],
+                    'Close': quote['close'],
+                    'Volume': quote['volume'],
+                    'Symbol': symbol
+                }
+                
+                df = pd.DataFrame(df_data)
+                
+                # None 값 제거
+                df = df.dropna()
+                
+                if df.empty:
+                    self.logger.warning(f"DataFrame is empty after cleaning for {symbol}")
+                    continue
+                
+                # 날짜 순 정렬
+                df = df.sort_values('Date').reset_index(drop=True)
+                
+                self.logger.info(f"✅ Successfully collected {symbol}: {len(df)} records from {df['Date'].iloc[0].date()} to {df['Date'].iloc[-1].date()}")
+                return df
+                
+            except requests.exceptions.RequestException as e:
+                self.logger.warning(f"🌐 Network error for {symbol}: {str(e)}")
+            except json.JSONDecodeError as e:
+                self.logger.warning(f"📊 JSON decode error for {symbol}: {str(e)}")
             except Exception as e:
-                error_msg = str(e).lower()
-                if "429" in error_msg or "too many requests" in error_msg or "expecting value" in error_msg:
-                    # 429 오류 시 exponential backoff 적용
-                    backoff_time = min(60, (2 ** attempt) * 5)  # 5, 10, 20, 40, 60초
-                    self.logger.warning(f"🚨 Rate limit hit for {symbol}, attempt {attempt + 1}/{self.retry_attempts}")
-                    self.logger.info(f"⏱️ Applying exponential backoff: waiting {backoff_time}s")
-                    time.sleep(backoff_time)
-                    
-                    if attempt == self.retry_attempts - 1:
-                        self.logger.error(f"❌ Rate limit exceeded for {symbol} after {self.retry_attempts} attempts")
-                        return None
-                else:
-                    self.logger.error(f"❌ Error collecting data for {symbol}: {str(e)}")
-                    if attempt == self.retry_attempts - 1:
-                        return None
+                self.logger.error(f"❌ Unexpected error for {symbol}: {str(e)}")
         
+        self.logger.error(f"❌ Failed to collect data for {symbol} after {self.retry_attempts} attempts")
         return None
     
     def get_recent_data(self, symbol: str, days: int = 60) -> Optional[pd.DataFrame]:
