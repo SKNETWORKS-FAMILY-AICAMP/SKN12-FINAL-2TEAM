@@ -28,18 +28,24 @@ class StockDataCollector:
             'DNT': '1',
             'Connection': 'keep-alive',
             'Upgrade-Insecure-Requests': '1',
+            'Referer': 'https://finance.yahoo.com/',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'same-origin',
         }
         
         # requests 세션 설정 (직접 API 호출용)
         self.session = requests.Session()
         self.session.headers.update(self.headers)
         
-        # yfinance는 기본 동작을 사용 (curl_cffi 지원)
-        # 세션 강제 설정 제거
+        # yfinance 세션 설정 (429 오류 방지)
+        import yfinance as yf
+        yf.pdr_override()  # pandas_datareader override
         
-        # 요청 간 지연시간 설정 (초)
-        self.request_delay = (0.5, 1.5)  # 0.5-1.5초 랜덤 지연
-        self.retry_attempts = 3  # 재시도 횟수
+        # 요청 간 지연시간 설정 (초) - 429 오류 방지를 위해 증가
+        self.request_delay = (2.0, 4.0)  # 2-4초 랜덤 지연 (기존 0.5-1.5초에서 증가)
+        self.retry_attempts = 5  # 재시도 횟수 증가 (기존 3회에서 5회)
+        self.max_concurrent_requests = 1  # 동시 요청 수 제한 (순차 처리)
         
         # 미국 주식 거래량 상위 100개 종목 (예시 - 실제로는 동적으로 가져와야 함)
         self.top_100_symbols = [
@@ -110,8 +116,13 @@ class StockDataCollector:
                 
             except Exception as e:
                 error_msg = str(e).lower()
-                if "429" in error_msg or "too many requests" in error_msg:
-                    self.logger.warning(f"Rate limit hit for {symbol}, attempt {attempt + 1}/{self.retry_attempts}")
+                if "429" in error_msg or "too many requests" in error_msg or "expecting value" in error_msg:
+                    # 429 오류 시 exponential backoff 적용
+                    backoff_time = min(60, (2 ** attempt) * 5)  # 5, 10, 20, 40, 60초
+                    self.logger.warning(f"🚨 Rate limit hit for {symbol}, attempt {attempt + 1}/{self.retry_attempts}")
+                    self.logger.info(f"⏱️ Applying exponential backoff: waiting {backoff_time}s")
+                    time.sleep(backoff_time)
+                    
                     if attempt == self.retry_attempts - 1:
                         self.logger.error(f"❌ Rate limit exceeded for {symbol} after {self.retry_attempts} attempts")
                         return None
@@ -189,47 +200,44 @@ class StockDataCollector:
         
         return None
     
-    def collect_batch_data(self, symbols: List[str], max_workers: int = 3) -> Dict[str, pd.DataFrame]:
+    def collect_batch_data(self, symbols: List[str], max_workers: int = 1) -> Dict[str, pd.DataFrame]:
         """
-        여러 종목의 데이터를 병렬로 수집 (Rate Limiting 고려)
+        여러 종목의 데이터를 순차적으로 수집 (429 오류 방지)
         
         Args:
             symbols: 수집할 종목 리스트
-            max_workers: 병렬 작업 수 (Rate Limiting 방지를 위해 낮게 설정)
+            max_workers: 사용되지 않음 (순차 처리로 변경)
             
         Returns:
             Dict[symbol, DataFrame]
         """
         results = {}
         
-        self.logger.info(f"Starting batch collection for {len(symbols)} symbols with {max_workers} workers")
+        self.logger.info(f"🔄 Starting sequential collection for {len(symbols)} symbols (429 오류 방지)")
         
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # 작업 제출
-            future_to_symbol = {
-                executor.submit(self.get_stock_data, symbol): symbol 
-                for symbol in symbols
-            }
+        # 병렬 처리 제거 → 순차 처리로 변경 (429 오류 방지)
+        for i, symbol in enumerate(symbols):
+            self.logger.info(f"📊 Processing {symbol} ({i+1}/{len(symbols)})")
             
-            # 결과 수집
-            for i, future in enumerate(as_completed(future_to_symbol)):
-                symbol = future_to_symbol[future]
-                try:
-                    data = future.result()
-                    if data is not None:
-                        results[symbol] = data
-                        self.logger.info(f"✅ Batch progress: {len(results)}/{len(symbols)} completed")
-                    else:
-                        self.logger.warning(f"❌ Failed to collect data for {symbol}")
-                except Exception as e:
-                    self.logger.error(f"❌ Error in batch collection for {symbol}: {str(e)}")
-                
-                # 배치 간 추가 지연 (Rate Limiting 방지)
-                if i < len(symbols) - 1:  # 마지막이 아니면
-                    time.sleep(random.uniform(0.2, 0.5))
+            try:
+                data = self.get_stock_data(symbol)
+                if data is not None:
+                    results[symbol] = data
+                    self.logger.info(f"✅ Success: {symbol} - Shape: {data.shape}")
+                else:
+                    self.logger.warning(f"❌ Failed to collect data for {symbol}")
+                    
+            except Exception as e:
+                self.logger.error(f"❌ Exception collecting {symbol}: {str(e)}")
+            
+            # 각 요청 후 지연시간 추가 (429 오류 방지)
+            if i < len(symbols) - 1:  # 마지막이 아니면
+                delay = random.uniform(*self.request_delay)
+                self.logger.info(f"⏱️ Waiting {delay:.1f}s before next request...")
+                time.sleep(delay)
         
-        success_rate = len(results) / len(symbols) * 100
-        self.logger.info(f"🎯 Batch collection completed: {len(results)}/{len(symbols)} symbols ({success_rate:.1f}% success rate)")
+        success_rate = len(results) / len(symbols) * 100 if symbols else 0
+        self.logger.info(f"🎯 Sequential collection completed: {len(results)}/{len(symbols)} symbols ({success_rate:.1f}% success rate)")
         return results
     
     def collect_top_100_data(self) -> Dict[str, pd.DataFrame]:
