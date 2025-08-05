@@ -298,13 +298,16 @@ class PyTorchStockTransformer:
         )
         
         # 🚀 고급 손실함수 적용
-        from advanced_metrics import get_advanced_loss_function
+        from advanced_metrics import get_advanced_loss_function, AdvancedMetrics
         if loss_type != "mse":
             self.criterion = get_advanced_loss_function(loss_type).to(self.device)
         else:
             self.criterion = nn.MSELoss()
             
         self.loss_type = loss_type
+        
+        # 🚀 고급 평가지표 계산기 초기화
+        self.metrics_calculator = AdvancedMetrics()
         
         # 모델 파라미터 수 출력
         total_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
