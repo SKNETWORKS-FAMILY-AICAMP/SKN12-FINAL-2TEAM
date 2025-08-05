@@ -24,8 +24,17 @@ from data_preprocessor import StockDataPreprocessor
 from pytorch_lstm_model import PyTorchStockLSTM
 from config import get_model_paths
 
-# Common 규격 import (기존 방식만 사용)
-from common.model_model import PredictionResult as CommonPredictionResult, DailyPrediction, BollingerBand
+# Common 규격 import 
+from common.model_model import PredictionResult as CommonPredictionResult, DailyPrediction, BollingerBand, ModelInfo
+from common.model_serialize import (
+    PredictRequest as CommonPredictRequest, 
+    PredictResponse as CommonPredictResponse,
+    BatchPredictRequest as CommonBatchPredictRequest,
+    BatchPredictResponse as CommonBatchPredictResponse,
+    ModelsListRequest, 
+    ModelsListResponse
+)
+from common.model_protocol import ModelProtocol
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -35,6 +44,9 @@ logger = logging.getLogger(__name__)
 model = None
 preprocessor = None
 data_collector = None
+
+# Common 프로토콜 인스턴스
+model_protocol = ModelProtocol()
 
 class PredictionRequest(BaseModel):
     """단일 예측 요청"""
@@ -140,9 +152,116 @@ async def load_model_and_preprocessor():
         preprocessor = None
 
 def setup_protocol_callbacks():
-    """Common 프로토콜 콜백 함수들 설정 (단순화됨)"""
-    # 기본 방식만 사용하므로 콜백 설정 생략
-    pass
+    """Common 프로토콜 콜백 함수들 설정"""
+    model_protocol.on_predict_req_callback = handle_common_predict
+    model_protocol.on_batch_predict_req_callback = handle_common_batch_predict
+    model_protocol.on_models_list_req_callback = handle_common_models_list
+
+async def handle_common_predict(session, request: CommonPredictRequest) -> CommonPredictResponse:
+    """Common 규격 단일 예측 처리"""
+    try:
+        # Common Request를 내부 형식으로 변환
+        internal_request = PredictionRequest(
+            symbol=request.symbol,
+            days=request.days
+        )
+        
+        # 기존 예측 로직 사용
+        result = await predict_single_stock_internal(internal_request)
+        
+        return CommonPredictResponse(
+            success=True,
+            result=result,
+            request_id=request.request_id,
+            timestamp=request.timestamp
+        )
+    except Exception as e:
+        return CommonPredictResponse(
+            success=False,
+            message=str(e),
+            request_id=request.request_id,
+            error_code="PREDICTION_ERROR"
+        )
+
+async def handle_common_batch_predict(session, request: CommonBatchPredictRequest) -> CommonBatchPredictResponse:
+    """Common 규격 배치 예측 처리"""
+    try:
+        # Common Request를 내부 형식으로 변환
+        internal_request = BatchPredictionRequest(
+            symbols=request.symbols,
+            days=request.days,
+            batch_size=len(request.symbols)
+        )
+        
+        # 기존 배치 예측 로직 사용 (내부 함수 호출)
+        batch_symbols = request.symbols
+        batch_results = []
+        
+        for symbol in batch_symbols:
+            try:
+                result = await predict_single_symbol(symbol, request.days)
+                batch_results.append(result)
+            except Exception as e:
+                # 실패한 경우 에러 결과 생성
+                error_result = CommonPredictionResult(
+                    symbol=symbol,
+                    prediction_date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    current_price=0.0,
+                    predictions=[],
+                    bollinger_bands=[],
+                    confidence_score=0.0,
+                    status=f"failed: {str(e)}"
+                )
+                batch_results.append(error_result)
+        
+        return CommonBatchPredictResponse(
+            success=True,
+            results=batch_results,
+            batch_id=request.request_id or f"batch_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+            processed_count=len(batch_results),
+            success_count=len([r for r in batch_results if r.status == "success"]),
+            request_id=request.request_id
+        )
+        
+    except Exception as e:
+        return CommonBatchPredictResponse(
+            success=False,
+            message=str(e),
+            request_id=request.request_id,
+            results=[],
+            batch_id="",
+            processed_count=0,
+            success_count=0,
+            error_code="BATCH_PREDICTION_ERROR"
+        )
+
+async def handle_common_models_list(session, request: ModelsListRequest) -> ModelsListResponse:
+    """Common 규격 모델 목록 처리"""
+    try:
+        models = [
+            ModelInfo(
+                model_type="PyTorch LSTM",
+                version="1.0.0",
+                description="LSTM model for stock price and Bollinger Band prediction",
+                supported_features=["price_prediction", "bollinger_bands", "trend_analysis"],
+                performance_metrics={"accuracy": 0.8, "confidence": 0.85}
+            )
+        ]
+        
+        return ModelsListResponse(
+            success=True,
+            models=models,
+            request_id=request.request_id
+        )
+        
+    except Exception as e:
+        return ModelsListResponse(
+            success=False,
+            message=str(e),
+            request_id=request.request_id,
+            models=[],
+            error_code="MODELS_LIST_ERROR"
+        )
 
 async def predict_single_stock_internal(request: PredictionRequest) -> CommonPredictionResult:
     """내부 예측 로직 (기존 코드 재사용)"""
@@ -238,15 +357,25 @@ async def predict_single_stock(request: PredictionRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# 단순화된 Common 엔드포인트 (기존 방식 사용)
-@app.post("/api/v1/predict", response_model=CommonPredictionResult)
-async def predict_common_format(request: PredictionRequest):
-    """Common 규격 단일 예측 API (기존 방식)"""
-    return await predict_single_stock_internal(request)
+# Common 규격 HTTP 엔드포인트들 (BaseRequest/BaseResponse 기반)
+@app.post("/api/v1/predict", response_model=CommonPredictResponse)
+async def predict_common_format(request: CommonPredictRequest):
+    """Common 규격 단일 예측 API"""
+    return await handle_common_predict(None, request)
 
-@app.get("/api/v1/models")
-async def list_models_common():
-    """모델 정보 조회 API"""
+@app.post("/api/v1/predict/batch", response_model=CommonBatchPredictResponse)
+async def batch_predict_common_format(request: CommonBatchPredictRequest):
+    """Common 규격 배치 예측 API"""
+    return await handle_common_batch_predict(None, request)
+
+@app.post("/api/v1/models", response_model=ModelsListResponse)
+async def list_models_common(request: ModelsListRequest):
+    """Common 규격 모델 목록 API"""
+    return await handle_common_models_list(None, request)
+
+@app.get("/api/v1/models/simple")
+async def list_models_simple():
+    """간단한 모델 정보 조회 API (GET)"""
     return {
         "models": [{
             "model_type": "PyTorch LSTM",
