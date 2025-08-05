@@ -58,7 +58,7 @@ def retrain_advanced_model():
         
         # 1. 데이터 수집 (기존 데이터 재사용)
         print("\n📊 1단계: 데이터 수집 중...")
-        raw_data = trainer.collect_data(force_reload_data=False)
+        raw_data = trainer.collect_data(force_reload=False)
         
         # 2. 고급 피처 전처리 (42개 피처)
         print("\n🔧 2단계: 고급 피처 전처리 중... (42개 피처 생성)")
