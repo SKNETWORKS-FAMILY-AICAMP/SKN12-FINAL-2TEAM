@@ -14,9 +14,15 @@ warnings.filterwarnings('ignore')
 class StockDataPreprocessor:
     def __init__(self):
         self.logger = logging.getLogger(__name__)
+        
+        # 하이브리드 스케일러 시스템
+        self.global_scaler = MinMaxScaler()      # 전역 피처 스케일러 (fallback용)
+        self.global_target_scaler = MinMaxScaler()  # 전역 타겟 스케일러 (fallback용)
+        self.symbol_scalers = {}  # 종목별 개별 피처 스케일러 (우선 사용)
+        self.target_scalers = {}  # 종목별 개별 타겟 스케일러 (우선 사용)
+        
+        # 하위 호환성을 위한 기존 스케일러 (사용 안함)
         self.scaler = MinMaxScaler()
-        self.symbol_scalers = {}  # 종목별 개별 스케일러
-        self.target_scalers = {}  # 타겟용 개별 스케일러
     
     def calculate_moving_averages(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -225,7 +231,7 @@ class StockDataPreprocessor:
     
     def inverse_transform_predictions(self, predictions: np.ndarray, symbol: str) -> np.ndarray:
         """
-        정규화된 예측값을 원래 스케일로 역변환
+        정규화된 예측값을 원래 스케일로 역변환 (하이브리드 방식)
         
         Args:
             predictions: 정규화된 예측값 (batch_size, prediction_length, num_targets)
@@ -234,16 +240,24 @@ class StockDataPreprocessor:
         Returns:
             역변환된 예측값
         """
-        if symbol not in self.target_scalers:
-            self.logger.warning(f"No target scaler found for {symbol}")
-            return predictions
-        
         # 3D → 2D 변환
         original_shape = predictions.shape
         predictions_2d = predictions.reshape(-1, predictions.shape[-1])
         
-        # 역변환
-        predictions_original = self.target_scalers[symbol].inverse_transform(predictions_2d)
+        # 하이브리드 역변환: 종목별 → 전역 타겟 스케일러 순서로 시도
+        if symbol in self.target_scalers:
+            # 우선순위 1: 종목별 타겟 스케일러 사용
+            predictions_original = self.target_scalers[symbol].inverse_transform(predictions_2d)
+            self.logger.info(f"Using symbol-specific target scaler for {symbol}")
+        else:
+            # 우선순위 2: 전역 타겟 스케일러 사용
+            try:
+                predictions_original = self.global_target_scaler.inverse_transform(predictions_2d)
+                self.logger.info(f"Using global target scaler for {symbol}")
+            except Exception as e:
+                # 최후의 수단: 역변환 없이 그대로 반환
+                self.logger.warning(f"No suitable target scaler for {symbol}, returning normalized predictions: {e}")
+                predictions_original = predictions_2d
         
         # 원래 shape로 복원
         predictions_original = predictions_original.reshape(original_shape)
@@ -274,14 +288,21 @@ class StockDataPreprocessor:
         
         feature_data = df_processed[feature_columns].values
         
-        # 정규화 (종목별 스케일러 사용)
+        # 하이브리드 스케일링: 종목별 → 전역 스케일러 순서로 시도
         if symbol in self.symbol_scalers:
+            # 우선순위 1: 종목별 스케일러 사용 (학습된 종목)
             feature_data_scaled = self.symbol_scalers[symbol].transform(feature_data)
+            self.logger.info(f"Using symbol-specific scaler for {symbol}")
         else:
-            # 종목별 스케일러가 없으면 임시로 fit_transform 사용
-            self.symbol_scalers[symbol] = MinMaxScaler()
-            feature_data_scaled = self.symbol_scalers[symbol].fit_transform(feature_data)
-            self.logger.warning(f"Created new scaler for {symbol} during inference")
+            # 우선순위 2: 전역 스케일러 사용 (새로운 종목)
+            try:
+                feature_data_scaled = self.global_scaler.transform(feature_data)
+                self.logger.info(f"Using global scaler for new symbol: {symbol}")
+            except Exception as e:
+                # 최후의 수단: 현재 데이터로 임시 스케일러 생성
+                self.logger.warning(f"Global scaler failed for {symbol}, creating temporary scaler: {e}")
+                temp_scaler = MinMaxScaler()
+                feature_data_scaled = temp_scaler.fit_transform(feature_data)
         
         # 마지막 60일만 사용
         if len(feature_data_scaled) >= 60:

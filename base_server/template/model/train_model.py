@@ -154,7 +154,10 @@ class ModelTrainer:
         
         self.logger.info(f"Combined sequences - X: {X_combined.shape}, y: {y_combined.shape}")
         
-        # 전처리된 데이터 저장 (종목별 스케일러 포함)
+        # 전역 스케일러 학습 (하이브리드 시스템용)
+        self.train_global_scalers(raw_data)
+        
+        # 전처리된 데이터 저장 (하이브리드 스케일러 포함)
         processed_data_file = os.path.join(self.data_dir, "processed_sequences.pkl")
         with open(processed_data_file, 'wb') as f:
             pickle.dump({
@@ -162,10 +165,69 @@ class ModelTrainer:
                 'y': y_combined,
                 'scaler': self.preprocessor.scaler,  # 기존 호환성
                 'symbol_scalers': self.preprocessor.symbol_scalers,  # 종목별 피처 스케일러
-                'target_scalers': self.preprocessor.target_scalers   # 종목별 타겟 스케일러
+                'target_scalers': self.preprocessor.target_scalers,   # 종목별 타겟 스케일러
+                'global_scaler': self.preprocessor.global_scaler,     # 전역 피처 스케일러
+                'global_target_scaler': self.preprocessor.global_target_scaler  # 전역 타겟 스케일러
             }, f)
         
         return X_combined, y_combined
+    
+    def train_global_scalers(self, raw_data: dict[str, pd.DataFrame]):
+        """
+        하이브리드 스케일러 시스템용 전역 스케일러 학습
+        모든 종목의 데이터를 합쳐서 전역 피처/타겟 스케일러 생성
+        
+        Args:
+            raw_data: 원본 데이터 딕셔너리
+        """
+        self.logger.info("🌐 Training global scalers for hybrid system...")
+        
+        all_feature_data = []
+        all_target_data = []
+        
+        # 피처 및 타겟 컬럼 정의
+        feature_columns = [
+            'Open', 'High', 'Low', 'Close', 'Volume',
+            'MA_5', 'MA_20', 'MA_60',
+            'BB_Upper', 'BB_Middle', 'BB_Lower', 'BB_Percent', 'BB_Width',
+            'RSI', 'MACD', 'MACD_Signal', 'Price_Change', 'Volatility'
+        ]
+        target_columns = ['Close', 'BB_Upper', 'BB_Lower']
+        
+        # 모든 종목의 데이터 수집
+        for symbol, df in raw_data.items():
+            try:
+                if len(df) < 100:
+                    continue
+                    
+                # 전처리
+                processed_df = self.preprocessor.preprocess_data(df)
+                
+                # 피처 및 타겟 데이터 추출
+                feature_data = processed_df[feature_columns].values
+                target_data = processed_df[target_columns].values
+                
+                all_feature_data.append(feature_data)
+                all_target_data.append(target_data)
+                
+            except Exception as e:
+                self.logger.warning(f"Skipping {symbol} for global scaler training: {e}")
+                continue
+        
+        if all_feature_data:
+            # 모든 데이터 결합
+            combined_features = np.vstack(all_feature_data)
+            combined_targets = np.vstack(all_target_data)
+            
+            # 전역 스케일러 학습
+            self.preprocessor.global_scaler.fit(combined_features)
+            self.preprocessor.global_target_scaler.fit(combined_targets)
+            
+            self.logger.info(f"✅ Global scalers trained on {len(combined_features)} samples from {len(all_feature_data)} symbols")
+            self.logger.info(f"   Feature range: [{combined_features.min():.3f}, {combined_features.max():.3f}]")
+            self.logger.info(f"   Target range: [{combined_targets.min():.3f}, {combined_targets.max():.3f}]")
+        else:
+            self.logger.warning("❌ No valid data for global scaler training")
     
     def prepare_training_data(self, X: np.ndarray, y: np.ndarray, 
                             test_size: float = 0.2, 
