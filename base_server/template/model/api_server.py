@@ -50,7 +50,7 @@ class PredictionResult(BaseModel):
     prediction_date: str
     current_price: float
     predictions: List[Dict[str, Any]]  # 5일간의 예측 결과
-    bollinger_bands: List[Dict[str, float]]  # 5일간의 볼린저 밴드
+    bollinger_bands: List[Dict[str, Any]]  # 5일간의 볼린저 밴드 (date는 str, 나머지는 float)
     confidence_score: float
     status: str
 
