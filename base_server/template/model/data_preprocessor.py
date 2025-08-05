@@ -35,6 +35,7 @@ class StockDataPreprocessor:
         
         # 🚀 고급 피처 엔지니어링 초기화
         self.advanced_features = AdvancedFeatureEngineering()
+        self.advanced_features_enabled = False  # 기본값: 비활성화 (호환성)
         
         if self.use_log_transform:
             self.logger.info("Log transformation enabled for price scaling")
@@ -204,8 +205,12 @@ class StockDataPreprocessor:
         numeric_cols = df_copy.select_dtypes(include=[np.number]).columns
         df_copy[numeric_cols] = df_copy[numeric_cols].fillna(method='bfill').fillna(method='ffill')
         
-        # 🚀 고급 피처 엔지니어링 적용 (30+ 고급 지표)
-        df_copy = self.advanced_features.add_all_advanced_features(df_copy)
+        # 🚀 고급 피처 엔지니어링 (선택적 활성화)
+        if self.advanced_features_enabled:
+            df_copy = self.advanced_features.add_all_advanced_features(df_copy)
+            self.logger.info("고급 피처 엔지니어링 적용됨 (42개 피처 모드)")
+        else:
+            self.logger.info("기본 피처만 사용 (18개 피처 모드 - 호환성)")
         
         # 🔧 로그 변환 적용 (2단계 해결책)
         df_copy = self.apply_log_transform(df_copy)
@@ -278,29 +283,39 @@ class StockDataPreprocessor:
         Returns:
             (X, y) - 입력 시퀀스와 타겟 시퀀스
         """
-        # 🚀 고급 피처를 포함한 학습용 피처 선택 (30+ 피처)
-        feature_columns = [
-            # 기본 OHLCV (5개)
-            'Open', 'High', 'Low', 'Close', 'Volume',
-            
-            # 이동평균 및 추세 (8개)
-            'MA_5', 'MA_20', 'MA_60', 'ADX', 'DI_Plus', 'DI_Minus', 'PSAR', 'PSAR_Trend',
-            
-            # 볼린저 밴드 및 변동성 (7개)
-            'BB_Upper', 'BB_Middle', 'BB_Lower', 'BB_Percent', 'BB_Width', 'ATR', 'ATR_Ratio',
-            
-            # 모멘텀 지표 (8개)
-            'RSI', 'Stoch_K', 'Stoch_D', 'Williams_R', 'CCI', 'MFI', 'ROC_10', 'Price_Momentum',
-            
-            # 거래량 지표 (4개)
-            'OBV_Ratio', 'CMF', 'Volume_Profile', 'Volume_Momentum',
-            
-            # 시장 체제 및 미시구조 (6개)
-            'Vol_Regime', 'Trend_Strength', 'VWAP', 'PV_Corr', 'Intraday_Range', 'Price_ZScore',
-            
-            # 기존 기술지표 (4개)
-            'MACD', 'MACD_Signal', 'Price_Change', 'Volatility'
-        ]
+        # 🚀 피처 선택 (고급 피처 활성화 여부에 따라)
+        if self.advanced_features_enabled:
+            # 고급 피처 포함 (42개)
+            feature_columns = [
+                # 기본 OHLCV (5개)
+                'Open', 'High', 'Low', 'Close', 'Volume',
+                
+                # 이동평균 및 추세 (8개)
+                'MA_5', 'MA_20', 'MA_60', 'ADX', 'DI_Plus', 'DI_Minus', 'PSAR', 'PSAR_Trend',
+                
+                # 볼린저 밴드 및 변동성 (7개)
+                'BB_Upper', 'BB_Middle', 'BB_Lower', 'BB_Percent', 'BB_Width', 'ATR', 'ATR_Ratio',
+                
+                # 모멘텀 지표 (8개)
+                'RSI', 'Stoch_K', 'Stoch_D', 'Williams_R', 'CCI', 'MFI', 'ROC_10', 'Price_Momentum',
+                
+                # 거래량 지표 (4개)
+                'OBV_Ratio', 'CMF', 'Volume_Profile', 'Volume_Momentum',
+                
+                # 시장 체제 및 미시구조 (6개)
+                'Vol_Regime', 'Trend_Strength', 'VWAP', 'PV_Corr', 'Intraday_Range', 'Price_ZScore',
+                
+                # 기존 기술지표 (4개)
+                'MACD', 'MACD_Signal', 'Price_Change', 'Volatility'
+            ]
+        else:
+            # 기본 피처만 (18개 - 호환성)
+            feature_columns = [
+                'Open', 'High', 'Low', 'Close', 'Volume',
+                'MA_5', 'MA_20', 'MA_60',
+                'BB_Upper', 'BB_Middle', 'BB_Lower', 'BB_Percent', 'BB_Width',
+                'RSI', 'MACD', 'MACD_Signal', 'Price_Change', 'Volatility'
+            ]
         
         # 타겟은 다음 5일의 Close, BB_Upper, BB_Lower
         target_columns = ['Close', 'BB_Upper', 'BB_Lower']
@@ -392,29 +407,39 @@ class StockDataPreprocessor:
         # 전처리 파이프라인 적용
         df_processed = self.preprocess_data(df)
         
-        # 🚀 고급 피처를 포함한 추론용 피처 선택 (30+ 피처)
-        feature_columns = [
-            # 기본 OHLCV (5개)
-            'Open', 'High', 'Low', 'Close', 'Volume',
-            
-            # 이동평균 및 추세 (8개)
-            'MA_5', 'MA_20', 'MA_60', 'ADX', 'DI_Plus', 'DI_Minus', 'PSAR', 'PSAR_Trend',
-            
-            # 볼린저 밴드 및 변동성 (7개)
-            'BB_Upper', 'BB_Middle', 'BB_Lower', 'BB_Percent', 'BB_Width', 'ATR', 'ATR_Ratio',
-            
-            # 모멘텀 지표 (8개)
-            'RSI', 'Stoch_K', 'Stoch_D', 'Williams_R', 'CCI', 'MFI', 'ROC_10', 'Price_Momentum',
-            
-            # 거래량 지표 (4개)
-            'OBV_Ratio', 'CMF', 'Volume_Profile', 'Volume_Momentum',
-            
-            # 시장 체제 및 미시구조 (6개)
-            'Vol_Regime', 'Trend_Strength', 'VWAP', 'PV_Corr', 'Intraday_Range', 'Price_ZScore',
-            
-            # 기존 기술지표 (4개)
-            'MACD', 'MACD_Signal', 'Price_Change', 'Volatility'
-        ]
+        # 🚀 피처 선택 (고급 피처 활성화 여부에 따라)
+        if self.advanced_features_enabled:
+            # 고급 피처 포함 (42개)
+            feature_columns = [
+                # 기본 OHLCV (5개)
+                'Open', 'High', 'Low', 'Close', 'Volume',
+                
+                # 이동평균 및 추세 (8개)
+                'MA_5', 'MA_20', 'MA_60', 'ADX', 'DI_Plus', 'DI_Minus', 'PSAR', 'PSAR_Trend',
+                
+                # 볼린저 밴드 및 변동성 (7개)
+                'BB_Upper', 'BB_Middle', 'BB_Lower', 'BB_Percent', 'BB_Width', 'ATR', 'ATR_Ratio',
+                
+                # 모멘텀 지표 (8개)
+                'RSI', 'Stoch_K', 'Stoch_D', 'Williams_R', 'CCI', 'MFI', 'ROC_10', 'Price_Momentum',
+                
+                # 거래량 지표 (4개)
+                'OBV_Ratio', 'CMF', 'Volume_Profile', 'Volume_Momentum',
+                
+                # 시장 체제 및 미시구조 (6개)
+                'Vol_Regime', 'Trend_Strength', 'VWAP', 'PV_Corr', 'Intraday_Range', 'Price_ZScore',
+                
+                # 기존 기술지표 (4개)
+                'MACD', 'MACD_Signal', 'Price_Change', 'Volatility'
+            ]
+        else:
+            # 기본 피처만 (18개 - 호환성)
+            feature_columns = [
+                'Open', 'High', 'Low', 'Close', 'Volume',
+                'MA_5', 'MA_20', 'MA_60',
+                'BB_Upper', 'BB_Middle', 'BB_Lower', 'BB_Percent', 'BB_Width',
+                'RSI', 'MACD', 'MACD_Signal', 'Price_Change', 'Volatility'
+            ]
         
         feature_data = df_processed[feature_columns].values
         

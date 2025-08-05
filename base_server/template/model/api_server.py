@@ -280,7 +280,7 @@ async def load_model_and_preprocessor():
             model = PyTorchStockLSTM(
                 sequence_length=60,
                 prediction_length=5,
-                num_features=18,
+                num_features=42,  # 기존 모델과 호환성 유지
                 num_targets=3
             )
             model.load_model(model_path, hidden_size=512)  # 🔥 RTX 4090 최적화
@@ -293,7 +293,12 @@ async def load_model_and_preprocessor():
         if os.path.exists(preprocessor_path):
             with open(preprocessor_path, 'rb') as f:
                 preprocessor = pickle.load(f)
+            
+            # 🚀 고급 피처 활성화 (42개 피처 모드)
+            preprocessor.advanced_features_enabled = True
+            
             logger.info("Preprocessor loaded successfully")
+            logger.info("🚀 Advanced features enabled (42 features mode)")
         else:
             logger.error(f"❌ Preprocessor file not found: {preprocessor_path}")
             logger.error("❌ Please train the model first to generate preprocessor.pkl")

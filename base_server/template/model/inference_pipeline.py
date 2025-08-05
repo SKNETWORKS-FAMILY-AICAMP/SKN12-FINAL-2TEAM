@@ -95,7 +95,7 @@ class InferencePipeline:
                 self.model = PyTorchStockLSTM(
                     sequence_length=60,
                     prediction_length=5,
-                    num_features=18,
+                    num_features=18,  # 기존 모델과 호환성 유지
                     num_targets=3
                 )
                 self.model.load_model(self.model_path, hidden_size=512)  # 🔥 RTX 4090 최적화
