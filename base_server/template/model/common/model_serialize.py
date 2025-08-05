@@ -1,23 +1,26 @@
-from typing import Optional, List, Dict, Any
-from service.net.protocol_base import BaseRequest, BaseResponse
+from typing import Optional, List
+from .protocol_base import BaseRequest, BaseResponse
 from .model_model import PredictionResult, ModelInfo
+
+# ============================================================================
+# 모델 예측 요청/응답 (팀 표준 BaseRequest/BaseResponse 기반)
+# ============================================================================
 
 class PredictRequest(BaseRequest):
     """단일 예측 요청"""
     symbol: str
-    data_points: List[float]
-    period: int = 30
+    days: int = 60
     model_type: str = "lstm"
 
 class PredictResponse(BaseResponse):
     """단일 예측 응답"""  
     result: Optional[PredictionResult] = None
+    message: str = ""
 
 class BatchPredictRequest(BaseRequest):
     """배치 예측 요청"""
     symbols: List[str]
-    data_points_list: List[List[float]]
-    period: int = 30
+    days: int = 60
     model_type: str = "lstm"
 
 class BatchPredictResponse(BaseResponse):
@@ -26,6 +29,7 @@ class BatchPredictResponse(BaseResponse):
     batch_id: str = ""
     processed_count: int = 0
     success_count: int = 0
+    message: str = ""
 
 class ModelsListRequest(BaseRequest):
     """모델 목록 요청"""
@@ -34,3 +38,4 @@ class ModelsListRequest(BaseRequest):
 class ModelsListResponse(BaseResponse):
     """모델 목록 응답"""
     models: List[ModelInfo] = []
+    message: str = ""

@@ -2,16 +2,30 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 from pydantic import BaseModel
 
+class DailyPrediction(BaseModel):
+    """일별 예측 데이터"""
+    day: int
+    date: str
+    predicted_close: float
+    trend: str  # up, down
+
+class BollingerBand(BaseModel):
+    """볼린저 밴드 데이터"""
+    day: int
+    date: str
+    bb_upper: float
+    bb_lower: float
+    bb_middle: Optional[float] = None
+
 class PredictionResult(BaseModel):
-    """예측 결과 모델"""
+    """예측 결과 모델 (5일간 상세 예측)"""
     symbol: str
-    signal: str  # BUY, SELL, HOLD
-    confidence: float
-    predicted_price: float
+    prediction_date: str
     current_price: float
-    change_percent: float
-    timestamp: datetime
-    model_info: Dict[str, Any] = {}
+    predictions: List[DailyPrediction]
+    bollinger_bands: List[BollingerBand]
+    confidence_score: float
+    status: str = "success"
 
 class ModelInfo(BaseModel):
     """모델 정보"""
