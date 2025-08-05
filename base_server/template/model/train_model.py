@@ -54,7 +54,8 @@ class ModelTrainer:
         
         # 컴포넌트 초기화
         self.data_collector = StockDataCollector()
-        self.preprocessor = StockDataPreprocessor()
+        # 🔧 로그 변환 활성화 (2단계 해결책)
+        self.preprocessor = StockDataPreprocessor(use_log_transform=True)
         self.model = None
         
         self.logger = logging.getLogger(__name__)

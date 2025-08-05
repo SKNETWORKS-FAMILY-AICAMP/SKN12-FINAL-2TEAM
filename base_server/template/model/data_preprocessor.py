@@ -12,8 +12,14 @@ import warnings
 warnings.filterwarnings('ignore')
 
 class StockDataPreprocessor:
-    def __init__(self):
+    def __init__(self, use_log_transform: bool = True):
         self.logger = logging.getLogger(__name__)
+        
+        # 🔧 로그 변환 설정 (2단계 해결책)
+        self.use_log_transform = use_log_transform
+        self.price_columns = ['Open', 'High', 'Low', 'Close']  # 로그 변환 대상 컬럼
+        self.ma_columns = ['MA_5', 'MA_20', 'MA_60']  # 이동평균도 로그 변환 대상
+        self.bb_price_columns = ['BB_Upper', 'BB_Middle', 'BB_Lower']  # 볼린저 밴드도 로그 변환 대상
         
         # 하이브리드 스케일러 시스템
         self.global_scaler = MinMaxScaler()      # 전역 피처 스케일러 (fallback용)
@@ -23,6 +29,81 @@ class StockDataPreprocessor:
         
         # 하위 호환성을 위한 기존 스케일러 (사용 안함)
         self.scaler = MinMaxScaler()
+        
+        if self.use_log_transform:
+            self.logger.info("Log transformation enabled for price scaling")
+    
+    # ============================================================================
+    # 로그 변환 함수들 (2단계 해결책)
+    # ============================================================================
+    
+    def apply_log_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        가격 관련 컬럼에 로그 변환 적용
+        
+        Args:
+            df: 원본 데이터프레임
+            
+        Returns:
+            로그 변환된 데이터프레임
+        """
+        if not self.use_log_transform:
+            return df
+        
+        df_transformed = df.copy()
+        
+        # 가격 컬럼들에 로그 변환 적용 (작은 값 처리를 위해 +1)
+        for col in self.price_columns:
+            if col in df_transformed.columns:
+                df_transformed[col] = np.log(df_transformed[col] + 1)
+        
+        # 이동평균 컬럼들에도 로그 변환 적용
+        for col in self.ma_columns:
+            if col in df_transformed.columns:
+                df_transformed[col] = np.log(df_transformed[col] + 1)
+        
+        # 볼린저 밴드 컬럼들에도 로그 변환 적용
+        for col in self.bb_price_columns:
+            if col in df_transformed.columns:
+                df_transformed[col] = np.log(df_transformed[col] + 1)
+        
+        self.logger.info(f"Applied log transformation to price columns")
+        return df_transformed
+    
+    def apply_inverse_log_transform(self, values: np.ndarray, is_price_data: bool = True) -> np.ndarray:
+        """
+        로그 변환된 데이터를 원래 스케일로 역변환
+        
+        Args:
+            values: 로그 변환된 값들
+            is_price_data: 가격 데이터 여부 (가격이 아닌 데이터는 역변환하지 않음)
+            
+        Returns:
+            원래 스케일로 복원된 값들
+        """
+        if not self.use_log_transform or not is_price_data:
+            return values
+        
+        # exp 변환 후 -1 (log(x+1)의 역변환)
+        restored_values = np.exp(values) - 1
+        
+        # 음수값 보정 (가격은 항상 양수여야 함)
+        restored_values = np.maximum(restored_values, 0.01)
+        
+        self.logger.debug(f"Applied inverse log transformation")
+        return restored_values
+    
+    def log_transform_single_value(self, value: float) -> float:
+        """단일 값에 로그 변환 적용"""
+        if not self.use_log_transform:
+            return value
+        return np.log(value + 1)
+    
+    def inverse_log_transform_single_value(self, value: float) -> float:
+        """단일 값에 로그 역변환 적용"""
+        if not self.use_log_transform:
+            return value
+        return max(np.exp(value) - 1, 0.01)
     
     def calculate_moving_averages(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -116,6 +197,9 @@ class StockDataPreprocessor:
         # NaN 값 처리
         numeric_cols = df_copy.select_dtypes(include=[np.number]).columns
         df_copy[numeric_cols] = df_copy[numeric_cols].fillna(method='bfill').fillna(method='ffill')
+        
+        # 🔧 로그 변환 적용 (2단계 해결책)
+        df_copy = self.apply_log_transform(df_copy)
         
         self.logger.info(f"Added technical indicators for {len(df_copy)} records")
         return df_copy
@@ -247,21 +331,25 @@ class StockDataPreprocessor:
         # 하이브리드 역변환: 종목별 → 전역 타겟 스케일러 순서로 시도
         if symbol in self.target_scalers:
             # 우선순위 1: 종목별 타겟 스케일러 사용
-            predictions_original = self.target_scalers[symbol].inverse_transform(predictions_2d)
+            predictions_scaled_back = self.target_scalers[symbol].inverse_transform(predictions_2d)
             self.logger.info(f"Using symbol-specific target scaler for {symbol}")
         else:
             # 우선순위 2: 전역 타겟 스케일러 사용
             try:
-                predictions_original = self.global_target_scaler.inverse_transform(predictions_2d)
+                predictions_scaled_back = self.global_target_scaler.inverse_transform(predictions_2d)
                 self.logger.info(f"Using global target scaler for {symbol}")
             except Exception as e:
                 # 최후의 수단: 역변환 없이 그대로 반환
                 self.logger.warning(f"No suitable target scaler for {symbol}, returning normalized predictions: {e}")
-                predictions_original = predictions_2d
+                predictions_scaled_back = predictions_2d
+        
+        # 🔧 로그 역변환 적용 (2단계 해결책)
+        predictions_original = self.apply_inverse_log_transform(predictions_scaled_back, is_price_data=True)
         
         # 원래 shape로 복원
         predictions_original = predictions_original.reshape(original_shape)
         
+        self.logger.info(f"Applied log inverse transform for {symbol}")
         return predictions_original
     
     def preprocess_for_inference(self, df: pd.DataFrame, symbol: str = "DEFAULT") -> np.ndarray:
