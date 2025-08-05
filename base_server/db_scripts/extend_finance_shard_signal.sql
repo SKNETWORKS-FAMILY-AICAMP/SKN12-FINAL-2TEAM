@@ -483,6 +483,60 @@ END ;;
 DELIMITER ;
 
 -- =====================================
+-- 🔄 미평가 시그널 조회 (성과 업데이트용)
+-- 목적: 1일 경과한 미평가 시그널 목록 조회
+-- 호출: SignalMonitoringService._update_signal_performance에서 사용
+-- 
+-- 조회 조건:
+-- - triggered_at이 지정된 날짜인 시그널
+-- - evaluated_at이 NULL인 시그널 (아직 평가되지 않음)
+-- - is_deleted = 0인 활성 시그널만
+-- =====================================
+DROP PROCEDURE IF EXISTS `fp_signal_get_pending_evaluation`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_signal_get_pending_evaluation`(
+    IN p_evaluation_date DATE  -- 평가할 날짜 (보통 어제 날짜)
+)
+BEGIN
+    DECLARE ProcParam VARCHAR(4000);
+    SET ProcParam = CONCAT('evaluation_date=', IFNULL(p_evaluation_date, 'NULL'));
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_signal_get_pending_evaluation', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+    END;
+    
+    -- 파라미터 검증
+    IF p_evaluation_date IS NULL THEN
+        SELECT 1 as ErrorCode, 'evaluation_date parameter is required' as ErrorMessage;
+        LEAVE;
+    END IF;
+    
+    -- 상태 반환
+    SELECT 0 as ErrorCode, 'SUCCESS' as ErrorMessage;
+    
+    -- 미평가 시그널 목록 조회
+    SELECT 
+        signal_id,
+        alarm_id,
+        account_db_key,
+        symbol,
+        signal_type,
+        signal_price,
+        triggered_at
+    FROM table_signal_history 
+    WHERE DATE(triggered_at) = p_evaluation_date     -- 지정된 날짜에 발생한 시그널
+      AND evaluated_at IS NULL                       -- 아직 평가되지 않음
+      AND is_deleted = 0                             -- 활성 시그널만
+    ORDER BY triggered_at ASC;                       -- 발생 시간 순
+    
+END ;;
+DELIMITER ;
+
+-- =====================================
 -- 📈 시그널 통계 조회 (대시보드용)
 -- 목적: 사용자별 전체 시그널 성과 통계 제공
 -- 호출: 대시보드나 성과 분석 화면에서 사용
@@ -711,5 +765,357 @@ BEGIN
       AND is_deleted = 0      -- 삭제되지 않은 알림만
     ORDER BY created_at ASC;  -- 등록 순서대로
     
+END ;;
+DELIMITER ;
+
+-- =====================================
+-- Shard 2용 나머지 프로시저들 추가
+-- =====================================
+
+-- 알림 목록 + 통계 조회 (Shard 2용)
+DROP PROCEDURE IF EXISTS `fp_signal_alarms_get_with_stats`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_signal_alarms_get_with_stats`(
+    IN p_account_db_key BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE ProcParam VARCHAR(4000);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET ProcParam = CONCAT('account_db_key=', p_account_db_key);
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_signal_alarms_get_with_stats', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+    END;
+    
+    SELECT 0 as ErrorCode, 'SUCCESS' as ErrorMessage;
+
+    SELECT 
+        a.alarm_id, a.symbol, a.company_name, a.current_price,
+        a.exchange, a.currency, a.note, a.is_active, a.created_at,
+        COALESCE(COUNT(h.signal_id), 0) as signal_count,
+        COALESCE(ROUND(AVG(CASE WHEN h.is_win = 1 THEN 100.0 ELSE 0.0 END), 2), 0.0) as win_rate,
+        COALESCE(ROUND(AVG(h.profit_rate), 2), 0.0) as profit_rate
+    FROM table_signal_alarms a
+    LEFT JOIN table_signal_history h ON a.alarm_id = h.alarm_id 
+        AND h.is_win IS NOT NULL AND h.is_deleted = 0
+    WHERE a.account_db_key = p_account_db_key AND a.is_deleted = 0
+    GROUP BY a.alarm_id, a.symbol, a.company_name, a.current_price, 
+             a.exchange, a.currency, a.note, a.is_active, a.created_at
+    ORDER BY a.created_at DESC;
+END ;;
+DELIMITER ;
+
+-- 알림 토글 (Shard 2용)
+DROP PROCEDURE IF EXISTS `fp_signal_alarm_toggle`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_signal_alarm_toggle`(
+    IN p_alarm_id VARCHAR(128),
+    IN p_account_db_key BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_current_status TINYINT(1) DEFAULT 0;
+    DECLARE v_new_status TINYINT(1) DEFAULT 0;
+    DECLARE ProcParam VARCHAR(4000);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET ProcParam = CONCAT(p_alarm_id, ',', p_account_db_key);
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        ROLLBACK;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_signal_alarm_toggle', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+    END;
+    
+    START TRANSACTION;
+    
+    SELECT is_active INTO v_current_status
+    FROM table_signal_alarms 
+    WHERE alarm_id = p_alarm_id AND account_db_key = p_account_db_key AND is_deleted = 0;
+    
+    IF v_current_status IS NULL THEN
+        ROLLBACK;
+        SELECT 1002 as ErrorCode, '알림을 찾을 수 없습니다' as ErrorMessage;
+    ELSE
+        SET v_new_status = NOT v_current_status;
+        
+        UPDATE table_signal_alarms 
+        SET is_active = v_new_status, updated_at = NOW(6)
+        WHERE alarm_id = p_alarm_id AND account_db_key = p_account_db_key;
+        
+        COMMIT;
+        SELECT 0 as ErrorCode, 
+               CONCAT('알림 상태가 ', IF(v_new_status = 1, '활성화', '비활성화'), '되었습니다') as ErrorMessage,
+               v_new_status as new_status;
+    END IF;
+END ;;
+DELIMITER ;
+
+-- 알림 소프트 삭제 (Shard 2용)
+DROP PROCEDURE IF EXISTS `fp_signal_alarm_soft_delete`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_signal_alarm_soft_delete`(
+    IN p_alarm_id VARCHAR(128),
+    IN p_account_db_key BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_alarm_exists INT DEFAULT 0;
+    DECLARE ProcParam VARCHAR(4000);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET ProcParam = CONCAT(p_alarm_id, ',', p_account_db_key);
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        ROLLBACK;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_signal_alarm_soft_delete', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+    END;
+    
+    START TRANSACTION;
+    
+    SELECT COUNT(*) INTO v_alarm_exists
+    FROM table_signal_alarms 
+    WHERE alarm_id = p_alarm_id AND account_db_key = p_account_db_key AND is_deleted = 0;
+    
+    IF v_alarm_exists = 0 THEN
+        ROLLBACK;
+        SELECT 1002 as ErrorCode, '알림을 찾을 수 없습니다' as ErrorMessage;
+    ELSE
+        UPDATE table_signal_alarms 
+        SET is_deleted = 1, deleted_at = NOW(6), updated_at = NOW(6)
+        WHERE alarm_id = p_alarm_id AND account_db_key = p_account_db_key;
+        
+        COMMIT;
+        SELECT 0 as ErrorCode, '알림이 삭제되었습니다' as ErrorMessage;
+    END IF;
+END ;;
+DELIMITER ;
+
+-- 시그널 히스토리 조회 (Shard 2용)
+DROP PROCEDURE IF EXISTS `fp_signal_history_get`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_signal_history_get`(
+    IN p_account_db_key BIGINT UNSIGNED,
+    IN p_alarm_id VARCHAR(128),
+    IN p_symbol VARCHAR(50),
+    IN p_signal_type VARCHAR(10),
+    IN p_limit INT
+)
+BEGIN
+    DECLARE v_sql TEXT;
+    DECLARE ProcParam VARCHAR(4000);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET ProcParam = CONCAT(p_account_db_key, ',', COALESCE(p_alarm_id, ''), ',', COALESCE(p_symbol, ''));
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_signal_history_get', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+    END;
+    
+    SET v_sql = 'SELECT signal_id, alarm_id, symbol, signal_type, signal_price, volume, 
+                        triggered_at, price_after_1d, profit_rate, is_win, evaluated_at
+                 FROM table_signal_history 
+                 WHERE account_db_key = ? AND is_deleted = 0';
+    
+    IF p_alarm_id IS NOT NULL AND p_alarm_id != '' THEN
+        SET v_sql = CONCAT(v_sql, ' AND alarm_id = "', p_alarm_id, '"');
+    END IF;
+    
+    IF p_symbol IS NOT NULL AND p_symbol != '' THEN
+        SET v_sql = CONCAT(v_sql, ' AND symbol = "', p_symbol, '"');
+    END IF;
+    
+    IF p_signal_type IS NOT NULL AND p_signal_type != '' THEN
+        SET v_sql = CONCAT(v_sql, ' AND signal_type = "', p_signal_type, '"');
+    END IF;
+    
+    SET v_sql = CONCAT(v_sql, ' ORDER BY triggered_at DESC');
+    
+    IF p_limit IS NOT NULL AND p_limit > 0 THEN
+        SET v_sql = CONCAT(v_sql, ' LIMIT ', p_limit);
+    END IF;
+    
+    SELECT 0 as ErrorCode, 'SUCCESS' as ErrorMessage;
+    
+    SET @sql = v_sql;
+    PREPARE stmt FROM @sql;
+    SET @account_db_key = p_account_db_key;
+    EXECUTE stmt USING @account_db_key;
+    DEALLOCATE PREPARE stmt;
+END ;;
+DELIMITER ;
+
+-- 시그널 히스토리 저장 (Shard 2용)
+DROP PROCEDURE IF EXISTS `fp_signal_history_save`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_signal_history_save`(
+    IN p_signal_id VARCHAR(128),
+    IN p_alarm_id VARCHAR(128),
+    IN p_signal_type VARCHAR(10),
+    IN p_signal_price DECIMAL(15,4)
+)
+BEGIN
+    DECLARE v_account_db_key BIGINT UNSIGNED;
+    DECLARE v_symbol VARCHAR(50);
+    DECLARE ProcParam VARCHAR(4000);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET ProcParam = CONCAT(p_signal_id, ',', p_alarm_id, ',', p_signal_type, ',', p_signal_price);
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        ROLLBACK;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_signal_history_save', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+    END;
+    
+    START TRANSACTION;
+    
+    SELECT account_db_key, symbol INTO v_account_db_key, v_symbol
+    FROM table_signal_alarms 
+    WHERE alarm_id = p_alarm_id AND is_deleted = 0;
+    
+    IF v_account_db_key IS NULL THEN
+        ROLLBACK;
+        SELECT 1002 as ErrorCode, '알림을 찾을 수 없습니다' as ErrorMessage;
+    ELSE
+        INSERT INTO table_signal_history (
+            signal_id, alarm_id, account_db_key, symbol, signal_type, signal_price,
+            volume, triggered_at, created_at, updated_at,
+            price_after_1d, profit_rate, is_win, evaluated_at,
+            is_deleted, deleted_at
+        ) VALUES (
+            p_signal_id, p_alarm_id, v_account_db_key, v_symbol, p_signal_type, p_signal_price,
+            0, NOW(6), NOW(6), NOW(6),
+            NULL, NULL, NULL, NULL,
+            0, NULL
+        );
+        
+        COMMIT;
+        SELECT 0 as ErrorCode, '시그널이 저장되었습니다' as ErrorMessage;
+    END IF;
+END ;;
+DELIMITER ;
+
+-- 성과 업데이트 (Shard 2용)
+DROP PROCEDURE IF EXISTS `fp_signal_performance_update`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_signal_performance_update`(
+    IN p_signal_id VARCHAR(128),
+    IN p_price_after_1d DECIMAL(15,4),
+    IN p_profit_rate DECIMAL(10,4),
+    IN p_is_win TINYINT(1)
+)
+BEGIN
+    DECLARE v_signal_exists INT DEFAULT 0;
+    DECLARE ProcParam VARCHAR(4000);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET ProcParam = CONCAT(p_signal_id, ',', p_price_after_1d, ',', p_profit_rate, ',', p_is_win);
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        ROLLBACK;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_signal_performance_update', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+    END;
+    
+    START TRANSACTION;
+    
+    SELECT COUNT(*) INTO v_signal_exists
+    FROM table_signal_history 
+    WHERE signal_id = p_signal_id AND is_deleted = 0;
+    
+    IF v_signal_exists = 0 THEN
+        ROLLBACK;
+        SELECT 1002 as ErrorCode, '시그널을 찾을 수 없습니다' as ErrorMessage;
+    ELSE
+        UPDATE table_signal_history 
+        SET price_after_1d = p_price_after_1d,
+            profit_rate = p_profit_rate,
+            is_win = p_is_win,
+            evaluated_at = NOW(6),
+            updated_at = NOW(6)
+        WHERE signal_id = p_signal_id;
+        
+        COMMIT;
+        SELECT 0 as ErrorCode, '시그널 성과가 업데이트되었습니다' as ErrorMessage;
+    END IF;
+END ;;
+DELIMITER ;
+
+-- 미평가 시그널 조회 (Shard 2용)
+DROP PROCEDURE IF EXISTS `fp_signal_get_pending_evaluation`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_signal_get_pending_evaluation`(
+    IN p_evaluation_date DATE
+)
+BEGIN
+    DECLARE ProcParam VARCHAR(4000);
+    SET ProcParam = CONCAT('evaluation_date=', IFNULL(p_evaluation_date, 'NULL'));
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_signal_get_pending_evaluation', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+    END;
+    
+    IF p_evaluation_date IS NULL THEN
+        SELECT 1 as ErrorCode, 'evaluation_date parameter is required' as ErrorMessage;
+        LEAVE;
+    END IF;
+    
+    SELECT 0 as ErrorCode, 'SUCCESS' as ErrorMessage;
+    
+    SELECT 
+        signal_id, alarm_id, account_db_key, symbol, signal_type, signal_price, triggered_at
+    FROM table_signal_history 
+    WHERE DATE(triggered_at) = p_evaluation_date
+      AND evaluated_at IS NULL
+      AND is_deleted = 0
+    ORDER BY triggered_at ASC;
+END ;;
+DELIMITER ;
+
+-- 통계 조회 (Shard 2용)
+DROP PROCEDURE IF EXISTS `fp_signal_statistics_get`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_signal_statistics_get`(
+    IN p_account_db_key BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE ProcParam VARCHAR(4000);
+    SET ProcParam = CONCAT('account_db_key=', p_account_db_key);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_signal_statistics_get', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+    END;
+    
+    SELECT 0 as ErrorCode, 'SUCCESS' as ErrorMessage;
+    
+    SELECT 
+        (SELECT COUNT(*) FROM table_signal_alarms WHERE account_db_key = p_account_db_key AND is_deleted = 0) as total_alarms,
+        (SELECT COUNT(*) FROM table_signal_alarms WHERE account_db_key = p_account_db_key AND is_active = 1 AND is_deleted = 0) as active_alarms,
+        COUNT(*) as total_signals,
+        SUM(CASE WHEN signal_type = 'BUY' THEN 1 ELSE 0 END) as buy_signals,
+        SUM(CASE WHEN signal_type = 'SELL' THEN 1 ELSE 0 END) as sell_signals,
+        SUM(CASE WHEN is_win IS NOT NULL THEN 1 ELSE 0 END) as evaluated_signals,
+        SUM(CASE WHEN is_win = 1 THEN 1 ELSE 0 END) as win_signals,
+        COALESCE(ROUND(AVG(CASE WHEN is_win = 1 THEN 100.0 ELSE 0.0 END), 2), 0.0) as overall_win_rate,
+        COALESCE(ROUND(AVG(profit_rate), 2), 0.0) as overall_profit_rate
+    FROM table_signal_history 
+    WHERE account_db_key = p_account_db_key AND is_deleted = 0;
 END ;;
 DELIMITER ;

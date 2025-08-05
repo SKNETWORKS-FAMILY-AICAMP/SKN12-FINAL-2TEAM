@@ -49,9 +49,16 @@ class ChatTemplateImpl(BaseTemplate):
                         for room_id in room_ids:
                             # State Machine으로 방 상태 확인
                             room_state = await state_machine.get_room_state(room_id)
+                            
+                            # 삭제 중이거나 삭제된 방은 목록에서 제외
                             if room_state in [RoomState.DELETING, RoomState.DELETED]:
                                 Logger.debug(f"삭제 중/삭제된 방 필터링: room_id={room_id}, state={room_state.value if room_state else 'UNKNOWN'}")
-                                continue  # 삭제 중이거나 삭제된 방은 목록에서 제외
+                                continue
+                            
+                            # Redis에 방 정보가 있지만 State Machine에 상태가 없는 경우 ACTIVE로 설정
+                            if room_state is None:
+                                await state_machine.transition_room(room_id, RoomState.ACTIVE)
+                                Logger.info(f"Redis 방 상태 복원: room_id={room_id} → ACTIVE")
                             
                             room_key = f"room:{room_id}"
                             raw = await redis.get_string(room_key)

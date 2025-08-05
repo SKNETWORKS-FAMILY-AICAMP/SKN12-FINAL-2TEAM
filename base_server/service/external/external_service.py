@@ -36,11 +36,13 @@ class ExternalService:
                     if health_result.get("healthy"):
                         Logger.info(f"✅ Korea Investment REST API 테스트 완료: {health_result.get('test_result', '')}")
                         
-                        # WebSocket 서비스 초기화 및 테스트
+                        # WebSocket 서비스 초기화 및 테스트 - 무조건 성공해야 함
                         korea_websocket = await get_korea_investment_websocket()
-                        ws_health_result = await korea_websocket.health_check(ki_config.app_key, ki_config.app_secret)
                         
-                        if ws_health_result.get("healthy"):
+                        try:
+                            ws_health_result = await korea_websocket.health_check(ki_config.app_key, ki_config.app_secret)
+                            
+                            # health_check는 이제 무조건 성공하거나 Exception 발생
                             Logger.info(f"✅ Korea Investment WebSocket 테스트 완료: {ws_health_result.get('test_result', '')}")
                             
                             # ServiceContainer에 등록
@@ -49,12 +51,11 @@ class ExternalService:
                                 korea_websocket
                             )
                             Logger.info("✅ Korea Investment 서비스 (REST + WebSocket) 초기화 완료")
-                        else:
-                            Logger.error(f"❌ Korea Investment WebSocket 테스트 실패: {ws_health_result.get('error', '')}")
-                            Logger.warn("⚠️ REST API만 사용 가능, WebSocket 실시간 데이터 제한됨")
                             
-                            # REST API만 등록
-                            ServiceContainer.set_korea_investment_service(KoreaInvestmentService, None)
+                        except RuntimeError as ws_error:
+                            Logger.error(f"❌ Korea Investment WebSocket 필수 연결 실패: {ws_error}")
+                            Logger.error("🚨 WebSocket 연결이 필수입니다 - 서버 초기화 중단")
+                            raise RuntimeError(f"Korea Investment WebSocket 연결 실패로 서버 시작 불가: {ws_error}")
                     else:
                         Logger.error(f"❌ Korea Investment REST API 테스트 실패: {health_result.get('error', '')}")
                 else:

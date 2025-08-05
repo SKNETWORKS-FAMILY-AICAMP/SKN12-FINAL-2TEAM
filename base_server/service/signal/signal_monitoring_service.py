@@ -6,8 +6,14 @@ from service.core.logger import Logger
 from service.service_container import ServiceContainer
 from service.external.korea_investment_websocket import KoreaInvestmentWebSocket
 from service.external.yahoo_finance_client import YahooFinanceClient
+from service.external.external_service import ExternalService
 from service.cache.cache_service import CacheService
+# Model Server 호출을 위한 import
+from template.model.common.model_serialize import PredictRequest, PredictResponse
+from template.model.common.model_model import PredictionResult
 from service.scheduler.scheduler_service import SchedulerService
+# NotificationService 알림 발송을 위한 import
+from service.notification.notification_service import NotificationService, NotificationChannel
 from service.scheduler.base_scheduler import ScheduleJob, ScheduleType
 import uuid
 
@@ -33,38 +39,23 @@ class SignalMonitoringService:
             return
         
         try:
-            # 한국투자증권 WebSocket 초기화 (미국 주식용)
+            # 한국투자증권 WebSocket 초기화 (ExternalService에서 이미 KoreaInvestmentService 초기화됨)
             cls._korea_websocket = KoreaInvestmentWebSocket()
             
-            # ServiceContainer에서 config 가져오기 (template 초기화 시 이미 로드됨)
+            # ServiceContainer에서 이미 초기화된 KoreaInvestmentService 확인
             try:
-                from template.base.template_service import TemplateService
-                app_config = TemplateService.get_config()
+                from service.service_container import ServiceContainer
                 
-                if app_config and hasattr(app_config, 'externalConfig') and app_config.externalConfig:
-                    korea_config = getattr(app_config.externalConfig, 'korea_investment', None)
-                    
-                    if korea_config:
-                        app_key = getattr(korea_config, 'app_key', None)
-                        app_secret = getattr(korea_config, 'app_secret', None)
-                        
-                        if app_key and app_secret:
-                            # WebSocket 연결 시도
-                            connection_success = await cls._korea_websocket.connect(app_key, app_secret)
-                            if connection_success:
-                                Logger.info("✅ 한국투자증권 WebSocket 연결 성공 (미국주식용)")
-                            else:
-                                Logger.error("❌ 한국투자증권 WebSocket 연결 실패")
-                                # 연결 실패해도 서비스는 시작 (폴백으로 Yahoo Finance 사용 가능)
-                        else:
-                            Logger.warn("⚠️ 한국투자증권 API 키가 설정되지 않음 - WebSocket 사용 불가")
-                    else:
-                        Logger.warn("⚠️ 한국투자증권 설정을 찾을 수 없음 - WebSocket 사용 불가")
+                # ExternalService에서 이미 ServiceContainer에 등록했는지 확인
+                if ServiceContainer.is_korea_investment_service_initialized():
+                    Logger.info("✅ KoreaInvestmentService 이미 초기화됨 (ExternalService)")
                 else:
-                    Logger.warn("⚠️ External 설정을 찾을 수 없음 - WebSocket 사용 불가")
+                    Logger.warn("⚠️ KoreaInvestmentService 초기화되지 않음 - WebSocket 기능 제한")
                     
-            except Exception as config_e:
-                Logger.error(f"❌ 설정 로드 실패: {config_e} - WebSocket 사용 불가")
+            except Exception as service_e:
+                Logger.warn(f"⚠️ ServiceContainer 확인 실패: {service_e} - WebSocket 기능 제한")
+            
+            # SchedulerService는 이미 상단에서 import됨
             
             # 주기적으로 활성 알림 동기화 (5분마다)
             sync_job = ScheduleJob(
@@ -338,29 +329,66 @@ class SignalMonitoringService:
             days_data = []
             
             if cls._is_us_stock(symbol):
-                # Yahoo Finance에서 초기 데이터 가져오기 (캐싱용)
-                async with YahooFinanceClient(cache_service) as client:
-                    stock_detail = await client.get_stock_detail(symbol)
-                    if stock_detail:
-                        # 임시로 최근 가격 기반 더미 데이터 생성
-                        base_price = stock_detail.current_price
-                        for i in range(5):
-                            date = (datetime.now() - timedelta(days=i)).strftime('%Y%m%d')
-                            # ±2% 변동
-                            import random
-                            variation = random.uniform(0.98, 1.02)
-                            price = base_price * variation
-                            
-                            days_data.append({
-                                'date': date,
-                                'price': price,
-                                'high': price * 1.01,
-                                'low': price * 0.99,
-                                'open': price,
-                                'volume': stock_detail.volume
-                            })
-                        
-                        Logger.info(f"Yahoo Finance로 초기 데이터 생성: {symbol} @ ${base_price}")
+                # Model Server에서 예측 데이터 가져오기 (template/model/common 사용)
+                prediction_result = await cls._call_model_server_predict(symbol)
+                if prediction_result and prediction_result.status == 'success':
+                    # PredictionResult를 5일치 캐시 형태로 변환  
+                    current_price = prediction_result.current_price
+                    predictions = prediction_result.predictions
+                    
+                    # 현재 데이터 추가
+                    today = datetime.now().strftime('%Y%m%d')
+                    days_data.append({
+                        'date': today,
+                        'price': current_price,
+                        'high': current_price * 1.005,  # 0.5% 상위
+                        'low': current_price * 0.995,   # 0.5% 하위
+                        'open': current_price,
+                        'volume': 1000000  # 더미 볼륨
+                    })
+                    
+                    # 예측 데이터 추가 (5일간)
+                    for pred in predictions:
+                        pred_date = pred.date.replace('-', '')
+                        pred_price = pred.predicted_close
+                        days_data.append({
+                            'date': pred_date,
+                            'price': pred_price,
+                            'high': pred_price * 1.005,
+                            'low': pred_price * 0.995,
+                            'open': pred_price,
+                            'volume': 1000000
+                        })
+                    
+                    Logger.info(f"Model Server로 예측 데이터 생성: {symbol} @ ${current_price}, confidence={prediction_result.confidence_score}")
+                    
+                    # Model Server 예측 결과를 시그널로 분석
+                    signal_data = cls._analyze_prediction_for_signals(prediction_result)
+                    if signal_data:
+                        Logger.info(f"🔔 Model Server 시그널 감지: {symbol} {signal_data['signal_type']}")
+                        # 시그널 저장 및 알림 발송
+                        await cls._process_model_server_signal(symbol, signal_data)
+                    
+                else:
+                    # Model Server 실패 시 Yahoo Finance 폴백
+                    Logger.warn(f"Model Server 실패, Yahoo Finance 폴백 사용: {symbol}")
+                    async with YahooFinanceClient(cache_service) as client:
+                        stock_detail = await client.get_stock_detail(symbol)
+                        if stock_detail:
+                            base_price = stock_detail.current_price
+                            for i in range(5):
+                                date = (datetime.now() - timedelta(days=i)).strftime('%Y%m%d')
+                                import random
+                                variation = random.uniform(0.98, 1.02)
+                                price = base_price * variation
+                                days_data.append({
+                                    'date': date,
+                                    'price': price,
+                                    'high': price * 1.01,
+                                    'low': price * 0.99,
+                                    'open': price,
+                                    'volume': stock_detail.volume
+                                })
             else:
                 # 한국 주식은 서비스하지 않음
                 Logger.info(f"한국 주식은 서비스하지 않습니다: {symbol}")
@@ -372,6 +400,218 @@ class SignalMonitoringService:
                 
         except Exception as e:
             Logger.error(f"과거 데이터 캐싱 실패 ({symbol}): {e}")
+    
+    @classmethod
+    async def _call_model_server_predict(cls, symbol: str) -> Optional[PredictionResult]:
+        """Model Server API 호출하여 예측 데이터 가져오기 (template/model/common 사용)"""
+        try:
+            external_service = ServiceContainer.get_external_service()
+            
+            # PredictRequest 객체 생성 (template/model/common 사용)
+            predict_request = PredictRequest(
+                symbol=symbol,
+                days=60,  # 기본값
+                model_type="lstm"  # 기본값
+            )
+            
+            # Model Server API 호출 (JSON 형태로 전송)
+            response_data = await external_service.post_request(
+                api_name="model_server",
+                endpoint="/api/model/predict",
+                data=predict_request.model_dump(),  # Pydantic 모델을 dict로 변환
+                timeout=30
+            )
+            
+            if response_data and isinstance(response_data, dict):
+                # 응답을 PredictionResult로 파싱
+                if response_data.get('status') == 'success':
+                    prediction_result = PredictionResult(**response_data)
+                    Logger.info(f"Model Server 예측 성공: {symbol}, confidence={prediction_result.confidence_score}")
+                    return prediction_result
+                else:
+                    Logger.warn(f"Model Server 응답 실패: {symbol}, status={response_data.get('status')}")
+                    return None
+            else:
+                Logger.warn(f"Model Server 응답 형식 오류: {symbol}, response={response_data}")
+                return None
+                
+        except Exception as e:
+            Logger.error(f"Model Server API 호출 실패 ({symbol}): {e}")
+            return None
+    
+    @classmethod
+    def _analyze_prediction_for_signals(cls, prediction: PredictionResult) -> Optional[Dict]:
+        """PredictionResult를 분석하여 매수/매도 시그널 생성"""
+        try:
+            symbol = prediction.symbol
+            current_price = prediction.current_price
+            confidence = prediction.confidence_score
+            predictions = prediction.predictions
+            bollinger_bands = prediction.bollinger_bands
+            
+            if not predictions or len(predictions) < 1:
+                Logger.warn(f"예측 데이터 부족: {symbol}")
+                return None
+            
+            # 1일차 예측 분석
+            day1_pred = predictions[0]
+            day1_price = day1_pred.predicted_close
+            day1_trend = day1_pred.trend
+            
+            # 가격 변화율 계산 (%)
+            price_change_pct = (day1_price - current_price) / current_price * 100
+            
+            # 볼린저 밴드 분석 (과매수/과매도 구간)
+            bb_position = 0.5  # 기본값 (중간)
+            if bollinger_bands and len(bollinger_bands) > 0:
+                bb = bollinger_bands[0]
+                if bb.bb_upper > bb.bb_lower:
+                    # 현재가의 볼린저 밴드 내 위치 (0~1)
+                    bb_position = (current_price - bb.bb_lower) / (bb.bb_upper - bb.bb_lower)
+                    bb_position = max(0, min(1, bb_position))  # 0~1 범위로 제한
+            
+            # 시그널 생성 로직
+            signal_type = "HOLD"
+            signal_strength = confidence
+            signal_reason = []
+            
+            # 강한 매수 시그널 조건
+            if (day1_trend == "up" and 
+                price_change_pct > 2.0 and 
+                confidence > 0.75 and 
+                bb_position < 0.8):  # 과매수 구간 아님
+                signal_type = "STRONG_BUY"
+                signal_reason.append(f"상승추세 예측 (+{price_change_pct:.2f}%)")
+                signal_reason.append(f"고신뢰도 ({confidence:.2f})")
+                
+            # 일반 매수 시그널 조건  
+            elif (day1_trend == "up" and 
+                  price_change_pct > 1.0 and 
+                  confidence > 0.65):
+                signal_type = "BUY"
+                signal_reason.append(f"상승추세 예측 (+{price_change_pct:.2f}%)")
+                
+            # 강한 매도 시그널 조건
+            elif (day1_trend == "down" and 
+                  price_change_pct < -2.0 and 
+                  confidence > 0.75 and 
+                  bb_position > 0.2):  # 과매도 구간 아님
+                signal_type = "STRONG_SELL"
+                signal_reason.append(f"하락추세 예측 ({price_change_pct:.2f}%)")
+                signal_reason.append(f"고신뢰도 ({confidence:.2f})")
+                
+            # 일반 매도 시그널 조건
+            elif (day1_trend == "down" and 
+                  price_change_pct < -1.0 and 
+                  confidence > 0.65):
+                signal_type = "SELL"
+                signal_reason.append(f"하락추세 예측 ({price_change_pct:.2f}%)")
+            
+            # 볼린저 밴드 특별 시그널
+            if bb_position > 0.95:  # 상한선 근처 (과매수)
+                signal_type = "SELL" if signal_type == "HOLD" else signal_type
+                signal_reason.append("볼린저 밴드 과매수 구간")
+            elif bb_position < 0.05:  # 하한선 근처 (과매도)
+                signal_type = "BUY" if signal_type == "HOLD" else signal_type
+                signal_reason.append("볼린저 밴드 과매도 구간")
+            
+            # HOLD 시그널은 알림을 발송하지 않음
+            if signal_type == "HOLD":
+                return None
+                
+            # 시그널 객체 생성
+            signal = {
+                "signal_id": str(uuid.uuid4()),
+                "symbol": symbol,
+                "signal_type": signal_type,
+                "signal_strength": signal_strength,
+                "current_price": current_price,
+                "predicted_price": day1_price,
+                "price_change_pct": price_change_pct,
+                "confidence_score": confidence,
+                "bollinger_position": bb_position,
+                "reasons": signal_reason,
+                "prediction_date": prediction.prediction_date,
+                "created_at": datetime.now().isoformat()
+            }
+            
+            Logger.info(f"시그널 생성: {symbol} {signal_type} (강도: {signal_strength:.2f}, 변화율: {price_change_pct:+.2f}%)")
+            return signal
+            
+        except Exception as e:
+            Logger.error(f"시그널 분석 실패 ({prediction.symbol}): {e}")
+            return None
+    
+    @classmethod
+    async def _process_model_server_signal(cls, symbol: str, signal_data: Dict):
+        """Model Server에서 생성된 시그널 처리 및 알림 발송"""
+        try:
+            db_service = ServiceContainer.get_database_service()
+            
+            # 활성 샤드 목록 조회
+            active_shards = await cls._get_active_shard_ids(db_service)
+            if not active_shards:
+                Logger.warn("활성 샤드가 없어 Model Server 시그널 처리 건너뜀")
+                return
+            
+            signal_type = signal_data['signal_type']
+            current_price = signal_data['current_price']
+            confidence = signal_data['confidence_score']
+            
+            # 시그널 히스토리 저장 및 알림 발송 (모든 구독자)
+            for shard_id in active_shards:
+                try:
+                    # 해당 종목을 구독하는 사용자 조회
+                    result = await db_service.execute_shard_procedure_by_shard_id(
+                        shard_id,
+                        "fp_signal_alarms_get_by_symbol",
+                        (symbol,)
+                    )
+                    
+                    if result and len(result) > 1:
+                        for alarm_data in result[1:]:
+                            alarm_id = alarm_data.get('alarm_id')
+                            account_db_key = alarm_data.get('account_db_key')
+                            
+                            # 시그널 히스토리 저장
+                            signal_id = signal_data['signal_id']
+                            save_result = await db_service.execute_shard_procedure(
+                                account_db_key,
+                                "fp_signal_history_save",
+                                (signal_id, alarm_id, signal_type, current_price)
+                            )
+                            
+                            if save_result and save_result[0].get('ErrorCode') == 0:
+                                Logger.info(f"✅ Model Server 시그널 저장: {alarm_id} - {signal_type} @ {current_price} (신뢰도: {confidence:.2f})")
+                                
+                                # 볼린저 밴드 데이터 생성 (Model Server 기반)
+                                band_data = {
+                                    'upper_band': current_price * (1 + signal_data['bollinger_position'] * 0.05),
+                                    'avg_price': current_price,
+                                    'lower_band': current_price * (1 - signal_data['bollinger_position'] * 0.05),
+                                    'std_dev': current_price * 0.02,
+                                    'timestamp': signal_data['created_at']
+                                }
+                                
+                                # NotificationService를 통한 알림 전송
+                                await cls._send_signal_notification(
+                                    account_db_key,
+                                    shard_id,
+                                    symbol,
+                                    signal_type,
+                                    current_price,
+                                    band_data,
+                                    confidence
+                                )
+                            else:
+                                Logger.error(f"Model Server 시그널 저장 실패: {alarm_id}")
+                                
+                except Exception as e:
+                    Logger.error(f"샤드 {shard_id} Model Server 시그널 처리 실패: {e}")
+                    continue
+                    
+        except Exception as e:
+            Logger.error(f"Model Server 시그널 처리 실패: {e}")
     
     @classmethod
     async def _update_5days_cache(cls, symbol: str, new_data: Dict):
@@ -674,10 +914,9 @@ class SignalMonitoringService:
     
     @classmethod
     async def _update_signal_performance(cls):
-        """1일 경과한 시그널의 성과 업데이트"""
+        """1일 경과한 시그널의 성과 업데이트 - 실제 가격 조회 및 계산"""
         try:
             db_service = ServiceContainer.get_database_service()
-            cache_service = ServiceContainer.get_cache_service()
             
             # 활성 샤드 목록 조회
             active_shards = await cls._get_active_shard_ids(db_service)
@@ -685,29 +924,94 @@ class SignalMonitoringService:
                 Logger.warn("활성 샤드가 없어 성과 업데이트 건너뜀")
                 return
             
-            # 활성 샤드에서만 성과 업데이트 필요한 시그널 처리
+            # 어제 날짜 (1일 경과한 시그널 평가)
+            yesterday = (datetime.now() - timedelta(days=1)).date()
+            total_updated = 0
+            
+            # 각 샤드에서 미평가 시그널 조회 및 처리
             for shard_id in active_shards:
                 try:
-                    # 어제 발생한 시그널들 조회 및 업데이트
+                    # 어제 발생한 미평가 시그널 조회
                     result = await db_service.execute_shard_procedure_by_shard_id(
                         shard_id,
-                        "fp_signal_performance_update",
-                        ()
+                        "fp_signal_get_pending_evaluation",
+                        (yesterday,)
                     )
                     
-                    if result and result[0].get('ErrorCode') == 0:
-                        updated_count = result[0].get('updated_count', 0)
-                        if updated_count > 0:
-                            Logger.info(f"샤드 {shard_id}: {updated_count}개 시그널 성과 업데이트")
+                    if not result or result[0].get('ErrorCode') != 0:
+                        Logger.warn(f"샤드 {shard_id}: 미평가 시그널 조회 실패")
+                        continue
+                    
+                    # 시그널 데이터가 있으면 처리 (첫 번째 행은 상태, 두 번째 행부터 데이터)
+                    if len(result) > 1:
+                        Logger.info(f"샤드 {shard_id}: {len(result)-1}개 미평가 시그널 발견")
+                        
+                        for signal_row in result[1:]:  # 첫 번째 행은 상태, 나머지가 시그널 데이터
+                            signal_id = signal_row.get('signal_id')
+                            account_db_key = signal_row.get('account_db_key')
+                            symbol = signal_row.get('symbol')
+                            signal_type = signal_row.get('signal_type')
+                            signal_price = float(signal_row.get('signal_price', 0))
                             
+                            if signal_price <= 0:
+                                Logger.warn(f"잘못된 시그널 가격: {signal_id}")
+                                continue
+                            
+                            # Yahoo Finance에서 현재 가격 조회
+                            current_price = await cls._get_current_price_for_evaluation(symbol)
+                            if current_price <= 0:
+                                Logger.warn(f"현재 가격 조회 실패: {symbol}")
+                                continue
+                            
+                            # 수익률 계산
+                            profit_rate = (current_price - signal_price) / signal_price * 100
+                            
+                            # 성공 판정 (1% 이상 움직임)
+                            is_win = 1 if abs(profit_rate) >= 1.0 else 0
+                            
+                            # DB 업데이트
+                            update_result = await db_service.execute_shard_procedure(
+                                account_db_key,
+                                "fp_signal_performance_update",
+                                (signal_id, current_price, profit_rate, is_win)
+                            )
+                            
+                            if update_result and update_result[0].get('ErrorCode') == 0:
+                                total_updated += 1
+                                Logger.info(f"✅ 시그널 성과 업데이트: {symbol} {signal_type} "
+                                          f"${signal_price:.2f} → ${current_price:.2f} "
+                                          f"({profit_rate:+.2f}%, {'성공' if is_win else '실패'})")
+                            else:
+                                Logger.error(f"시그널 성과 업데이트 실패: {signal_id}")
+                    
                 except Exception as e:
                     Logger.error(f"샤드 {shard_id} 성과 업데이트 실패: {e}")
                     continue
             
-            Logger.info("모든 시그널 성과 업데이트 완료")
+            Logger.info(f"✅ 시그널 성과 업데이트 완료: 총 {total_updated}개 시그널 처리")
             
         except Exception as e:
             Logger.error(f"시그널 성과 업데이트 실패: {e}")
+    
+    @classmethod
+    async def _get_current_price_for_evaluation(cls, symbol: str) -> float:
+        """성과 평가용 현재 가격 조회 (Yahoo Finance 사용)"""
+        try:
+            cache_service = ServiceContainer.get_cache_service()
+            
+            # Yahoo Finance 클라이언트로 실시간 가격 조회
+            async with YahooFinanceClient(cache_service) as yahoo_client:
+                stock_detail = await yahoo_client.get_stock_detail(symbol)
+                if stock_detail and stock_detail.current_price > 0:
+                    Logger.info(f"💰 {symbol} 현재가: ${stock_detail.current_price:.2f}")
+                    return stock_detail.current_price
+                else:
+                    Logger.warn(f"Yahoo Finance에서 {symbol} 가격 조회 실패")
+                    return 0.0
+                    
+        except Exception as e:
+            Logger.error(f"현재 가격 조회 실패 ({symbol}): {e}")
+            return 0.0
     
     @classmethod
     async def get_bollinger_data(cls, symbol: str) -> Optional[Dict]:
@@ -760,6 +1064,15 @@ class SignalMonitoringService:
             # WebSocket 연결 해제
             if cls._korea_websocket:
                 await cls._korea_websocket.disconnect()
+            
+            # KoreaInvestmentService 종료
+            try:
+                from service.external.korea_investment_service import KoreaInvestmentService
+                if KoreaInvestmentService.is_initialized():
+                    await KoreaInvestmentService.shutdown()
+                    Logger.info("✅ KoreaInvestmentService 종료 완료")
+            except Exception as e:
+                Logger.error(f"❌ KoreaInvestmentService 종료 실패: {e}")
             
             cls._monitoring_symbols.clear()
             

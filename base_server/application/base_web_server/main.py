@@ -617,6 +617,21 @@ async def lifespan(app: FastAPI):
             from service.signal.signal_monitoring_service import SignalMonitoringService
             await SignalMonitoringService.init()
             Logger.info("✅ SignalMonitoringService 초기화 완료")
+            
+            # 일일 시그널 성과 업데이트 스케줄러 작업 등록
+            from service.scheduler.base_scheduler import ScheduleType, ScheduleJob
+            signal_performance_job = ScheduleJob(
+                job_id="signal_performance_daily_update",
+                name="일일 시그널 성과 업데이트",
+                schedule_type=ScheduleType.DAILY,
+                schedule_value="09:00",  # 매일 오전 9시 실행
+                callback=SignalMonitoringService._update_signal_performance,
+                use_distributed_lock=True,
+                lock_key="signal:update:performance:daily"
+            )
+            await SchedulerService.add_job(signal_performance_job)
+            Logger.info("✅ 일일 시그널 성과 업데이트 스케줄러 등록 완료 (매일 09:00)")
+            
         except Exception as e:
             Logger.error(f"❌ SignalMonitoringService 초기화 실패: {e}")
             Logger.warn("⚠️ SignalMonitoringService 없이 계속 진행 - 시그널 알림 기능 제한됨")

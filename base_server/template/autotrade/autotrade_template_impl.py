@@ -352,11 +352,17 @@ class AutoTradeTemplateImpl(BaseTemplate):
             
             db_service = ServiceContainer.get_database_service()
             
-            # 프로시저 호출 - 히스토리 조회
+            # 프로시저 호출 - 히스토리 조회 (SQL 프로시저 파라미터에 맞춤)
             result = await db_service.execute_shard_procedure(
                 account_db_key,
                 "fp_signal_history_get",
-                (account_db_key, request.alarm_id, request.limit, request.offset)
+                (
+                    account_db_key,
+                    request.alarm_id if request.alarm_id else "",        # 특정 알림 또는 전체
+                    request.symbol if request.symbol else "",            # 특정 종목 또는 전체  
+                    request.signal_type if request.signal_type else "",  # BUY/SELL 필터 또는 전체
+                    request.limit                                        # 조회 개수 제한
+                )
             )
             
             if not result:
