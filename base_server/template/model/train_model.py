@@ -19,6 +19,8 @@ warnings.filterwarnings('ignore')
 from data_collector import StockDataCollector
 from data_preprocessor import StockDataPreprocessor
 from pytorch_lstm_model import PyTorchStockLSTM
+# 🚀 Transformer 모델 import
+from transformer_model import PyTorchStockTransformer
 from config import get_model_save_dir, get_workspace_path, is_runpod_environment
 
 class ModelTrainer:
@@ -267,7 +269,7 @@ class ModelTrainer:
                    y_train: np.ndarray,
                    X_val: np.ndarray, 
                    y_val: np.ndarray,
-                   model_type: str = "lstm_attention",
+                   model_type: str = "transformer",  # 🚀 기본값을 Transformer로 변경
                    epochs: int = 100,
                    batch_size: int = 128) -> dict:  # 🔥 RTX 4090 최적화
         """
@@ -285,17 +287,42 @@ class ModelTrainer:
         """
         self.logger.info(f"Starting model training with {model_type}")
         
-        # 🚀 PyTorch 모델 초기화
-        self.model = PyTorchStockLSTM(
-            sequence_length=X_train.shape[1],
-            prediction_length=y_train.shape[1],
-            num_features=X_train.shape[2],
-            num_targets=y_train.shape[2]
-        )
-        
-        # 🔥 RTX 4090 최적화 모델 구축
-        pytorch_model = self.model.build_model(hidden_size=512, num_layers=4, dropout=0.2)
-        print(f"🚀 RTX 4090 최적화 모델 구축 완료!")
+        # 🚀 모델 타입에 따른 초기화
+        if model_type == "transformer":
+            self.model = PyTorchStockTransformer(
+                sequence_length=X_train.shape[1],
+                prediction_length=y_train.shape[1],
+                num_features=X_train.shape[2],
+                num_targets=y_train.shape[2]
+            )
+            
+            # 🚀 Transformer 모델 구축
+            pytorch_model = self.model.build_model(
+                d_model=512,
+                n_heads=8,
+                n_layers=6,
+                d_ff=2048,
+                dropout=0.1,
+                loss_type="multi_target"
+            )
+            print(f"🚀 Transformer + 고급 손실함수 모델 구축 완료!")
+            
+        else:  # LSTM 모델 (하위 호환성)
+            self.model = PyTorchStockLSTM(
+                sequence_length=X_train.shape[1],
+                prediction_length=y_train.shape[1],
+                num_features=X_train.shape[2],
+                num_targets=y_train.shape[2]
+            )
+            
+            # 🚀 LSTM 모델 구축
+            pytorch_model = self.model.build_model(
+                hidden_size=512, 
+                num_layers=4, 
+                dropout=0.2,
+                loss_type="multi_target"
+            )
+            print(f"🚀 LSTM + 고급 손실함수 모델 구축 완료!")
         
         # 학습 실행 (PyTorch)
         history = self.model.train_model(
@@ -363,7 +390,7 @@ class ModelTrainer:
     
     def run_full_training_pipeline(self,
                                  force_reload_data: bool = False,
-                                 model_type: str = "lstm_attention",
+                                 model_type: str = "transformer",  # 🚀 기본값을 Transformer로 변경
                                  epochs: int = 100,
                                  batch_size: int = 128):  # 🔥 RTX 4090 최적화
         """
