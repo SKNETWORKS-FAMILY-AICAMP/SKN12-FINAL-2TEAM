@@ -250,12 +250,13 @@ class StockDataPreprocessor:
         
         return predictions_original
     
-    def preprocess_for_inference(self, df: pd.DataFrame) -> np.ndarray:
+    def preprocess_for_inference(self, df: pd.DataFrame, symbol: str = "DEFAULT") -> np.ndarray:
         """
         추론용 데이터 전처리
         
         Args:
             df: 최근 60일 OHLCV 데이터
+            symbol: 주식 심볼 (종목별 스케일러 사용)
             
         Returns:
             정규화된 시퀀스 데이터
@@ -273,8 +274,14 @@ class StockDataPreprocessor:
         
         feature_data = df_processed[feature_columns].values
         
-        # 정규화 (학습 시 사용한 scaler 사용)
-        feature_data_scaled = self.scaler.transform(feature_data)
+        # 정규화 (종목별 스케일러 사용)
+        if symbol in self.symbol_scalers:
+            feature_data_scaled = self.symbol_scalers[symbol].transform(feature_data)
+        else:
+            # 종목별 스케일러가 없으면 임시로 fit_transform 사용
+            self.symbol_scalers[symbol] = MinMaxScaler()
+            feature_data_scaled = self.symbol_scalers[symbol].fit_transform(feature_data)
+            self.logger.warning(f"Created new scaler for {symbol} during inference")
         
         # 마지막 60일만 사용
         if len(feature_data_scaled) >= 60:

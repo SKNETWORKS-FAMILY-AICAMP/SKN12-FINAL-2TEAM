@@ -214,7 +214,7 @@ async def predict_single_stock(request: PredictionRequest):
             )
         
         # 전처리 및 추론
-        input_sequence = preprocessor.preprocess_for_inference(recent_data)
+        input_sequence = preprocessor.preprocess_for_inference(recent_data, request.symbol)
         predictions = model.predict(input_sequence)
         
         # 결과 포맷팅
@@ -301,7 +301,7 @@ async def predict_single_symbol(symbol: str, days: int) -> PredictionResult:
             raise ValueError(f"Insufficient data for symbol {symbol}")
         
         # 전처리 및 추론
-        input_sequence = preprocessor.preprocess_for_inference(recent_data)
+        input_sequence = preprocessor.preprocess_for_inference(recent_data, symbol)
         predictions = model.predict(input_sequence)
         
         # 결과 포맷팅

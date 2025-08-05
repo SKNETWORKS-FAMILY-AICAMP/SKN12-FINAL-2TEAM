@@ -231,7 +231,7 @@ class InferencePipeline:
             processed_data = self.preprocessor.preprocess_data(raw_data)
             
             # 4. 추론용 시퀀스 생성
-            input_sequence = self.preprocessor.preprocess_for_inference(processed_data)
+            input_sequence = self.preprocessor.preprocess_for_inference(processed_data, symbol)
             
             # 5. 모델 추론
             predictions = self.model.predict(input_sequence)
