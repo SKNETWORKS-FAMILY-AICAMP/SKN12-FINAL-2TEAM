@@ -1,0 +1,76 @@
+# Core ML and Data Science
+# tensorflow==2.19.0  # Commented out: Using PyTorch instead
+torch==2.3.1
+torchvision==0.18.1
+torchaudio==2.3.1
+numpy==1.26.4
+pandas==2.2.2
+scikit-learn==1.4.2
+
+# Stock Data
+yfinance==0.2.48
+curl_cffi==0.7.0  # Required for yfinance in cloud environments (RunPod)
+
+# API and Web Framework
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+pydantic==2.9.2
+
+# Database
+sqlalchemy==2.0.36
+pymysql==1.1.1  # MySQL driver
+# pymongo==4.10.1  # MongoDB - 현재 미사용
+# elasticsearch==8.15.1  # Elasticsearch - 현재 미사용
+# sqlite3 is included in Python standard library
+
+# Data Processing and Visualization
+matplotlib==3.9.2  # PyTorch 모델 학습 히스토리 시각화용
+# seaborn==0.13.2  # 현재 미사용
+# plotly==5.24.1  # 현재 미사용
+
+# Utilities
+python-multipart==0.0.12  # FastAPI 파일 업로드용
+# python-json-logger==2.0.7  # 현재 미사용 - 표준 logging 사용
+python-dotenv==1.0.1  # 환경 변수 관리
+requests==2.32.3  # HTTP 요청
+aiofiles==24.1.0  # 비동기 파일 처리
+
+# Development and Testing
+pytest==8.3.3
+pytest-asyncio==0.24.0
+black==24.10.0
+flake8==7.1.1
+
+# GPU and CUDA (for runpod)
+# These will be installed via runpod's CUDA base image
+# cudf-cu11
+# cupy-cuda11x
+
+# Additional ML libraries (현재 미사용 - 필요시 활성화)
+# xgboost==2.1.1
+# lightgbm==4.5.0
+
+# Time series analysis (현재 미사용 - 필요시 활성화)
+# statsmodels==0.14.4
+
+# Logging and Monitoring (현재 미사용 - 표준 logging 사용)
+# loguru==0.7.2
+# prometheus-client==0.21.0
+
+# Date and Time
+python-dateutil==2.9.0.post0
+pytz==2024.2
+
+# Async and Concurrency (included in Python standard library)
+# asyncio - Python 3.4+
+# concurrent.futures - Python 3.2+
+
+# HTTP Client (현재 requests 사용 중)
+# httpx==0.27.2  # 현재 미사용
+
+# Configuration
+# pyyaml==6.0.2  # 현재 미사용
+# configparser - Python 3.x standard library
+
+# Security (requests/urllib3 내부 의존성으로 자동 설치)
+# cryptography==43.0.3  # 현재 직접 사용 안함
