@@ -231,6 +231,11 @@ class FeaturePipelineTool:
         return_raw: bool = False,
         debug: bool = False
     ) -> Dict[str, Any]:
+        if debug:
+            print(f"[FeaturePipelineTool] transform called with:")
+            print(f"  - tickers: {tickers}")
+            print(f"  - feature_set: {feature_set}")
+            print(f"  - debug: {debug}")
         """
         완전한 피처 파이프라인 - 복합 피처 생성 + 선택적 정규화 + Raw/Normalized 동시 반환 지원
         
@@ -276,7 +281,12 @@ class FeaturePipelineTool:
 
         # Technical
         tech_features = [f for f in ["RSI", "MACD", "EMA"] if f in feature_set]
+        if debug:
+            print(f"[FeaturePipelineTool] Technical features requested: {tech_features}")
+            print(f"[FeaturePipelineTool] Tickers: {tickers}")
         if tech_features and tickers:
+            if debug:
+                print(f"[FeaturePipelineTool] Calling TechnicalAnalysisTool...")
             ta = TechnicalAnalysisTool(self.ai_chat_service).get_data(tickers=tickers)
             ta_data = None
             if isinstance(ta.results, dict):
