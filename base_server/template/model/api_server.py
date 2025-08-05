@@ -24,6 +24,9 @@ from data_preprocessor import StockDataPreprocessor
 from pytorch_lstm_model import PyTorchStockLSTM
 from config import get_model_paths
 
+# Common 규격 import (기존 방식만 사용)
+from common.model_model import PredictionResult as CommonPredictionResult, DailyPrediction, BollingerBand
+
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -44,15 +47,7 @@ class BatchPredictionRequest(BaseModel):
     days: int = Field(60, description="사용할 과거 데이터 일수")
     batch_size: int = Field(5, description="배치 크기")
 
-class PredictionResult(BaseModel):
-    """예측 결과"""
-    symbol: str
-    prediction_date: str
-    current_price: float
-    predictions: List[Dict[str, Any]]  # 5일간의 예측 결과
-    bollinger_bands: List[Dict[str, Any]]  # 5일간의 볼린저 밴드 (date는 str, 나머지는 float)
-    confidence_score: float
-    status: str
+# PredictionResult는 이제 Common에서 import
 
 class BatchPredictionResult(BaseModel):
     """배치 예측 결과"""
@@ -60,7 +55,7 @@ class BatchPredictionResult(BaseModel):
     total_symbols: int
     completed_symbols: int
     failed_symbols: int
-    results: List[PredictionResult]
+    results: List[CommonPredictionResult]
     processing_time: float
     status: str
 
@@ -136,43 +131,81 @@ async def load_model_and_preprocessor():
         
         logger.info("All components loaded successfully")
         
+        # Common 프로토콜 콜백 설정
+        setup_protocol_callbacks()
+        
     except Exception as e:
         logger.error(f"Error loading model/preprocessor: {str(e)}")
         model = None
         preprocessor = None
 
+def setup_protocol_callbacks():
+    """Common 프로토콜 콜백 함수들 설정 (단순화됨)"""
+    # 기본 방식만 사용하므로 콜백 설정 생략
+    pass
+
+async def predict_single_stock_internal(request: PredictionRequest) -> CommonPredictionResult:
+    """내부 예측 로직 (기존 코드 재사용)"""
+    if model is None or preprocessor is None:
+        raise Exception("Model or preprocessor not loaded")
+    
+    try:
+        logger.info(f"Processing prediction request for {request.symbol}")
+        
+        # 최근 데이터 수집
+        recent_data = data_collector.get_recent_data(request.symbol, request.days)
+        if recent_data is None or len(recent_data) < request.days:
+            raise Exception(f"Insufficient data for symbol {request.symbol}")
+        
+        # 전처리 및 추론
+        input_sequence = preprocessor.preprocess_for_inference(recent_data, request.symbol)
+        predictions_normalized = model.predict(input_sequence)
+        
+        # 정규화된 예측값을 실제 스케일로 역변환
+        predictions = preprocessor.inverse_transform_predictions(predictions_normalized, request.symbol)
+        
+        # 결과 포맷팅
+        result = format_prediction_result(request.symbol, recent_data, predictions)
+        
+        logger.info(f"Prediction completed for {request.symbol}")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error predicting {request.symbol}: {str(e)}")
+        raise Exception(str(e))
+
 def format_prediction_result(symbol: str, 
                            current_data: pd.DataFrame,
                            predictions: np.ndarray,
-                           confidence: float = 0.8) -> PredictionResult:
-    """예측 결과를 API 응답 형식으로 변환"""
+                           confidence: float = 0.8) -> CommonPredictionResult:
+    """예측 결과를 API 응답 형식으로 변환 (기존 방식 유지)"""
     
     current_price = float(current_data['Close'].iloc[-1])
     prediction_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    # 5일간의 예측 결과 포맷팅
+    # 5일간의 상세 예측 결과 포맷팅
     prediction_list = []
     bollinger_list = []
     
     for i in range(5):
-        day_prediction = {
-            "day": i + 1,
-            "date": (datetime.now() + timedelta(days=i+1)).strftime("%Y-%m-%d"),
-            "predicted_close": float(predictions[0, i, 0]),  # Close 예측
-            "trend": "up" if predictions[0, i, 0] > current_price else "down"
-        }
+        day_prediction = DailyPrediction(
+            day=i + 1,
+            date=(datetime.now() + timedelta(days=i+1)).strftime("%Y-%m-%d"),
+            predicted_close=float(predictions[0, i, 0]),  # Close 예측
+            trend="up" if predictions[0, i, 0] > current_price else "down"
+        )
         prediction_list.append(day_prediction)
         
-        bollinger_band = {
-            "day": i + 1,
-            "date": (datetime.now() + timedelta(days=i+1)).strftime("%Y-%m-%d"),
-            "bb_upper": float(predictions[0, i, 1]),  # BB_Upper 예측
-            "bb_lower": float(predictions[0, i, 2]),  # BB_Lower 예측
-            "bb_middle": (float(predictions[0, i, 1]) + float(predictions[0, i, 2])) / 2
-        }
+        bollinger_band = BollingerBand(
+            day=i + 1,
+            date=(datetime.now() + timedelta(days=i+1)).strftime("%Y-%m-%d"),
+            bb_upper=float(predictions[0, i, 1]),  # BB_Upper 예측
+            bb_lower=float(predictions[0, i, 2]),  # BB_Lower 예측
+            bb_middle=(float(predictions[0, i, 1]) + float(predictions[0, i, 2])) / 2
+        )
         bollinger_list.append(bollinger_band)
     
-    return PredictionResult(
+    return CommonPredictionResult(
         symbol=symbol,
         prediction_date=prediction_date,
         current_price=current_price,
@@ -196,39 +229,33 @@ async def health_check():
         timestamp=datetime.now().isoformat()
     )
 
-@app.post("/predict", response_model=PredictionResult)
+@app.post("/predict", response_model=CommonPredictionResult)
 async def predict_single_stock(request: PredictionRequest):
-    """단일 종목 예측"""
-    if model is None or preprocessor is None:
-        raise HTTPException(status_code=503, detail="Model or preprocessor not loaded")
-    
+    """단일 종목 예측 (FastAPI 엔드포인트)"""
     try:
-        logger.info(f"Processing prediction request for {request.symbol}")
-        
-        # 최근 데이터 수집
-        recent_data = data_collector.get_recent_data(request.symbol, request.days)
-        if recent_data is None or len(recent_data) < request.days:
-            raise HTTPException(
-                status_code=404, 
-                detail=f"Insufficient data for symbol {request.symbol}"
-            )
-        
-        # 전처리 및 추론
-        input_sequence = preprocessor.preprocess_for_inference(recent_data, request.symbol)
-        predictions_normalized = model.predict(input_sequence)
-        
-        # 정규화된 예측값을 실제 스케일로 역변환
-        predictions = preprocessor.inverse_transform_predictions(predictions_normalized, request.symbol)
-        
-        # 결과 포맷팅
-        result = format_prediction_result(request.symbol, recent_data, predictions)
-        
-        logger.info(f"Prediction completed for {request.symbol}")
+        result = await predict_single_stock_internal(request)
         return result
-        
     except Exception as e:
-        logger.error(f"Error predicting {request.symbol}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# 단순화된 Common 엔드포인트 (기존 방식 사용)
+@app.post("/api/v1/predict", response_model=CommonPredictionResult)
+async def predict_common_format(request: PredictionRequest):
+    """Common 규격 단일 예측 API (기존 방식)"""
+    return await predict_single_stock_internal(request)
+
+@app.get("/api/v1/models")
+async def list_models_common():
+    """모델 정보 조회 API"""
+    return {
+        "models": [{
+            "model_type": "PyTorch LSTM",
+            "version": "1.0.0",
+            "description": "LSTM model for stock price and Bollinger Band prediction",
+            "supported_features": ["price_prediction", "bollinger_bands", "trend_analysis"],
+            "performance_metrics": {"accuracy": 0.8, "confidence": 0.85}
+        }]
+    }
 
 @app.post("/predict/batch", response_model=BatchPredictionResult)
 async def predict_batch_stocks(request: BatchPredictionRequest):
@@ -263,7 +290,7 @@ async def predict_batch_stocks(request: BatchPredictionRequest):
                 logger.error(f"Failed to predict {symbol}: {str(result)}")
                 failed += 1
                 # 실패한 경우에도 결과에 포함
-                error_result = PredictionResult(
+                error_result = CommonPredictionResult(
                     symbol=symbol,
                     prediction_date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     current_price=0.0,
@@ -295,7 +322,7 @@ async def predict_batch_stocks(request: BatchPredictionRequest):
         status="completed"
     )
 
-async def predict_single_symbol(symbol: str, days: int) -> PredictionResult:
+async def predict_single_symbol(symbol: str, days: int) -> CommonPredictionResult:
     """단일 심볼 예측 (내부 함수)"""
     try:
         # 최근 데이터 수집
