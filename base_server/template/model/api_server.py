@@ -48,6 +48,19 @@ data_collector = None
 # Common 프로토콜 인스턴스
 model_protocol = ModelProtocol()
 
+# ============================================================================
+# 에러 코드 정의 (Account 템플릿 패턴 준수)
+# ============================================================================
+class ErrorCodes:
+    """모델 서비스 에러 코드"""
+    SUCCESS = 0                    # 성공
+    SERVER_ERROR = 5000           # 서버 내부 오류
+    MODEL_LOAD_ERROR = 5001       # 모델 로딩 실패
+    PREPROCESSING_ERROR = 5002    # 전처리 오류
+    PREDICTION_ERROR = 5003       # 예측 실패
+    INVALID_REQUEST = 5004        # 잘못된 요청 파라미터
+    DATA_COLLECTION_ERROR = 5005  # 데이터 수집 실패
+
 class PredictionRequest(BaseModel):
     """단일 예측 요청"""
     symbol: str = Field(..., description="주식 심볼 (예: AAPL)")
@@ -158,8 +171,25 @@ def setup_protocol_callbacks():
     model_protocol.on_models_list_req_callback = handle_common_models_list
 
 async def handle_common_predict(session, request: CommonPredictRequest) -> CommonPredictResponse:
-    """Common 규격 단일 예측 처리"""
+    """Common 규격 단일 예측 처리 (팀 표준 BaseRequest/BaseResponse 기반)"""
+    response = CommonPredictResponse(
+        errorCode=ErrorCodes.SUCCESS,
+        sequence=request.sequence
+    )
+    
     try:
+        # 요청 파라미터 검증
+        if not request.symbol:
+            response.errorCode = ErrorCodes.INVALID_REQUEST
+            response.message = "Symbol is required"
+            return response
+            
+        # 모델/전처리기 로딩 확인
+        if model is None or preprocessor is None:
+            response.errorCode = ErrorCodes.MODEL_LOAD_ERROR
+            response.message = "Model or preprocessor not loaded"
+            return response
+        
         # Common Request를 내부 형식으로 변환
         internal_request = PredictionRequest(
             symbol=request.symbol,
@@ -169,39 +199,48 @@ async def handle_common_predict(session, request: CommonPredictRequest) -> Commo
         # 기존 예측 로직 사용
         result = await predict_single_stock_internal(internal_request)
         
-        return CommonPredictResponse(
-            success=True,
-            result=result,
-            request_id=request.request_id,
-            timestamp=request.timestamp
-        )
+        response.result = result
+        response.message = "Prediction completed successfully"
+        
     except Exception as e:
-        return CommonPredictResponse(
-            success=False,
-            message=str(e),
-            request_id=request.request_id,
-            error_code="PREDICTION_ERROR"
-        )
+        logger.error(f"Prediction error for {request.symbol}: {str(e)}")
+        response.errorCode = ErrorCodes.PREDICTION_ERROR
+        response.message = f"Prediction failed: {str(e)}"
+    
+    return response
 
 async def handle_common_batch_predict(session, request: CommonBatchPredictRequest) -> CommonBatchPredictResponse:
-    """Common 규격 배치 예측 처리"""
+    """Common 규격 배치 예측 처리 (팀 표준 BaseRequest/BaseResponse 기반)"""
+    response = CommonBatchPredictResponse(
+        errorCode=ErrorCodes.SUCCESS,
+        sequence=request.sequence
+    )
+    
     try:
-        # Common Request를 내부 형식으로 변환
-        internal_request = BatchPredictionRequest(
-            symbols=request.symbols,
-            days=request.days,
-            batch_size=len(request.symbols)
-        )
+        # 요청 파라미터 검증
+        if not request.symbols or len(request.symbols) == 0:
+            response.errorCode = ErrorCodes.INVALID_REQUEST
+            response.message = "Symbols list is required and cannot be empty"
+            return response
+            
+        # 모델/전처리기 로딩 확인
+        if model is None or preprocessor is None:
+            response.errorCode = ErrorCodes.MODEL_LOAD_ERROR
+            response.message = "Model or preprocessor not loaded"
+            return response
         
-        # 기존 배치 예측 로직 사용 (내부 함수 호출)
-        batch_symbols = request.symbols
+        # 배치 예측 실행
         batch_results = []
+        success_count = 0
         
-        for symbol in batch_symbols:
+        for symbol in request.symbols:
             try:
                 result = await predict_single_symbol(symbol, request.days)
                 batch_results.append(result)
+                if result.status == "success":
+                    success_count += 1
             except Exception as e:
+                logger.warning(f"Failed to predict {symbol}: {str(e)}")
                 # 실패한 경우 에러 결과 생성
                 error_result = CommonPredictionResult(
                     symbol=symbol,
@@ -214,30 +253,29 @@ async def handle_common_batch_predict(session, request: CommonBatchPredictReques
                 )
                 batch_results.append(error_result)
         
-        return CommonBatchPredictResponse(
-            success=True,
-            results=batch_results,
-            batch_id=request.request_id or f"batch_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-            processed_count=len(batch_results),
-            success_count=len([r for r in batch_results if r.status == "success"]),
-            request_id=request.request_id
-        )
+        # 응답 설정
+        response.results = batch_results
+        response.batch_id = f"batch_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{request.sequence}"
+        response.processed_count = len(batch_results)
+        response.success_count = success_count
+        response.message = f"Batch prediction completed: {success_count}/{len(batch_results)} successful"
         
     except Exception as e:
-        return CommonBatchPredictResponse(
-            success=False,
-            message=str(e),
-            request_id=request.request_id,
-            results=[],
-            batch_id="",
-            processed_count=0,
-            success_count=0,
-            error_code="BATCH_PREDICTION_ERROR"
-        )
+        logger.error(f"Batch prediction error: {str(e)}")
+        response.errorCode = ErrorCodes.PREDICTION_ERROR
+        response.message = f"Batch prediction failed: {str(e)}"
+    
+    return response
 
 async def handle_common_models_list(session, request: ModelsListRequest) -> ModelsListResponse:
-    """Common 규격 모델 목록 처리"""
+    """Common 규격 모델 목록 처리 (팀 표준 BaseRequest/BaseResponse 기반)"""
+    response = ModelsListResponse(
+        errorCode=ErrorCodes.SUCCESS,
+        sequence=request.sequence
+    )
+    
     try:
+        # 사용 가능한 모델 정보 생성
         models = [
             ModelInfo(
                 model_type="PyTorch LSTM",
@@ -248,20 +286,15 @@ async def handle_common_models_list(session, request: ModelsListRequest) -> Mode
             )
         ]
         
-        return ModelsListResponse(
-            success=True,
-            models=models,
-            request_id=request.request_id
-        )
+        response.models = models
+        response.message = f"Found {len(models)} available models"
         
     except Exception as e:
-        return ModelsListResponse(
-            success=False,
-            message=str(e),
-            request_id=request.request_id,
-            models=[],
-            error_code="MODELS_LIST_ERROR"
-        )
+        logger.error(f"Models list error: {str(e)}")
+        response.errorCode = ErrorCodes.SERVER_ERROR
+        response.message = f"Failed to retrieve models list: {str(e)}"
+    
+    return response
 
 async def predict_single_stock_internal(request: PredictionRequest) -> CommonPredictionResult:
     """내부 예측 로직 (기존 코드 재사용)"""

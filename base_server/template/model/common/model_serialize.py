@@ -1,30 +1,35 @@
-from typing import Optional, List, Dict, Any
-from pydantic import Field
+from typing import Optional, List
 from .protocol_base import BaseRequest, BaseResponse
 from .model_model import PredictionResult, ModelInfo
 
+# ============================================================================
+# 모델 예측 요청/응답 (팀 표준 BaseRequest/BaseResponse 기반)
+# ============================================================================
+
 class PredictRequest(BaseRequest):
     """단일 예측 요청"""
-    symbol: str = Field(..., description="주식 심볼 (예: AAPL)")
-    days: int = Field(60, description="사용할 과거 데이터 일수")
-    model_type: str = Field("lstm", description="모델 타입")
+    symbol: str
+    days: int = 60
+    model_type: str = "lstm"
 
 class PredictResponse(BaseResponse):
     """단일 예측 응답"""  
-    result: Optional[PredictionResult] = Field(None, description="예측 결과")
+    result: Optional[PredictionResult] = None
+    message: str = ""
 
 class BatchPredictRequest(BaseRequest):
     """배치 예측 요청"""
-    symbols: List[str] = Field(..., description="주식 심볼 리스트")
-    days: int = Field(60, description="사용할 과거 데이터 일수")
-    model_type: str = Field("lstm", description="모델 타입")
+    symbols: List[str]
+    days: int = 60
+    model_type: str = "lstm"
 
 class BatchPredictResponse(BaseResponse):
     """배치 예측 응답"""
-    results: List[PredictionResult] = Field([], description="배치 예측 결과 리스트")
-    batch_id: str = Field("", description="배치 ID")
-    processed_count: int = Field(0, description="처리된 종목 수")
-    success_count: int = Field(0, description="성공한 종목 수")
+    results: List[PredictionResult] = []
+    batch_id: str = ""
+    processed_count: int = 0
+    success_count: int = 0
+    message: str = ""
 
 class ModelsListRequest(BaseRequest):
     """모델 목록 요청"""
@@ -32,4 +37,5 @@ class ModelsListRequest(BaseRequest):
 
 class ModelsListResponse(BaseResponse):
     """모델 목록 응답"""
-    models: List[ModelInfo] = Field([], description="사용 가능한 모델 리스트")
+    models: List[ModelInfo] = []
+    message: str = ""
