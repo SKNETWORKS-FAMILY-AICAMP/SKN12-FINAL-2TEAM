@@ -444,8 +444,8 @@ class RagConfig(BaseModel):
         # 추가 필드 허용하지 않음 (타입 안전성)
         extra = "forbid"
         
-        # 필드 검증 활성화
-        validate_assignment = True
+        # 필드 검증 비활성화 (무한 재귀 방지)
+        validate_assignment = False
         
         # JSON 예제
         json_schema_extra = {

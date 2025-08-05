@@ -597,16 +597,25 @@ class RagService:
                 Logger.warn("쿼리 임베딩 생성 실패")
                 return []
             
-            # 벡터 검색 (실제 구현은 VectorDbService 메서드에 따라 조정 필요)
-            # 여기서는 기본적인 구조만 제공
-            results = []
+            # 벡터 검색 실행
+            vector_results = await VectorDbService.similarity_search(
+                query=query,
+                top_k=k
+            )
             
-            # TODO: VectorDbService의 실제 검색 메서드 호출
-            # vector_results = await VectorDbService.search_similar(
-            #     embedding=embed_result["embedding"],
-            #     top_k=k,
-            #     threshold=cls._config.default_threshold
-            # )
+            if not vector_results:
+                return []
+            
+            results = []
+            for result in vector_results.get("results", []):
+                doc_result = {
+                    "id": result.get("id", ""),
+                    "content": result.get("content", ""),
+                    "metadata": result.get("metadata", {}),
+                    "score": result.get("score", 0.0),
+                    "search_type": "vector"
+                }
+                results.append(doc_result)
             
             return results
             
