@@ -61,6 +61,79 @@ class ErrorCodes:
     INVALID_REQUEST = 5004        # 잘못된 요청 파라미터
     DATA_COLLECTION_ERROR = 5005  # 데이터 수집 실패
 
+# ============================================================================
+# 현실성 검증 로직 (1단계 해결책)
+# ============================================================================
+
+def validate_and_adjust_prediction(current_price: float, predicted_price: float, max_daily_change: float = 0.2) -> float:
+    """
+    예측값의 현실성을 검증하고 비현실적인 경우 조정
+    
+    Args:
+        current_price: 현재 주가
+        predicted_price: 예측된 주가
+        max_daily_change: 허용 가능한 최대 일일 변화율 (기본 20%)
+    
+    Returns:
+        조정된 예측 주가
+    """
+    if current_price <= 0:
+        return predicted_price
+    
+    change_rate = abs(predicted_price - current_price) / current_price
+    
+    # 변화율이 제한을 초과하는 경우 조정
+    if change_rate > max_daily_change:
+        logger.warning(f"Unrealistic prediction detected: {current_price:.2f} → {predicted_price:.2f} ({change_rate:.1%})")
+        
+        if predicted_price > current_price:
+            # 상승 시 제한
+            adjusted_price = current_price * (1 + max_daily_change)
+        else:
+            # 하락 시 제한
+            adjusted_price = current_price * (1 - max_daily_change)
+        
+        logger.info(f"Adjusted prediction: {predicted_price:.2f} → {adjusted_price:.2f}")
+        return adjusted_price
+    
+    return predicted_price
+
+def validate_and_fix_bollinger_bands(bands_list: list) -> list:
+    """
+    볼린저 밴드의 순서를 검증하고 잘못된 경우 수정
+    정상: bb_upper > bb_middle > bb_lower
+    
+    Args:
+        bands_list: 볼린저 밴드 리스트
+    
+    Returns:
+        수정된 볼린저 밴드 리스트
+    """
+    fixed_bands = []
+    
+    for band in bands_list:
+        upper = band.get('bb_upper', 0)
+        middle = band.get('bb_middle', 0)
+        lower = band.get('bb_lower', 0)
+        
+        # 순서가 잘못된 경우 수정
+        if not (upper >= middle >= lower):
+            logger.warning(f"Invalid Bollinger Band order detected: upper={upper:.2f}, middle={middle:.2f}, lower={lower:.2f}")
+            
+            # 값들을 정렬하여 올바른 순서로 재배치
+            values = sorted([upper, middle, lower], reverse=True)
+            fixed_band = band.copy()
+            fixed_band['bb_upper'] = values[0]
+            fixed_band['bb_middle'] = values[1] 
+            fixed_band['bb_lower'] = values[2]
+            
+            logger.info(f"Fixed Bollinger Band: upper={values[0]:.2f}, middle={values[1]:.2f}, lower={values[2]:.2f}")
+            fixed_bands.append(fixed_band)
+        else:
+            fixed_bands.append(band)
+    
+    return fixed_bands
+
 class PredictionRequest(BaseModel):
     """단일 예측 요청"""
     symbol: str = Field(..., description="주식 심볼 (예: AAPL)")
@@ -330,32 +403,67 @@ def format_prediction_result(symbol: str,
                            current_data: pd.DataFrame,
                            predictions: np.ndarray,
                            confidence: float = 0.8) -> CommonPredictionResult:
-    """예측 결과를 API 응답 형식으로 변환 (기존 방식 유지)"""
+    """예측 결과를 API 응답 형식으로 변환 (현실성 검증 적용)"""
     
     current_price = float(current_data['Close'].iloc[-1])
     prediction_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    # 5일간의 상세 예측 결과 포맷팅
+    logger.info(f"Formatting prediction for {symbol}: current_price={current_price:.2f}")
+    
+    # 5일간의 상세 예측 결과 포맷팅 (현실성 검증 적용)
     prediction_list = []
-    bollinger_list = []
+    bollinger_list_raw = []
     
     for i in range(5):
+        # 원본 예측값
+        raw_predicted_close = float(predictions[0, i, 0])
+        raw_bb_upper = float(predictions[0, i, 1])
+        raw_bb_lower = float(predictions[0, i, 2])
+        
+        # 🔧 현실성 검증 및 조정 (1단계 해결책)
+        adjusted_predicted_close = validate_and_adjust_prediction(current_price, raw_predicted_close)
+        adjusted_bb_upper = validate_and_adjust_prediction(current_price, raw_bb_upper)
+        adjusted_bb_lower = validate_and_adjust_prediction(current_price, raw_bb_lower)
+        
+        # 조정 여부 로깅
+        if abs(raw_predicted_close - adjusted_predicted_close) > 0.01:
+            logger.warning(f"Day {i+1} Close adjusted: {raw_predicted_close:.2f} → {adjusted_predicted_close:.2f}")
+        
         day_prediction = DailyPrediction(
             day=i + 1,
             date=(datetime.now() + timedelta(days=i+1)).strftime("%Y-%m-%d"),
-            predicted_close=float(predictions[0, i, 0]),  # Close 예측
-            trend="up" if predictions[0, i, 0] > current_price else "down"
+            predicted_close=adjusted_predicted_close,
+            trend="up" if adjusted_predicted_close > current_price else "down"
         )
         prediction_list.append(day_prediction)
         
+        # 볼린저 밴드 (아직 순서 검증 전)
+        bb_middle = (adjusted_bb_upper + adjusted_bb_lower) / 2
+        bollinger_band_raw = {
+            "day": i + 1,
+            "date": (datetime.now() + timedelta(days=i+1)).strftime("%Y-%m-%d"),
+            "bb_upper": adjusted_bb_upper,
+            "bb_lower": adjusted_bb_lower,
+            "bb_middle": bb_middle
+        }
+        bollinger_list_raw.append(bollinger_band_raw)
+    
+    # 🔧 볼린저 밴드 순서 검증 및 수정 (1단계 해결책)
+    bollinger_list_fixed = validate_and_fix_bollinger_bands(bollinger_list_raw)
+    
+    # BollingerBand 객체로 변환
+    bollinger_list = []
+    for band_data in bollinger_list_fixed:
         bollinger_band = BollingerBand(
-            day=i + 1,
-            date=(datetime.now() + timedelta(days=i+1)).strftime("%Y-%m-%d"),
-            bb_upper=float(predictions[0, i, 1]),  # BB_Upper 예측
-            bb_lower=float(predictions[0, i, 2]),  # BB_Lower 예측
-            bb_middle=(float(predictions[0, i, 1]) + float(predictions[0, i, 2])) / 2
+            day=band_data["day"],
+            date=band_data["date"],
+            bb_upper=band_data["bb_upper"],
+            bb_lower=band_data["bb_lower"],
+            bb_middle=band_data["bb_middle"]
         )
         bollinger_list.append(bollinger_band)
+    
+    logger.info(f"Prediction formatting completed for {symbol}")
     
     return CommonPredictionResult(
         symbol=symbol,
