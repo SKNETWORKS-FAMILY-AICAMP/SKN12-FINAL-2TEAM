@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 # --- 외부 툴 의존부 ---
 from service.llm.AIChat.SessionAwareTool import SessionAwareTool
 from service.llm.AIChat.manager.KalmanStateManager import KalmanStateManager
-from service.llm.AIChat.tool.KalmanRegimeFilterCore import KalmanRegimeFilterCore
+from service.llm.AIChat.manager.KalmanRegimeFilterCore import KalmanRegimeFilterCore
 
 __all__ = ["KalmanRegimeFilterTool"]
 
@@ -422,7 +422,7 @@ class KalmanRegimeFilterTool(SessionAwareTool):
                     
                     # 동기적으로 Rule-Based 초기화 실행
                     try:
-                        from service.llm.AIChat.tool.KalmanInitializerTool import KalmanInitializerTool
+                        from service.llm.AIChat.manager.KalmanInitializerTool import KalmanInitializerTool
                         
                         # Rule-Based 초기화 툴 사용
                         initializer = KalmanInitializerTool()

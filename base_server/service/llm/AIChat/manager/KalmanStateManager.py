@@ -7,7 +7,7 @@ from typing import Dict, Any, Optional, List
 import numpy as np
 from numpy.typing import NDArray
 
-from service.llm.AIChat.tool.KalmanRegimeFilterCore import KalmanRegimeFilterCore
+from service.llm.AIChat.manager.KalmanRegimeFilterCore import KalmanRegimeFilterCore
 
 __all__ = ["KalmanStateManager"]
 
@@ -253,7 +253,7 @@ class KalmanStateManager:
     async def _initialize_with_rules(self, ticker: str, account_db_key: int) -> KalmanRegimeFilterCore:
         """Rule-Based 초기화"""
         try:
-            from service.llm.AIChat.tool.KalmanInitializerTool import KalmanInitializerTool
+            from service.llm.AIChat.manager.KalmanInitializerTool import KalmanInitializerTool
             
             # Rule-Based 초기화 툴 사용
             initializer = KalmanInitializerTool()
