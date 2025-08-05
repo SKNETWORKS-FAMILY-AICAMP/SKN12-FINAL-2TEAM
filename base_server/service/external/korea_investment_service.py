@@ -199,6 +199,87 @@ class KoreaInvestmentService:
         return results
     
     @classmethod
+    async def get_overseas_stock_price(cls, exchange: str, symbol: str) -> Optional[Dict]:
+        """해외주식 현재가 조회
+        
+        Args:
+            exchange: 거래소 코드 (NASD=나스닥, NYSE=뉴욕, AMEX=아멕스, TSE=도쿄, etc)
+            symbol: 종목 심볼 (AAPL, TSLA, MSFT, etc)
+        """
+        if not cls._initialized:
+            Logger.error("KoreaInvestmentService가 초기화되지 않았습니다")
+            return None
+            
+        if not cls._access_token:
+            Logger.error("한국투자증권 API 인증이 필요합니다")
+            return None
+            
+        try:
+            url = f"{cls._base_url}/uapi/overseas-price/v1/quotations/price"
+            headers = {
+                'Content-Type': 'application/json',
+                'authorization': f'Bearer {cls._access_token}',
+                'appkey': cls._app_key,
+                'appsecret': cls._app_secret,
+                'tr_id': 'HHDFS00000300'  # 해외주식 현재가 TR ID
+            }
+            params = {
+                'AUTH': '',
+                'EXCD': exchange,  # 거래소코드
+                'SYMB': symbol     # 심볼
+            }
+            
+            Logger.info(f"해외주식 조회 파라미터: {params}")
+            Logger.info(f"해외주식 조회 URL: {url}")
+            
+            async with cls._session.get(url, headers=headers, params=params) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    Logger.info(f"해외주식 가격 조회 성공: {result}")
+                    return result.get('output', {})
+                else:
+                    error_text = await response.text()
+                    Logger.error(f"해외주식 가격 조회 실패: {response.status} - {error_text}")
+                    return None
+                    
+        except Exception as e:
+            Logger.error(f"해외주식 가격 조회 에러: {e}")
+            return None
+    
+    @classmethod
+    async def get_overseas_real_time_data(cls, exchange: str, symbols: List[str]) -> Dict[str, Dict]:
+        """해외주식 실시간 데이터 조회 (여러 종목)
+        
+        Args:
+            exchange: 거래소 코드
+            symbols: 종목 심볼 리스트
+        """
+        results = {}
+        
+        for symbol in symbols:
+            try:
+                # 해외주식 가격 조회
+                price_data = await cls.get_overseas_stock_price(exchange, symbol)
+                if price_data:
+                    results[f"{exchange}^{symbol}"] = {
+                        'symbol': symbol,
+                        'exchange': exchange,
+                        'current_price': float(price_data.get('last', 0)),
+                        'change_amount': float(price_data.get('diff', 0)),
+                        'change_rate': float(price_data.get('rate', 0)),
+                        'volume': int(price_data.get('tvol', 0)),
+                        'high_price': float(price_data.get('high', 0)),
+                        'low_price': float(price_data.get('low', 0)),
+                        'open_price': float(price_data.get('open', 0)),
+                        'timestamp': price_data.get('date', '')
+                    }
+            except Exception as e:
+                Logger.error(f"해외주식 실시간 데이터 조회 에러 ({exchange}^{symbol}): {e}")
+                continue
+        
+        return results
+    
+    @classmethod
     async def shutdown(cls):
         """서비스 종료"""
         try:

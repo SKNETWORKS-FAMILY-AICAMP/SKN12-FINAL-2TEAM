@@ -80,10 +80,15 @@ class KoreaInvestmentWebSocket:
             if 'header' in data and 'tr_id' in data['header']:
                 tr_id = data['header']['tr_id']
                 
-                # 지수 데이터 처리
+                # 지수 및 해외주식 데이터 처리
                 if tr_id.startswith('H0_'):
-                    await self._process_market_index_data(data)
-                # 주식 데이터 처리
+                    if 'OVFUTURE' in tr_id:
+                        # 해외주식 데이터 처리
+                        await self._process_overseas_stock_data(data)
+                    else:
+                        # 국내 지수 데이터 처리
+                        await self._process_market_index_data(data)
+                # 국내 주식 데이터 처리
                 elif tr_id.startswith('H1_'):
                     await self._process_stock_data(data)
                 # 기타 콜백 함수 호출
@@ -160,6 +165,44 @@ class KoreaInvestmentWebSocket:
         except Exception as e:
             Logger.error(f"주식 데이터 처리 에러: {e}")
     
+    async def _process_overseas_stock_data(self, data: dict):
+        """해외주식 데이터 처리"""
+        try:
+            if 'body' in data and 'output' in data['body']:
+                output = data['body']['output']
+                tr_key = data['header'].get('tr_key', '')
+                
+                # tr_key에서 거래소와 종목 분리 (예: "NASD^AAPL")
+                if '^' in tr_key:
+                    exchange, symbol = tr_key.split('^', 1)
+                else:
+                    exchange = 'UNKNOWN'
+                    symbol = tr_key
+                
+                processed_data = {
+                    'exchange': exchange,
+                    'symbol': symbol,
+                    'current_price': float(output.get('last', 0)),
+                    'change_amount': float(output.get('diff', 0)),
+                    'change_rate': float(output.get('rate', 0)),
+                    'volume': int(output.get('tvol', 0)),
+                    'high_price': float(output.get('high', 0)),
+                    'low_price': float(output.get('low', 0)),
+                    'open_price': float(output.get('open', 0)),
+                    'timestamp': output.get('date', ''),
+                    'currency': output.get('curr', 'USD')
+                }
+                
+                Logger.info(f"해외주식 데이터 처리 완료: {exchange}^{symbol} - {processed_data}")
+                
+                # 콜백 함수 호출
+                callback_key = f"H0_{tr_key}"
+                if callback_key in self.callbacks:
+                    await self.callbacks[callback_key](processed_data)
+                    
+        except Exception as e:
+            Logger.error(f"해외주식 데이터 처리 에러: {e}")
+    
     async def subscribe_stock_price(self, symbols: List[str], callback: Callable):
         """주식 실시간 가격 구독"""
         if not self.is_connected:
@@ -228,6 +271,50 @@ class KoreaInvestmentWebSocket:
             
         except Exception as e:
             Logger.error(f"지수 구독 실패: {e}")
+            return False
+    
+    async def subscribe_overseas_stock_price(self, exchange: str, symbols: List[str], callback: Callable):
+        """해외주식 실시간 가격 구독
+        
+        Args:
+            exchange: 거래소 코드 (NASD=나스닥, NYSE=뉴욕, AMEX=아멕스, TSE=도쿄, etc)
+            symbols: 종목 심볼 리스트 (AAPL, TSLA, MSFT, etc)
+            callback: 데이터 수신 시 호출할 콜백 함수
+        """
+        if not self.is_connected:
+            Logger.error("웹소켓이 연결되지 않음")
+            return False
+            
+        try:
+            for symbol in symbols:
+                # 해외주식 실시간 구독 (한국투자증권 API 형식에 맞춤)
+                subscribe_message = {
+                    "header": {
+                        "approval_key": self.approval_key,
+                        "custtype": "P",
+                        "tr_type": "1",
+                        "content-type": "utf-8"
+                    },
+                    "body": {
+                        "input": {
+                            "tr_id": "H0_OVFUTURE0",  # 해외주식 실시간 TR ID
+                            "tr_key": f"{exchange}^{symbol}"  # 거래소^종목심볼 형식
+                        }
+                    }
+                }
+                
+                Logger.info(f"해외주식 구독 메시지 전송: {subscribe_message}")
+                await self.websocket.send(json.dumps(subscribe_message))
+                
+                # 콜백 등록 (거래소^종목 형식으로 키 생성)
+                callback_key = f"H0_{exchange}^{symbol}"
+                self.callbacks[callback_key] = callback
+                Logger.info(f"해외주식 실시간 구독 등록: {exchange}^{symbol}")
+                
+            return True
+            
+        except Exception as e:
+            Logger.error(f"해외주식 구독 실패: {e}")
             return False
     
     async def disconnect(self):

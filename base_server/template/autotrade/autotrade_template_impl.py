@@ -1,475 +1,75 @@
 from template.base.base_template import BaseTemplate
 from template.autotrade.common.autotrade_serialize import (
-    AutoTradeStrategyListRequest, AutoTradeStrategyListResponse,
-    AutoTradeStrategyCreateRequest, AutoTradeStrategyCreateResponse,
-    AutoTradeStrategyUpdateRequest, AutoTradeStrategyUpdateResponse,
-    AutoTradeExecutionListRequest, AutoTradeExecutionListResponse,
-    AutoTradeBacktestRequest, AutoTradeBacktestResponse,
-    AutoTradeAIStrategyRequest, AutoTradeAIStrategyResponse
+    AutoTradeYahooSearchRequest, AutoTradeYahooSearchResponse,
+    AutoTradeYahooDetailRequest, AutoTradeYahooDetailResponse,
+    SignalAlarmCreateRequest, SignalAlarmCreateResponse,
+    SignalAlarmListRequest, SignalAlarmListResponse,
+    SignalAlarmToggleRequest, SignalAlarmToggleResponse,
+    SignalAlarmDeleteRequest, SignalAlarmDeleteResponse,
+    SignalHistoryRequest, SignalHistoryResponse
 )
-from template.autotrade.common.autotrade_model import TradingStrategy, StrategyPerformance, TradeExecution, StrategyBacktest
+from template.autotrade.common.autotrade_model import SignalAlarmInfo, SignalHistoryItem
 from service.core.logger import Logger
 from service.service_container import ServiceContainer
-import json
-import uuid
-import random
-from datetime import datetime
 from service.external.yahoo_finance_client import YahooFinanceClient
+import uuid
+from datetime import datetime
 
 class AutoTradeTemplateImpl(BaseTemplate):
     def __init__(self):
         super().__init__()
-    
-    async def on_autotrade_strategy_list_req(self, client_session, request: AutoTradeStrategyListRequest):
-        """매매 전략 목록 요청 처리"""
-        response = AutoTradeStrategyListResponse()
-        
-        Logger.info(f"AutoTrade strategy list request: status_filter={request.status_filter}")
-        
-        try:
-            account_db_key = client_session.session.account_db_key
-            shard_id = client_session.session.shard_id
-            
-            db_service = ServiceContainer.get_database_service()
-            
-            # 1. 매매 전략 목록 조회
-            strategies_result = await db_service.call_shard_procedure(
-                shard_id,
-                "fp_get_trading_strategies",
-                (account_db_key, True, request.status_filter)  # include_performance=True
-            )
-            
-            if not strategies_result or len(strategies_result) == 0:
-                response.strategies = []
-                response.performances = {}
-                response.errorCode = 0
-                return response
-            
-            # 2. DB 결과를 바탕으로 응답 생성
-            strategies_data = strategies_result[0] if isinstance(strategies_result[0], list) else strategies_result
-            performance_data = strategies_result[1] if len(strategies_result) > 1 else []
-            
-            response.strategies = []
-            for strategy in strategies_data:
-                response.strategies.append(TradingStrategy(
-                    strategy_id=strategy.get('strategy_id'),
-                    name=strategy.get('name'),
-                    description=strategy.get('description'),
-                    algorithm_type=strategy.get('algorithm_type'),
-                    target_symbols=json.loads(strategy.get('target_symbols', '[]')),
-                    is_active=bool(strategy.get('is_active')),
-                    created_at=str(strategy.get('created_at'))
-                ))
-            
-            # 3. 성과 정보 처리
-            response.performances = {}
-            for perf in performance_data:
-                strategy_id = perf.get('strategy_id')
-                response.performances[strategy_id] = StrategyPerformance(
-                    strategy_id=strategy_id,
-                    total_return=float(perf.get('avg_total_return', 0.0)),
-                    win_rate=float(perf.get('avg_win_rate', 0.0)),
-                    sharpe_ratio=float(perf.get('avg_sharpe_ratio', 0.0)),
-                    max_drawdown=float(perf.get('max_drawdown', 0.0))
-                )
-            response.errorCode = 0
-            
-        except Exception as e:
-            response.errorCode = 1000
-            response.strategies = []
-            response.performances = {}
-            Logger.error(f"AutoTrade strategy list error: {e}")
-        
-        return response
 
-    async def on_autotrade_strategy_create_req(self, client_session, request: AutoTradeStrategyCreateRequest):
-        """새 매매 전략 생성 요청 처리"""
-        response = AutoTradeStrategyCreateResponse()
-        
-        Logger.info(f"AutoTrade strategy create request: name={request.name}")
-        
-        try:
-            account_db_key = client_session.session.account_db_key
-            shard_id = client_session.session.shard_id
-            
-            db_service = ServiceContainer.get_database_service()
-            
-            # 1. 입력 검증
-            if not request.name or not request.algorithm_type:
-                response.errorCode = 10001
-                response.message = "전략 이름과 알고리즘 타입은 필수입니다"
-                return response
-            
-            # 2. 매매 전략 생성 DB 프로시저 호출
-            create_result = await db_service.call_shard_procedure(
-                shard_id,
-                "fp_create_trading_strategy",
-                (account_db_key, request.name, request.description,
-                 request.algorithm_type, json.dumps(request.parameters),
-                 json.dumps(request.target_symbols), request.max_position_size,
-                 request.stop_loss, request.take_profit)
-            )
-            
-            if not create_result or create_result[0].get('result') != 'SUCCESS':
-                response.errorCode = 10002
-                response.message = "매매 전략 생성 실패"
-                return response
-            
-            # 3. 생성된 전략 정보 반환
-            strategy_id = create_result[0].get('strategy_id')
-            response.strategy = TradingStrategy(
-                strategy_id=strategy_id,
-                name=request.name,
-                description=request.description,
-                algorithm_type=request.algorithm_type,
-                target_symbols=request.target_symbols,
-                is_active=False,  # 생성 시점에는 비활성화
-                created_at=str(datetime.now())
-            )
-            response.message = "매매 전략이 생성되었습니다"
-            response.errorCode = 0
-            
-        except Exception as e:
-            response.errorCode = 1000
-            Logger.error(f"AutoTrade strategy create error: {e}")
-        
-        return response
-
-    async def on_autotrade_strategy_update_req(self, client_session, request: AutoTradeStrategyUpdateRequest):
-        """매매 전략 수정 요청 처리"""
-        response = AutoTradeStrategyUpdateResponse()
-        
-        Logger.info(f"AutoTrade strategy update request: strategy_id={request.strategy_id}")
-        
-        try:
-            account_db_key = client_session.session.account_db_key
-            shard_id = client_session.session.shard_id
-            
-            db_service = ServiceContainer.get_database_service()
-            
-            # 1. 전략 존재 및 소유권 확인
-            strategy_check = await db_service.call_shard_procedure(
-                shard_id,
-                "fp_get_trading_strategies",
-                (account_db_key, False, "ALL")
-            )
-            
-            strategy_exists = False
-            if strategy_check:
-                for strategy in strategy_check[0] if isinstance(strategy_check[0], list) else strategy_check:
-                    if strategy.get('strategy_id') == request.strategy_id:
-                        strategy_exists = True
-                        break
-            
-            if not strategy_exists:
-                response.errorCode = 10003
-                response.message = "전략을 찾을 수 없거나 접근 권한이 없습니다"
-                return response
-            
-            # 2. 전략 업데이트 (간단한 예시 - 실제로는 별도 업데이트 프로시저 필요)
-            # 여기서는 전략의 활성화/비활성화만 처리
-            if hasattr(request, 'is_active'):
-                # UPDATE 쿼리를 직접 실행 (예시)
-                update_sql = f"UPDATE table_trading_strategies SET is_active = {1 if request.is_active else 0}, updated_at = NOW() WHERE strategy_id = '{request.strategy_id}' AND account_db_key = {account_db_key}"
-                # 실제로는 별도 프로시저를 만들어 사용해야 함
-            
-            response.message = "전략이 수정되었습니다"
-            response.errorCode = 0
-            
-        except Exception as e:
-            response.errorCode = 1000
-            response.message = "전략 수정 실패"
-            Logger.error(f"AutoTrade strategy update error: {e}")
-        
-        return response
-
-    async def on_autotrade_execution_list_req(self, client_session, request: AutoTradeExecutionListRequest):
-        """거래 실행 내역 조회 요청 처리"""
-        response = AutoTradeExecutionListResponse()
-        
-        Logger.info(f"AutoTrade execution list request: strategy_id={request.strategy_id}")
-        
-        try:
-            account_db_key = client_session.session.account_db_key
-            shard_id = client_session.session.shard_id
-            
-            db_service = ServiceContainer.get_database_service()
-            
-            # 1. 거래 실행 내역 조회 (별도 프로시저 필요하지만 기존 테이블에서 직접 조회)
-            # 실제로는 fp_get_trade_executions 프로시저가 필요
-            from datetime import timedelta
-            
-            # 간단한 쿼리로 거래 실행 내역 조회
-            executions_data = []
-            
-            # 샘플 데이터 생성 (실제로는 DB에서 조회)
-            if request.strategy_id:
-                # 특정 전략의 거래 내역
-                for i in range(3):
-                    execution = {
-                        "execution_id": f"exec_{request.strategy_id}_{i+1}",
-                        "symbol": ["AAPL", "GOOGL", "TSLA"][i],
-                        "action": "BUY" if i % 2 == 0 else "SELL",
-                        "quantity": (i+1) * 10,
-                        "executed_price": 150.0 + i * 10,
-                        "profit_loss": (i-1) * 50.0,
-                        "executed_at": str(datetime.now() - timedelta(days=i)),
-                        "status": "EXECUTED"
-                    }
-                    executions_data.append(execution)
-            
-            # 2. 거래 실행 내역을 TradeExecution 모델로 변환
-            response.executions = []
-            for exec_data in executions_data:
-                response.executions.append(TradeExecution(
-                    execution_id=exec_data.get('execution_id'),
-                    strategy_id=request.strategy_id,
-                    symbol=exec_data.get('symbol'),
-                    action=exec_data.get('action'),
-                    quantity=exec_data.get('quantity'),
-                    executed_price=exec_data.get('executed_price'),
-                    profit_loss=exec_data.get('profit_loss'),
-                    executed_at=exec_data.get('executed_at'),
-                    status=exec_data.get('status')
-                ))
-            
-            response.total_count = len(response.executions)
-            
-            # 3. 요약 정보 계산
-            total_profit = sum(exec_data.get('profit_loss', 0) for exec_data in executions_data)
-            buy_count = sum(1 for exec_data in executions_data if exec_data.get('action') == 'BUY')
-            sell_count = len(executions_data) - buy_count
-            
-            response.summary = {
-                "total_trades": len(executions_data),
-                "buy_orders": buy_count,
-                "sell_orders": sell_count,
-                "total_profit_loss": round(total_profit, 2),
-                "success_rate": round((len([e for e in executions_data if e.get('profit_loss', 0) > 0]) / max(1, len(executions_data))) * 100, 2)
-            }
-            response.errorCode = 0
-            
-        except Exception as e:
-            response.errorCode = 1000
-            Logger.error(f"AutoTrade execution list error: {e}")
-        
-        return response
-
-    async def on_autotrade_backtest_req(self, client_session, request: AutoTradeBacktestRequest):
-        """백테스트 실행 요청 처리"""
-        response = AutoTradeBacktestResponse()
-        
-        Logger.info(f"AutoTrade backtest request: strategy_id={request.strategy_id}")
-        
-        try:
-            account_db_key = client_session.session.account_db_key
-            shard_id = client_session.session.shard_id
-            
-            db_service = ServiceContainer.get_database_service()
-            
-            # 1. 백테스트 실행 요청 DB 프로시저 호출
-            backtest_result = await db_service.call_shard_procedure(
-                shard_id,
-                "fp_run_backtest",
-                (request.strategy_id, account_db_key, request.start_date,
-                 request.end_date, request.initial_capital, request.benchmark or 'KOSPI')
-            )
-            
-            if not backtest_result or backtest_result[0].get('result') != 'SUCCESS':
-                response.errorCode = 10004
-                response.message = "백테스트 실행 실패"
-                response.daily_returns = []
-                response.trade_history = []
-                return response
-            
-            backtest_id = backtest_result[0].get('backtest_id')
-            
-            # 2. 백테스트 결과 시뮬레이션 (실제로는 별도 백테스트 엔진에서 처리)
-            from datetime import timedelta
-            import random
-            
-            start = datetime.strptime(request.start_date, '%Y-%m-%d')
-            end = datetime.strptime(request.end_date, '%Y-%m-%d')
-            
-            # 일별 수익률 시뮬레이션
-            daily_returns = []
-            current_date = start
-            cumulative_return = 0.0
-            
-            while current_date <= end:
-                # 랜덤 일별 수익률 (-2% ~ +2%)
-                daily_return = round(random.uniform(-0.02, 0.02), 4)
-                cumulative_return += daily_return
-                
-                daily_returns.append({
-                    "date": current_date.strftime('%Y-%m-%d'),
-                    "daily_return": daily_return,
-                    "cumulative_return": round(cumulative_return, 4),
-                    "portfolio_value": round(request.initial_capital * (1 + cumulative_return), 2)
-                })
-                
-                current_date += timedelta(days=1)
-            
-            # 거래 내역 시뮬레이션
-            trade_history = []
-            for i in range(random.randint(10, 20)):
-                trade_date = start + timedelta(days=random.randint(0, (end - start).days))
-                profit_loss = round(random.uniform(-500, 1000), 2)
-                
-                trade_history.append({
-                    "date": trade_date.strftime('%Y-%m-%d'),
-                    "symbol": random.choice(["AAPL", "GOOGL", "TSLA", "MSFT"]),
-                    "action": random.choice(["BUY", "SELL"]),
-                    "quantity": random.randint(1, 100),
-                    "price": round(random.uniform(100, 300), 2),
-                    "profit_loss": profit_loss
-                })
-            
-            # 3. 백테스트 결과 DB 업데이트
-            final_value = daily_returns[-1]['portfolio_value'] if daily_returns else request.initial_capital
-            total_return = (final_value - request.initial_capital) / request.initial_capital
-            win_rate = len([t for t in trade_history if t['profit_loss'] > 0]) / max(1, len(trade_history)) * 100
-            
-            await db_service.call_shard_procedure(
-                shard_id,
-                "fp_update_backtest_result",
-                (backtest_id, final_value, total_return, 0.08,  # benchmark_return
-                 -0.05, 1.2, len(trade_history), win_rate,
-                 json.dumps(daily_returns), json.dumps(trade_history))
-            )
-            
-            response.backtest = StrategyBacktest(
-                backtest_id=backtest_id,
-                strategy_id=request.strategy_id,
-                period=f"{request.start_date}_{request.end_date}",
-                initial_capital=request.initial_capital,
-                final_value=final_value,
-                total_return=round(total_return * 100, 2),
-                max_drawdown=-5.0,
-                sharpe_ratio=1.2,
-                win_rate=round(win_rate, 2)
-            )
-            response.daily_returns = daily_returns
-            response.trade_history = trade_history
-            response.errorCode = 0
-            
-        except Exception as e:
-            response.errorCode = 1000
-            Logger.error(f"AutoTrade backtest error: {e}")
-        
-        return response
-
-    async def on_autotrade_ai_strategy_req(self, client_session, request: AutoTradeAIStrategyRequest):
-        """AI 전략 생성 요청 처리"""
-        response = AutoTradeAIStrategyResponse()
-        
-        Logger.info(f"AutoTrade AI strategy request: goal={request.investment_goal}")
-        
-        try:
-            account_db_key = client_session.session.account_db_key
-            shard_id = client_session.session.shard_id
-            
-            db_service = ServiceContainer.get_database_service()
-            
-            # 1. AI 전략 추천 DB 프로시저 호출
-            recommendations_result = await db_service.call_shard_procedure(
-                shard_id,
-                "fp_get_ai_strategy_recommendations",
-                (account_db_key, request.investment_goal, request.risk_tolerance,
-                 request.investment_amount, request.time_horizon)
-            )
-            
-            if not recommendations_result:
-                response.errorCode = 10005
-                response.message = "AI 전략 추천을 가져올 수 없습니다"
-                response.strategy_suggestions = []
-                response.expected_performance = {}
-                response.risk_analysis = {}
-                return response
-            
-            # 2. 추천 전략 목록 생성
-            response.strategy_suggestions = []
-            for template in recommendations_result:
-                suggestion = {
-                    "template_id": template.get('template_id'),
-                    "name": template.get('name'),
-                    "description": template.get('description'),
-                    "category": template.get('category'),
-                    "algorithm_type": template.get('algorithm_type'),
-                    "parameters": json.loads(template.get('default_parameters', '{}')),
-                    "suitability_score": round(random.uniform(0.7, 0.95), 2),  # 적합도 점수
-                    "confidence": round(random.uniform(0.8, 0.9), 2)
-                }
-                response.strategy_suggestions.append(suggestion)
-            
-            # 3. 예상 성과 분석
-            if response.strategy_suggestions:
-                best_template = recommendations_result[0]
-                expected_return = float(best_template.get('expected_return', 0.0))
-                expected_volatility = float(best_template.get('expected_volatility', 0.0))
-                
-                response.expected_performance = {
-                    "expected_annual_return": round(expected_return * 100, 2),
-                    "expected_volatility": round(expected_volatility * 100, 2),
-                    "expected_sharpe_ratio": round(expected_return / max(expected_volatility, 0.01), 2),
-                    "projection_horizon": request.time_horizon,
-                    "confidence_interval": "80%"
-                }
-            
-            # 4. 위험 분석
-            response.risk_analysis = {
-                "risk_level": request.risk_tolerance,
-                "max_drawdown_estimate": round(float(best_template.get('expected_volatility', 0.15)) * -2, 2),
-                "volatility_assessment": "적정" if request.risk_tolerance == "MODERATE" else ("높음" if request.risk_tolerance == "AGGRESSIVE" else "낮음"),
-                "diversification_score": round(random.uniform(0.6, 0.9), 2),
-                "capital_requirement": float(best_template.get('min_capital', 100000.0)),
-                "suitability_factors": [
-                    f"투자 목표: {request.investment_goal}",
-                    f"위험 성향: {request.risk_tolerance}", 
-                    f"투자 기간: {request.time_horizon}",
-                    f"투자 금액: {request.investment_amount:,.0f}원"
-                ]
-            }
-            response.errorCode = 0
-            
-        except Exception as e:
-            response.errorCode = 1000
-            Logger.error(f"AutoTrade AI strategy error: {e}")
-        
-        return response
-
-    async def on_autotrade_yahoo_search_req(self, client_session, request: dict):
+    async def on_autotrade_yahoo_search_req(self, client_session, request: AutoTradeYahooSearchRequest):
         """야후 파이낸스 주식 검색"""
-        Logger.info(f"client_session: {client_session}")
-        Logger.info(f"client_session.session: {getattr(client_session, 'session', None)}")
-        Logger.info(f"user_id: {getattr(getattr(client_session, 'session', None), 'user_id', None)}")
-        cache_service = ServiceContainer.get_cache_service()
-        async with YahooFinanceClient(cache_service) as client:
-            result = await client.search_stocks(request.get("query", ""))
-            return result
+        response = AutoTradeYahooSearchResponse()
+        response.sequence = request.sequence
+        
+        Logger.info(f"Yahoo Finance search request: query={request.query}")
+        
+        try:
+            cache_service = ServiceContainer.get_cache_service()
+            async with YahooFinanceClient(cache_service) as client:
+                result = await client.search_stocks(request.query)
+                
+                response.errorCode = result.get('errorCode', 0)
+                response.results = result.get('results', [])
+                
+                if response.errorCode != 0:
+                    response.message = result.get('message', '검색 중 오류가 발생했습니다')
+                
+        except Exception as e:
+            Logger.error(f"Yahoo Finance search error: {e}")
+            response.errorCode = 1
+            response.results = []
+            response.message = f"검색 중 오류가 발생했습니다: {str(e)}"
+        
+        return response
 
-    async def on_autotrade_yahoo_detail_req(self, client_session, request: dict):
+    async def on_autotrade_yahoo_detail_req(self, client_session, request: AutoTradeYahooDetailRequest):
         """야후 파이낸스 주식 상세 정보"""
-        symbol = request.get("symbol")
+        response = AutoTradeYahooDetailResponse()
+        response.sequence = request.sequence
         
         # symbol 유효성 검사
-        if not symbol or not isinstance(symbol, str) or not symbol.strip():
-            return {
-                "errorCode": 1,
-                "price_data": {},
-                "message": f"유효하지 않은 symbol: {symbol}"
-            }
+        if not request.symbol or not isinstance(request.symbol, str) or not request.symbol.strip():
+            response.errorCode = 1
+            response.price_data = {}
+            response.message = f"유효하지 않은 symbol: {request.symbol}"
+            return response
         
-        cache_service = ServiceContainer.get_cache_service()
-        async with YahooFinanceClient(cache_service) as client:
-            result = await client.get_stock_detail(symbol)
-            if result is None:
-                # None 대신 유효한 응답 구조 반환
-                return {
-                    "errorCode": 1,
-                    "price_data": {
-                        symbol: {
-                            "symbol": symbol,
+        Logger.info(f"Yahoo Finance detail request: symbol={request.symbol}")
+        
+        try:
+            cache_service = ServiceContainer.get_cache_service()
+            async with YahooFinanceClient(cache_service) as client:
+                result = await client.get_stock_detail(request.symbol)
+                
+                if result is None:
+                    # None 대신 유효한 응답 구조 반환
+                    response.errorCode = 1
+                    response.price_data = {
+                        request.symbol: {
+                            "symbol": request.symbol,
                             "current_price": 0.0,
                             "close_price": 0.0,
                             "open_price": 0.0,
@@ -481,27 +81,316 @@ class AutoTradeTemplateImpl(BaseTemplate):
                             "currency": "USD",
                             "exchange": "NASDAQ"
                         }
-                    },
-                    "message": f"상세 정보를 가져올 수 없습니다: {symbol}"
-                }
-            # 성공 시에도 프론트엔드가 기대하는 형태로 변환
-            return {
-                "errorCode": 0,
-                "price_data": {
-                    symbol: {
-                        "symbol": result.symbol,
-                        "name": result.name,
-                        "current_price": result.current_price,
-                        "close_price": result.current_price,  # current_price를 close_price로도 사용
-                        "open_price": result.open_price,
-                        "high_price": result.high_price,
-                        "low_price": result.low_price,
-                        "volume": result.volume,
-                        "change_amount": result.change_amount,
-                        "change_percent": result.change_percent,
-                        "currency": result.currency,
-                        "exchange": result.exchange
                     }
-                },
-                "message": "상세 정보 조회 성공"
-            }
+                    response.message = f"상세 정보를 가져올 수 없습니다: {request.symbol}"
+                else:
+                    # 성공 시에도 프론트엔드가 기대하는 형태로 변환
+                    response.errorCode = 0
+                    response.price_data = {
+                        request.symbol: {
+                            "symbol": result.symbol,
+                            "name": result.name,
+                            "current_price": result.current_price,
+                            "close_price": result.current_price,  # current_price를 close_price로도 사용
+                            "open_price": result.open_price,
+                            "high_price": result.high_price,
+                            "low_price": result.low_price,
+                            "volume": result.volume,
+                            "change_amount": result.change_amount,
+                            "change_percent": result.change_percent,
+                            "currency": result.currency,
+                            "exchange": result.exchange
+                        }
+                    }
+                    response.message = "상세 정보 조회 성공"
+                    
+        except Exception as e:
+            Logger.error(f"Yahoo Finance detail error: {e}")
+            response.errorCode = 1
+            response.price_data = {}
+            response.message = f"상세 정보 조회 중 오류가 발생했습니다: {str(e)}"
+        
+        return response
+
+    async def on_signal_alarm_create_req(self, client_session, request: SignalAlarmCreateRequest):
+        """시그널 알림 등록"""
+        response = SignalAlarmCreateResponse()
+        response.sequence = request.sequence
+        
+        try:
+            # 세션 정보 조회
+            account_db_key = getattr(client_session.session, 'account_db_key', 0)
+            if account_db_key == 0:
+                response.errorCode = 1001
+                response.message = "유효하지 않은 세션입니다"
+                return response
+            
+            # Yahoo Finance에서 종목 정보 조회
+            cache_service = ServiceContainer.get_cache_service()
+            async with YahooFinanceClient(cache_service) as client:
+                stock_detail = await client.get_stock_detail(request.symbol)
+                
+                if stock_detail is None:
+                    response.errorCode = 1004
+                    response.message = f"종목 정보를 찾을 수 없습니다: {request.symbol}"
+                    return response
+            
+            # UUID 생성
+            alarm_id = str(uuid.uuid4())
+            
+            db_service = ServiceContainer.get_database_service()
+            
+            # 프로시저 호출 - 전체 파라미터 전달
+            result = await db_service.execute_shard_procedure(
+                account_db_key,
+                "fp_signal_alarm_create",
+                (
+                    alarm_id,
+                    account_db_key,
+                    request.symbol,
+                    stock_detail.name if stock_detail.name else request.symbol,
+                    stock_detail.current_price,
+                    stock_detail.exchange if stock_detail.exchange else "NASDAQ",
+                    stock_detail.currency if stock_detail.currency else "USD",
+                    ""  # note (빈 문자열)
+                )
+            )
+            
+            if not result:
+                response.errorCode = 1002
+                response.message = "알림 등록 중 오류가 발생했습니다"
+                return response
+            
+            proc_result = result[0]
+            error_code = proc_result.get('ErrorCode', 1)
+            error_message = proc_result.get('ErrorMessage', '')
+            
+            response.errorCode = error_code
+            if error_code == 0:
+                response.message = "알림이 성공적으로 등록되었습니다"
+                Logger.info(f"Signal alarm created: user={account_db_key}, symbol={request.symbol}, alarm_id={alarm_id}")
+            else:
+                response.message = error_message
+                Logger.warning(f"Signal alarm creation failed: {error_message}")
+                
+        except Exception as e:
+            Logger.error(f"Signal alarm create error: {e}")
+            response.errorCode = 1003
+            response.message = f"알림 등록 중 오류가 발생했습니다: {str(e)}"
+        
+        return response
+
+    async def on_signal_alarm_list_req(self, client_session, request: SignalAlarmListRequest):
+        """시그널 알림 목록 조회"""
+        response = SignalAlarmListResponse()
+        response.sequence = request.sequence
+        response.alarms = []
+        
+        try:
+            # 세션 정보 조회
+            account_db_key = getattr(client_session.session, 'account_db_key', 0)
+            if account_db_key == 0:
+                response.errorCode = 1001
+                response.message = "유효하지 않은 세션입니다"
+                return response
+            
+            db_service = ServiceContainer.get_database_service()
+            
+            # 프로시저 호출 - 통계 정보 포함
+            result = await db_service.execute_shard_procedure(
+                account_db_key,
+                "fp_signal_alarms_get_with_stats",
+                (account_db_key,)
+            )
+            
+            if not result:
+                response.errorCode = 1002
+                response.message = "알림 목록 조회 중 오류가 발생했습니다"
+                return response
+            
+            # 첫 번째 결과는 프로시저 상태
+            proc_result = result[0]
+            error_code = proc_result.get('ErrorCode', 1)
+            error_message = proc_result.get('ErrorMessage', '')
+            
+            response.errorCode = error_code
+            if error_code == 0:
+                # 두 번째부터는 알림 데이터
+                for alarm_data in result[1:]:
+                    alarm_info = SignalAlarmInfo(
+                        alarm_id=alarm_data.get('alarm_id', ''),
+                        symbol=alarm_data.get('symbol', ''),
+                        company_name=alarm_data.get('company_name', ''),
+                        current_price=float(alarm_data.get('current_price', 0.0)),
+                        is_active=bool(alarm_data.get('is_active', True)),
+                        signal_count=int(alarm_data.get('signal_count', 0)),
+                        win_rate=float(alarm_data.get('win_rate', 0.0)),
+                        profit_rate=float(alarm_data.get('profit_rate', 0.0))
+                    )
+                    response.alarms.append(alarm_info)
+                
+                response.message = f"{len(response.alarms)}개의 알림을 조회했습니다"
+                Logger.info(f"Signal alarms retrieved: user={account_db_key}, count={len(response.alarms)}")
+            else:
+                response.message = error_message
+                Logger.warning(f"Signal alarm list failed: {error_message}")
+                
+        except Exception as e:
+            Logger.error(f"Signal alarm list error: {e}")
+            response.errorCode = 1003
+            response.message = f"알림 목록 조회 중 오류가 발생했습니다: {str(e)}"
+        
+        return response
+
+    async def on_signal_alarm_toggle_req(self, client_session, request: SignalAlarmToggleRequest):
+        """시그널 알림 ON/OFF 토글"""
+        response = SignalAlarmToggleResponse()
+        response.sequence = request.sequence
+        
+        try:
+            # 세션 정보 조회
+            account_db_key = getattr(client_session.session, 'account_db_key', 0)
+            if account_db_key == 0:
+                response.errorCode = 1001
+                response.message = "유효하지 않은 세션입니다"
+                return response
+            
+            db_service = ServiceContainer.get_database_service()
+            
+            # 프로시저 호출 - 알림 토글
+            result = await db_service.execute_shard_procedure(
+                account_db_key,
+                "fp_signal_alarm_toggle",
+                (request.alarm_id, account_db_key)
+            )
+            
+            if not result:
+                response.errorCode = 1002
+                response.message = "알림 설정 변경 중 오류가 발생했습니다"
+                return response
+            
+            proc_result = result[0]
+            error_code = proc_result.get('ErrorCode', 1)
+            error_message = proc_result.get('ErrorMessage', '')
+            
+            response.errorCode = error_code
+            if error_code == 0:
+                new_status = proc_result.get('new_status', True)
+                status_text = "활성화" if new_status else "비활성화"
+                response.message = f"알림이 {status_text}되었습니다"
+                Logger.info(f"Signal alarm toggled: user={account_db_key}, alarm_id={request.alarm_id}, active={new_status}")
+            else:
+                response.message = error_message
+                Logger.warning(f"Signal alarm toggle failed: {error_message}")
+                
+        except Exception as e:
+            Logger.error(f"Signal alarm toggle error: {e}")
+            response.errorCode = 1003
+            response.message = f"알림 설정 변경 중 오류가 발생했습니다: {str(e)}"
+        
+        return response
+
+    async def on_signal_alarm_delete_req(self, client_session, request: SignalAlarmDeleteRequest):
+        """시그널 알림 삭제"""
+        response = SignalAlarmDeleteResponse()
+        response.sequence = request.sequence
+        
+        try:
+            # 세션 정보 조회
+            account_db_key = getattr(client_session.session, 'account_db_key', 0)
+            if account_db_key == 0:
+                response.errorCode = 1001
+                response.message = "유효하지 않은 세션입니다"
+                return response
+            
+            db_service = ServiceContainer.get_database_service()
+            
+            # 프로시저 호출 - 소프트 삭제
+            result = await db_service.execute_shard_procedure(
+                account_db_key,
+                "fp_signal_alarm_soft_delete",
+                (request.alarm_id, account_db_key)
+            )
+            
+            if not result:
+                response.errorCode = 1002
+                response.message = "알림 삭제 중 오류가 발생했습니다"
+                return response
+            
+            proc_result = result[0]
+            error_code = proc_result.get('ErrorCode', 1)
+            error_message = proc_result.get('ErrorMessage', '')
+            
+            response.errorCode = error_code
+            if error_code == 0:
+                response.message = "알림이 성공적으로 삭제되었습니다"
+                Logger.info(f"Signal alarm deleted: user={account_db_key}, alarm_id={request.alarm_id}")
+            else:
+                response.message = error_message
+                Logger.warning(f"Signal alarm deletion failed: {error_message}")
+                
+        except Exception as e:
+            Logger.error(f"Signal alarm delete error: {e}")
+            response.errorCode = 1003
+            response.message = f"알림 삭제 중 오류가 발생했습니다: {str(e)}"
+        
+        return response
+
+    async def on_signal_history_req(self, client_session, request: SignalHistoryRequest):
+        """시그널 히스토리 조회"""
+        response = SignalHistoryResponse()
+        response.sequence = request.sequence
+        response.history = []
+        
+        try:
+            # 세션 정보 조회
+            account_db_key = getattr(client_session.session, 'account_db_key', 0)
+            if account_db_key == 0:
+                response.errorCode = 1001
+                response.message = "유효하지 않은 세션입니다"
+                return response
+            
+            db_service = ServiceContainer.get_database_service()
+            
+            # 프로시저 호출 - 히스토리 조회
+            result = await db_service.execute_shard_procedure(
+                account_db_key,
+                "fp_signal_history_get",
+                (account_db_key, request.alarm_id, request.limit, request.offset)
+            )
+            
+            if not result:
+                response.errorCode = 1002
+                response.message = "히스토리 조회 중 오류가 발생했습니다"
+                return response
+            
+            # 첫 번째 결과는 프로시저 상태
+            proc_result = result[0]
+            error_code = proc_result.get('ErrorCode', 1)
+            error_message = proc_result.get('ErrorMessage', '')
+            
+            response.errorCode = error_code
+            if error_code == 0:
+                # 두 번째부터는 히스토리 데이터
+                for history_data in result[1:]:
+                    history_item = SignalHistoryItem(
+                        signal_id=history_data.get('signal_id', ''),
+                        signal_type=history_data.get('signal_type', ''),
+                        signal_price=float(history_data.get('signal_price', 0.0)),
+                        profit_rate=history_data.get('profit_rate'),
+                        is_win=history_data.get('is_win')
+                    )
+                    response.history.append(history_item)
+                
+                response.message = f"{len(response.history)}개의 히스토리를 조회했습니다"
+                Logger.info(f"Signal history retrieved: user={account_db_key}, alarm_id={request.alarm_id}, count={len(response.history)}")
+            else:
+                response.message = error_message
+                Logger.warning(f"Signal history failed: {error_message}")
+                
+        except Exception as e:
+            Logger.error(f"Signal history error: {e}")
+            response.errorCode = 1003
+            response.message = f"히스토리 조회 중 오류가 발생했습니다: {str(e)}"
+        
+        return response

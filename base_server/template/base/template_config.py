@@ -13,6 +13,7 @@ from service.websocket.websocket_config import WebSocketConfig
 from service.email.email_config import EmailConfig
 from service.sms.sms_config import SmsConfig
 from service.rag.rag_config import RagConfig
+from service.notification.notification_config import NotificationConfig
 
 class TemplateConfig(BaseModel):
     appId: str
@@ -39,3 +40,4 @@ class AppConfig(BaseModel):
     emailConfig: EmailConfig
     smsConfig: SmsConfig
     ragConfig: RagConfig
+    notificationConfig: NotificationConfig

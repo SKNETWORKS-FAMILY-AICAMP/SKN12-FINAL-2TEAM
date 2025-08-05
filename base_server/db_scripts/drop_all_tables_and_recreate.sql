@@ -107,13 +107,13 @@ CREATE TABLE IF NOT EXISTS `table_user_profiles` (
   `profile_completed` tinyint(1) DEFAULT 0,
   `country` varchar(3) DEFAULT 'KOR',
   `timezone` varchar(50) DEFAULT 'Asia/Seoul',
-  `email_notifications_enabled` bit(1) NOT NULL DEFAULT b'1',
+  `email_notifications_enabled` bit(1) NOT NULL DEFAULT b'0',
   `sms_notifications_enabled` bit(1) NOT NULL DEFAULT b'0',
-  `push_notifications_enabled` bit(1) NOT NULL DEFAULT b'1',
-  `price_alert_enabled` bit(1) NOT NULL DEFAULT b'1',
-  `news_alert_enabled` bit(1) NOT NULL DEFAULT b'1',
+  `push_notifications_enabled` bit(1) NOT NULL DEFAULT b'0',
+  `price_alert_enabled` bit(1) NOT NULL DEFAULT b'0',
+  `news_alert_enabled` bit(1) NOT NULL DEFAULT b'0',
   `portfolio_alert_enabled` bit(1) NOT NULL DEFAULT b'0',
-  `trade_alert_enabled` bit(1) NOT NULL DEFAULT b'1',
+  `trade_alert_enabled` bit(1) NOT NULL DEFAULT b'0',
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`account_db_key`),
@@ -1406,6 +1406,214 @@ BEGIN
 END ;;
 DELIMITER ;
 
+-- =====================================
+-- 사용자 알림 설정 조회 (SignalMonitoringService용)
+-- 목적: 시그널 발생 시 사용자별 알림 채널 결정을 위한 설정 조회
+-- =====================================
+USE finance_global;
+DROP PROCEDURE IF EXISTS `fp_get_user_notification_settings`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_get_user_notification_settings`(
+    IN p_account_db_key BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE ProcParam VARCHAR(4000);
+    SET ProcParam = CONCAT('account_db_key=', IFNULL(p_account_db_key, 'NULL'));
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_get_user_notification_settings', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+    END;
+    
+    -- 파라미터 검증
+    IF p_account_db_key IS NULL OR p_account_db_key = 0 THEN
+        SELECT 1 as ErrorCode, 'account_db_key parameter is required' as ErrorMessage;
+        LEAVE;
+    END IF;
+    
+    -- 상태 반환
+    SELECT 0 as ErrorCode, 'SUCCESS' as ErrorMessage;
+    
+    -- 사용자 알림 설정 조회 (기본값: 모두 OFF - 사용자가 명시적으로 켜야 함)
+    SELECT 
+        p_account_db_key as account_db_key,
+        COALESCE(p.email_notifications_enabled, 0) as email_notifications_enabled,    -- 기본: OFF
+        COALESCE(p.sms_notifications_enabled, 0) as sms_notifications_enabled,        -- 기본: OFF
+        COALESCE(p.push_notifications_enabled, 0) as push_notifications_enabled,      -- 기본: OFF
+        COALESCE(p.price_alert_enabled, 0) as price_alert_enabled,                    -- 기본: OFF
+        COALESCE(p.trade_alert_enabled, 0) as trade_alert_enabled,                    -- 기본: OFF
+        COALESCE(p.news_alert_enabled, 0) as news_alert_enabled,                      -- 기본: OFF
+        COALESCE(p.portfolio_alert_enabled, 0) as portfolio_alert_enabled             -- 기본: OFF
+    FROM table_user_profiles p
+    WHERE p.account_db_key = p_account_db_key
+    
+    UNION ALL
+    
+    -- 프로필이 없는 경우 기본값 반환 (모두 OFF)
+    SELECT 
+        p_account_db_key as account_db_key,
+        0 as email_notifications_enabled,    -- 기본: OFF
+        0 as sms_notifications_enabled,      -- 기본: OFF  
+        0 as push_notifications_enabled,     -- 기본: OFF
+        0 as price_alert_enabled,            -- 기본: OFF
+        0 as trade_alert_enabled,            -- 기본: OFF
+        0 as news_alert_enabled,             -- 기본: OFF
+        0 as portfolio_alert_enabled         -- 기본: OFF
+    WHERE NOT EXISTS (
+        SELECT 1 FROM table_user_profiles 
+        WHERE account_db_key = p_account_db_key
+    )
+    LIMIT 1;  -- 중복 방지
+    
+END ;;
+DELIMITER ;
+
+-- =====================================
+-- 사용자 연락처 정보 조회 (알림 발송용)
+-- 목적: 이메일/SMS 발송을 위한 사용자 연락처 정보 조회
+-- =====================================
+USE finance_global;
+DROP PROCEDURE IF EXISTS `fp_get_user_contact_info`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_get_user_contact_info`(
+    IN p_account_db_key BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE ProcParam VARCHAR(4000);
+    SET ProcParam = CONCAT('account_db_key=', IFNULL(p_account_db_key, 'NULL'));
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_get_user_contact_info', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+    END;
+    
+    -- 파라미터 검증
+    IF p_account_db_key IS NULL OR p_account_db_key = 0 THEN
+        SELECT 1 as ErrorCode, 'account_db_key parameter is required' as ErrorMessage;
+        LEAVE;
+    END IF;
+    
+    -- 상태 반환
+    SELECT 0 as ErrorCode, 'SUCCESS' as ErrorMessage;
+    
+    -- 사용자 연락처 정보 조회
+    SELECT 
+        a.account_db_key,
+        a.email,
+        a.phone_number,
+        a.nickname,
+        a.account_status
+    FROM table_accountid a
+    WHERE a.account_db_key = p_account_db_key
+    AND a.account_status = 'Normal'
+    LIMIT 1;
+    
+END ;;
+DELIMITER ;
+
+-- =====================================
+-- 활성 샤드 목록 조회 프로시저 (SignalMonitoringService용)
+-- 목적: 하드코딩된 샤드 순회 대신 동적으로 활성 샤드 목록 조회
+-- =====================================
+USE finance_global;
+DROP PROCEDURE IF EXISTS `fp_get_active_shard_ids`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_get_active_shard_ids`()
+BEGIN
+    DECLARE ProcParam VARCHAR(4000) DEFAULT '';
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_get_active_shard_ids', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+    END;
+    
+    -- 상태 반환
+    SELECT 0 as ErrorCode, 'SUCCESS' as ErrorMessage;
+    
+    -- 활성 샤드 ID 목록 조회 (status가 'active'인 샤드만)
+    SELECT 
+        shard_id,
+        shard_name,
+        host,
+        port,
+        database_name,
+        status,
+        max_connections
+    FROM table_shard_config 
+    WHERE status = 'active'
+    ORDER BY shard_id;
+    
+END ;;
+DELIMITER ;
+
+-- =====================================
+-- 샤드 상태 업데이트 프로시저 (운영용)
+-- 목적: 샤드 상태를 동적으로 변경 (maintenance, disabled 등)
+-- =====================================
+USE finance_global;
+DROP PROCEDURE IF EXISTS `fp_update_shard_status`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_update_shard_status`(
+    IN p_shard_id INT,
+    IN p_status VARCHAR(20)
+)
+BEGIN
+    DECLARE v_affected_rows INT DEFAULT 0;
+    DECLARE ProcParam VARCHAR(4000);
+    SET ProcParam = CONCAT('shard_id=', IFNULL(p_shard_id, 'NULL'), ', status=', IFNULL(p_status, 'NULL'));
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        ROLLBACK;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_update_shard_status', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+    END;
+    
+    -- 파라미터 검증
+    IF p_shard_id IS NULL OR p_shard_id <= 0 THEN
+        SELECT 1 as ErrorCode, 'shard_id parameter is required and must be positive' as ErrorMessage;
+        LEAVE;
+    END IF;
+    
+    IF p_status NOT IN ('active', 'maintenance', 'disabled') THEN
+        SELECT 1 as ErrorCode, 'status must be one of: active, maintenance, disabled' as ErrorMessage;
+        LEAVE;
+    END IF;
+    
+    START TRANSACTION;
+    
+    -- 샤드 상태 업데이트
+    UPDATE table_shard_config 
+    SET status = p_status,
+        updated_at = NOW()
+    WHERE shard_id = p_shard_id;
+    
+    SET v_affected_rows = ROW_COUNT();
+    
+    IF v_affected_rows = 0 THEN
+        ROLLBACK;
+        SELECT 1 as ErrorCode, CONCAT('Shard not found: ', p_shard_id) as ErrorMessage;
+    ELSE
+        COMMIT;
+        SELECT 0 as ErrorCode, 
+               CONCAT('Shard ', p_shard_id, ' status updated to: ', p_status) as ErrorMessage,
+               v_affected_rows as affected_rows;
+    END IF;
+    
+END ;;
+DELIMITER ;
+
 -- 최종 상태 확인
 USE finance_global;
-SELECT 'Finance DB 재생성 완료 - account_db_key가 AUTO_INCREMENT PRIMARY KEY로 설정됨' as status;
+SELECT 'Finance DB 재생성 완료 - 샤드 동적 관리 프로시저 추가됨' as status;

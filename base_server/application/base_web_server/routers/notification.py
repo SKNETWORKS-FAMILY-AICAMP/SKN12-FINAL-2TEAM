@@ -2,8 +2,8 @@ from fastapi import APIRouter, Request
 from template.base.template_context import TemplateContext, TemplateType
 from template.base.template_service import TemplateService
 from template.notification.common.notification_serialize import (
-    NotificationListRequest, NotificationMarkReadRequest, NotificationCreateAlertRequest,
-    NotificationAlertListRequest, NotificationDeleteAlertRequest
+    NotificationListRequest, NotificationMarkReadRequest, NotificationMarkAllReadRequest,
+    NotificationDeleteRequest, NotificationStatsRequest
 )
 from template.notification.common.notification_protocol import NotificationProtocol
 
@@ -16,13 +16,13 @@ def setup_notification_protocol_callbacks():
     notification_template = TemplateContext.get_template(TemplateType.NOTIFICATION)
     notification_protocol.on_notification_list_req_callback = getattr(notification_template, "on_notification_list_req", None)
     notification_protocol.on_notification_mark_read_req_callback = getattr(notification_template, "on_notification_mark_read_req", None)
-    notification_protocol.on_notification_create_alert_req_callback = getattr(notification_template, "on_notification_create_alert_req", None)
-    notification_protocol.on_notification_alert_list_req_callback = getattr(notification_template, "on_notification_alert_list_req", None)
-    notification_protocol.on_notification_delete_alert_req_callback = getattr(notification_template, "on_notification_delete_alert_req", None)
+    notification_protocol.on_notification_mark_all_read_req_callback = getattr(notification_template, "on_notification_mark_all_read_req", None)
+    notification_protocol.on_notification_delete_req_callback = getattr(notification_template, "on_notification_delete_req", None)
+    notification_protocol.on_notification_stats_req_callback = getattr(notification_template, "on_notification_stats_req", None)
 
 @router.post("/list")
 async def notification_list(request: NotificationListRequest, req: Request):
-    """알림 목록 조회"""
+    """인앱 알림 목록 조회 (게임 패턴: 읽은 알림 조회 시 자동 삭제)"""
     ip = req.headers.get("X-Forwarded-For")
     if not ip:
         ip = req.client.host
@@ -52,9 +52,9 @@ async def notification_mark_read(request: NotificationMarkReadRequest, req: Requ
         notification_protocol.notification_mark_read_req_controller
     )
 
-@router.post("/create-alert")
-async def notification_create_alert(request: NotificationCreateAlertRequest, req: Request):
-    """알림 생성"""
+@router.post("/mark-all-read")
+async def notification_mark_all_read(request: NotificationMarkAllReadRequest, req: Request):
+    """알림 일괄 읽음 처리"""
     ip = req.headers.get("X-Forwarded-For")
     if not ip:
         ip = req.client.host
@@ -65,12 +65,12 @@ async def notification_create_alert(request: NotificationCreateAlertRequest, req
         req.url.path,
         ip,
         request.model_dump_json(),
-        notification_protocol.notification_create_alert_req_controller
+        notification_protocol.notification_mark_all_read_req_controller
     )
 
-@router.post("/alert/list")
-async def notification_alert_list(request: NotificationAlertListRequest, req: Request):
-    """알림 설정 목록 조회"""
+@router.post("/delete")
+async def notification_delete(request: NotificationDeleteRequest, req: Request):
+    """알림 삭제 (소프트 삭제)"""
     ip = req.headers.get("X-Forwarded-For")
     if not ip:
         ip = req.client.host
@@ -81,12 +81,12 @@ async def notification_alert_list(request: NotificationAlertListRequest, req: Re
         req.url.path,
         ip,
         request.model_dump_json(),
-        notification_protocol.notification_alert_list_req_controller
+        notification_protocol.notification_delete_req_controller
     )
 
-@router.post("/delete-alert")
-async def notification_delete_alert(request: NotificationDeleteAlertRequest, req: Request):
-    """알림 설정 삭제"""
+@router.post("/stats")
+async def notification_stats(request: NotificationStatsRequest, req: Request):
+    """알림 통계 조회"""
     ip = req.headers.get("X-Forwarded-For")
     if not ip:
         ip = req.client.host
@@ -97,5 +97,5 @@ async def notification_delete_alert(request: NotificationDeleteAlertRequest, req
         req.url.path,
         ip,
         request.model_dump_json(),
-        notification_protocol.notification_delete_alert_req_controller
+        notification_protocol.notification_stats_req_controller
     )

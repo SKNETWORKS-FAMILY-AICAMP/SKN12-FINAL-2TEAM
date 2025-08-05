@@ -583,11 +583,43 @@ async def lifespan(app: FastAPI):
                     Logger.error(f"채팅 영속성 컨슈머 등록 실패: {chat_consumer_e}")
                     Logger.info("채팅 영속성 컨슈머 없이 계속 진행")
                 
+                # NotificationPersistenceConsumer 등록 (알림 메시지 DB 저장 및 멀티채널 발송)
+                try:
+                    from template.notification.notification_persistence_consumer import register_notification_persistence_consumer
+                    if await register_notification_persistence_consumer():
+                        Logger.info("알림 영속성 컨슈머 등록 완료")
+                    else:
+                        Logger.warn("알림 영속성 컨슈머 등록 실패")
+                except Exception as notification_consumer_e:
+                    Logger.error(f"알림 영속성 컨슈머 등록 실패: {notification_consumer_e}")
+                    Logger.info("알림 영속성 컨슈머 없이 계속 진행")
+                
             else:
                 Logger.warn("QueueService 초기화 실패")
         except Exception as e:
             Logger.error(f"QueueService 초기화 실패: {e}")
             Logger.info("QueueService 없이 계속 진행")
+        
+        # NotificationService 초기화 (간소화된 알림 서비스)
+        try:
+            from service.notification.notification_service import NotificationService
+            if await NotificationService.init(app_config.notificationConfig):
+                Logger.info("✅ NotificationService 초기화 완료")
+                ServiceContainer.set_notification_service_initialized(True)
+            else:
+                Logger.warn("⚠️ NotificationService 초기화 실패")
+        except Exception as e:
+            Logger.error(f"❌ NotificationService 초기화 실패: {e}")
+            Logger.warn("⚠️ NotificationService 없이 계속 진행 - 알림 기능 제한됨")
+        
+        # SignalMonitoringService 초기화
+        try:
+            from service.signal.signal_monitoring_service import SignalMonitoringService
+            await SignalMonitoringService.init()
+            Logger.info("✅ SignalMonitoringService 초기화 완료")
+        except Exception as e:
+            Logger.error(f"❌ SignalMonitoringService 초기화 실패: {e}")
+            Logger.warn("⚠️ SignalMonitoringService 없이 계속 진행 - 시그널 알림 기능 제한됨")
         
         # WebSocket 서비스 초기화
         try:
@@ -1057,60 +1089,94 @@ async def lifespan(app: FastAPI):
         if SchedulerService.is_initialized():
             await SchedulerService.shutdown()
             ServiceContainer.set_scheduler_service_initialized(False)
-            Logger.info("SchedulerService 종료")
+            Logger.info("✅ SchedulerService 종료 완료")
     except Exception as e:
-        Logger.error(f"SchedulerService 종료 오류: {e}")
+        Logger.error(f"❌ SchedulerService 종료 오류: {e}")
     
     # QueueService 종료 (큐 처리 완료 후)
     try:
         if QueueService._initialized:
             Logger.info("QueueService graceful shutdown 시작...")
             
-            # 우아한 종료 시도 (처리 중인 메시지 완료 대기)
-            success = await QueueService.graceful_shutdown(timeout_seconds=30)
+            # 우아한 종료 시도 (처리 중인 메시지 완료 대기) - 타임아웃 단축
+            success = await QueueService.graceful_shutdown(timeout_seconds=10)
             
             if success:
-                Logger.info("QueueService graceful shutdown 성공")
+                Logger.info("✅ QueueService graceful shutdown 성공")
             else:
-                Logger.warn("QueueService graceful shutdown 실패 - 강제 종료")
+                Logger.warn("⚠️ QueueService graceful shutdown 실패 - 강제 종료")
                 await QueueService.shutdown()
             
             ServiceContainer.set_queue_service_initialized(False)
-            Logger.info("QueueService 종료 완료")
+            Logger.info("✅ QueueService 종료 완료")
     except Exception as e:
-        Logger.error(f"QueueService 종료 오류: {e}")
+        Logger.error(f"❌ QueueService 종료 오류: {e}")
         # 예외 발생 시에도 강제 종료 시도
         try:
             await QueueService.shutdown()
             ServiceContainer.set_queue_service_initialized(False)
         except Exception as force_e:
-            Logger.error(f"QueueService 강제 종료도 실패: {force_e}")
+            Logger.error(f"❌ QueueService 강제 종료도 실패: {force_e}")
     
     # WebSocket 서비스 종료
     try:
         if WebSocketService.is_initialized():
             await WebSocketService.shutdown()
             ServiceContainer.set_websocket_service_initialized(False)
-            Logger.info("WebSocket 서비스 종료 완료")
+            Logger.info("✅ WebSocket 서비스 종료 완료")
     except Exception as e:
-        Logger.error(f"WebSocket 서비스 종료 오류: {e}")
+        Logger.error(f"❌ WebSocket 서비스 종료 오류: {e}")
+    
+    # NotificationService 종료 (큐 의존 서비스이므로 먼저)
+    try:
+        from service.notification.notification_service import NotificationService
+        if NotificationService.is_initialized():
+            await NotificationService.shutdown()
+            Logger.info("✅ NotificationService 종료 완료")
+    except Exception as e:
+        Logger.error(f"❌ NotificationService 종료 오류: {e}")
+    
+    # SignalMonitoringService 종료 (KoreaInvestmentService 포함)
+    try:
+        from service.signal.signal_monitoring_service import SignalMonitoringService
+        if SignalMonitoringService.is_initialized():
+            await SignalMonitoringService.shutdown()
+            Logger.info("✅ SignalMonitoringService 종료 완료")
+    except Exception as e:
+        Logger.error(f"❌ SignalMonitoringService 종료 오류: {e}")
+    
+    # EmailService 종료 (AWS SES 연결 정리)
+    try:
+        if EmailService.is_initialized():
+            await EmailService.shutdown()
+            Logger.info("✅ EmailService 종료 완료")
+    except Exception as e:
+        Logger.error(f"❌ EmailService 종료 오류: {e}")
+    
+    # SmsService 종료 (AWS SNS 연결 정리)
+    try:
+        if SmsService.is_initialized():
+            await SmsService.shutdown()
+            Logger.info("✅ SmsService 종료 완료")
+    except Exception as e:
+        Logger.error(f"❌ SmsService 종료 오류: {e}")
     
     # LockService 종료 (분산락 해제)
     try:
         if LockService.is_initialized():
             await LockService.shutdown()
             ServiceContainer.set_lock_service_initialized(False)
-            Logger.info("LockService 종료")
+            Logger.info("✅ LockService 종료 완료")
     except Exception as e:
-        Logger.error(f"LockService 종료 오류: {e}")
+        Logger.error(f"❌ LockService 종료 오류: {e}")
     
     # VectorDB 서비스 종료 (Bedrock 세션 먼저)
     try:
         if VectorDbService.is_initialized():
             await VectorDbService.shutdown()
-            Logger.info("VectorDB 서비스 종료")
+            Logger.info("✅ VectorDB 서비스 종료 완료")
     except Exception as e:
-        Logger.error(f"VectorDB 서비스 종료 오류: {e}")
+        Logger.error(f"❌ VectorDB 서비스 종료 오류: {e}")
     
     # RAG 서비스 종료 (VectorDB 종료 직후)
     try:
@@ -1124,42 +1190,42 @@ async def lifespan(app: FastAPI):
     try:
         if SearchService.is_initialized():
             await SearchService.shutdown()
-            Logger.info("Search 서비스 종료")
+            Logger.info("✅ Search 서비스 종료 완료")
     except Exception as e:
-        Logger.error(f"Search 서비스 종료 오류: {e}")
+        Logger.error(f"❌ Search 서비스 종료 오류: {e}")
     
     # Storage 서비스 종료 (S3 세션)
     try:
         if StorageService.is_initialized():
             await StorageService.shutdown()
-            Logger.info("Storage 서비스 종료")
+            Logger.info("✅ Storage 서비스 종료 완료")
     except Exception as e:
-        Logger.error(f"Storage 서비스 종료 오류: {e}")
+        Logger.error(f"❌ Storage 서비스 종료 오류: {e}")
         
     # External 서비스 종료 (HTTP 세션)  
     try:
         if ExternalService.is_initialized():
             await ExternalService.shutdown()
-            Logger.info("External 서비스 종료")
+            Logger.info("✅ External 서비스 종료 완료")
     except Exception as e:
-        Logger.error(f"External 서비스 종료 오류: {e}")
+        Logger.error(f"❌ External 서비스 종료 오류: {e}")
         
     # 캐시 서비스 종료 (Redis 연결) - CacheService 의존 서비스들 이후 종료
     try:
         if CacheService.is_initialized():
             await CacheService.shutdown()
             ServiceContainer.set_cache_service_initialized(False)
-            Logger.info("캐시 서비스 종료")
+            Logger.info("✅ 캐시 서비스 종료 완료")
     except Exception as e:
-        Logger.error(f"캐시 서비스 종료 오류: {e}")
+        Logger.error(f"❌ 캐시 서비스 종료 오류: {e}")
     
     # 데이터베이스 서비스 종료 (마지막)
     try:
         if database_service:
             await database_service.close_service()
-            Logger.info("데이터베이스 서비스 종료")
+            Logger.info("✅ 데이터베이스 서비스 종료 완료")
     except Exception as e:
-        Logger.error(f"데이터베이스 서비스 종료 오류: {e}")
+        Logger.error(f"❌ 데이터베이스 서비스 종료 오류: {e}")
     
     # 진행 중인 작업들 완료 대기
     try:
@@ -1169,8 +1235,8 @@ async def lifespan(app: FastAPI):
         gc.collect()
         
         # 간단한 대기만 수행 (작업 취소는 uvicorn에 맡김)
-        await asyncio.sleep(0.2)  # 짧은 대기
-        Logger.info("모든 서비스 종료 완료")
+        await asyncio.sleep(0.5)  # 서비스 정리 대기 시간 증가
+        Logger.info("✅ 모든 서비스 종료 완료")
         
         # 활성 스레드 수 확인
         import threading

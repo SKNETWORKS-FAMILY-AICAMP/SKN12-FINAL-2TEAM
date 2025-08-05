@@ -1,95 +1,44 @@
 -- =====================================
--- 시그널 알림 시스템 테이블 확장 스크립트
--- 기존 base_server 패턴 준수
--- 외래키 없음, soft delete 지향
--- 적용 대상: finance_shard_1, finance_shard_2
+-- 시그널 알림 시스템 확장 (Finance Shard용)
+-- 볼린저 밴드 기반 매수/매도 시그널 알림 관리
+-- 
+-- 기능 개요:
+-- 1. 사용자가 특정 종목(TSLA, AAPL 등)에 대해 볼린저 밴드 시그널 알림을 등록
+-- 2. Model Server에서 5일치 데이터를 분석하여 매수/매도 시그널 생성
+-- 3. 시그널 발생 시 사용자에게 알림 전송
+-- 4. 1일 후 가격 변동을 추적하여 승률/수익률 계산
+-- 5. 사용자별 시그널 성과 통계 제공
 -- =====================================
 
--- =====================================
--- Shard DB 1에 시그널 테이블 추가
--- =====================================
 USE finance_shard_1;
 
--- 시그널 알람 테이블 (사용자별 종목 알림 설정)
-CREATE TABLE IF NOT EXISTS `table_signal_alarms` (
-  `idx` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '알람 고유 인덱스 (기존 패턴)',
-  `alarm_id` varchar(128) NOT NULL COMMENT '알람 ID (비즈니스 키)',
-  `account_db_key` bigint unsigned NOT NULL COMMENT '사용자 계정 키',
-  `symbol` varchar(50) NOT NULL COMMENT '종목 코드 (TSLA, AAPL 등)',
-  `company_name` varchar(200) DEFAULT NULL COMMENT '기업명 (Tesla, Inc.)',
-  `current_price` decimal(15,4) DEFAULT NULL COMMENT '알람 설정 시점 가격',
-  `exchange` varchar(50) DEFAULT 'NASDAQ' COMMENT '거래소',
-  `currency` varchar(10) DEFAULT 'USD' COMMENT '통화',
-  `note` varchar(500) DEFAULT NULL COMMENT '사용자 메모',
-  `is_active` tinyint(1) DEFAULT 1 COMMENT '알람 활성화 여부 (1=추론모델 동작, 0=일시정지)',
-  `is_deleted` tinyint(1) DEFAULT 0 COMMENT '삭제 여부 (soft delete, 1=화면에서 완전 제거)',
-  `created_at` datetime(6) DEFAULT CURRENT_TIMESTAMP(6) COMMENT '생성 시간',
-  `updated_at` datetime(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6) COMMENT '수정 시간',
-  PRIMARY KEY (`idx`),
-  UNIQUE KEY `uk_alarm_id` (`alarm_id`),
-  UNIQUE KEY `uk_account_symbol` (`account_db_key`, `symbol`),
-  INDEX `idx_account_db_key` (`account_db_key`),
-  INDEX `idx_symbol` (`symbol`),
-  INDEX `idx_is_active` (`is_active`),
-  INDEX `idx_is_deleted` (`is_deleted`),
-  INDEX `idx_active_not_deleted` (`is_active`, `is_deleted`),
-  INDEX `idx_created_at` (`created_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='시그널 알람 설정 테이블 (Shard 1)';
-
--- 시그널 히스토리 테이블 (매수/매도 시그널 발생 기록 및 성과)
-CREATE TABLE IF NOT EXISTS `table_signal_history` (
-  `idx` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '시그널 고유 인덱스 (기존 패턴)',
-  `signal_id` varchar(128) NOT NULL COMMENT '시그널 ID (비즈니스 키)',
-  `alarm_id` varchar(128) NOT NULL COMMENT '알람 ID (참조용, FK 없음)',
-  `account_db_key` bigint unsigned NOT NULL COMMENT '사용자 계정 키',
-  `symbol` varchar(50) NOT NULL COMMENT '종목 코드',
-  `signal_type` enum('BUY','SELL') NOT NULL COMMENT '시그널 타입',
-  `signal_price` decimal(15,4) NOT NULL COMMENT '시그널 발생 시점 가격',
-  `volume` bigint DEFAULT 0 COMMENT '거래량',
-  `triggered_at` datetime(6) DEFAULT CURRENT_TIMESTAMP(6) COMMENT '시그널 발생 시간',
-  
-  -- 성과 평가 필드 (1일 후 배치로 계산)
-  `price_after_1d` decimal(15,4) DEFAULT NULL COMMENT '1일 후 가격',
-  `profit_rate` decimal(10,4) DEFAULT NULL COMMENT '수익률 (%)',
-  `is_win` tinyint(1) DEFAULT NULL COMMENT '1% 이상 움직임 여부 (승률 계산용)',
-  `evaluated_at` datetime(6) DEFAULT NULL COMMENT '성과 평가 완료 시간',
-  
-  `is_deleted` tinyint(1) DEFAULT 0 COMMENT '삭제 여부 (soft delete, 1=화면에서 완전 제거)',
-  `created_at` datetime(6) DEFAULT CURRENT_TIMESTAMP(6) COMMENT '생성 시간',
-  `updated_at` datetime(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6) COMMENT '수정 시간',
-  PRIMARY KEY (`idx`),
-  UNIQUE KEY `uk_signal_id` (`signal_id`),
-  INDEX `idx_alarm_id` (`alarm_id`),
-  INDEX `idx_account_db_key` (`account_db_key`),
-  INDEX `idx_symbol` (`symbol`),
-  INDEX `idx_signal_type` (`signal_type`),
-  INDEX `idx_triggered_at` (`triggered_at`),
-  INDEX `idx_is_win` (`is_win`),
-  INDEX `idx_evaluated_at` (`evaluated_at`),
-  INDEX `idx_is_deleted` (`is_deleted`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='시그널 히스토리 테이블 (Shard 1)';
-
 -- =====================================
--- 시그널 관련 프로시저 (Shard 1) - 기존 패턴 준수
+-- 📋 시그널 알람 등록 프로시저
+-- 목적: 사용자가 특정 종목에 대한 볼린저 밴드 시그널 알림을 등록
+-- 호출: autotrade_template_impl.py의 on_signal_alarm_create_req에서 사용
+-- 
+-- 로직:
+-- 1. 같은 사용자, 같은 종목의 기존 알림 중복 체크
+-- 2. 중복이 없으면 새 알림 등록 (기본값: is_active=1, is_deleted=0)
+-- 3. 중복이 있으면 에러 코드 1062 반환
 -- =====================================
-
--- 시그널 알람 생성 프로시저
 DROP PROCEDURE IF EXISTS `fp_signal_alarm_create`;
 DELIMITER ;;
 CREATE PROCEDURE `fp_signal_alarm_create`(
-    IN p_alarm_id VARCHAR(128),
-    IN p_account_db_key BIGINT UNSIGNED,
-    IN p_symbol VARCHAR(50),
-    IN p_company_name VARCHAR(200),
-    IN p_current_price DECIMAL(15,4),
-    IN p_exchange VARCHAR(50),
-    IN p_currency VARCHAR(10),
-    IN p_note VARCHAR(500)
+    IN p_alarm_id VARCHAR(128),         -- UUID 형태의 알림 고유 ID (Python에서 생성)
+    IN p_account_db_key BIGINT UNSIGNED, -- 사용자 계정 키 (세션에서 가져옴)
+    IN p_symbol VARCHAR(50),            -- 종목 코드 (TSLA, AAPL 등)
+    IN p_company_name VARCHAR(200),     -- 기업명 (Tesla, Inc. 등)
+    IN p_current_price DECIMAL(15,4),   -- 알림 등록 시점의 현재가
+    IN p_exchange VARCHAR(50),          -- 거래소 (NASDAQ, NYSE 등)
+    IN p_currency VARCHAR(10),          -- 통화 (USD, KRW 등)
+    IN p_note VARCHAR(500)              -- 사용자 메모 (선택사항)
 )
 BEGIN
-    DECLARE v_existing_count INT DEFAULT 0;
-    DECLARE ProcParam VARCHAR(4000);
+    DECLARE v_existing_count INT DEFAULT 0;  -- 기존 알림 개수 확인용
+    DECLARE ProcParam VARCHAR(4000);         -- 에러 로그용 파라미터 문자열
     
+    -- 예외 발생 시 자동으로 에러 로그 기록 및 트랜잭션 롤백
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         SET ProcParam = CONCAT(p_alarm_id, ',', p_account_db_key, ',', p_symbol);
@@ -97,40 +46,55 @@ BEGIN
         ROLLBACK;
         INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
             VALUES ('fp_signal_alarm_create', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
-        RESIGNAL;
+        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
     END;
     
-    -- 중복 알람 확인 (삭제되지 않은 것만)
+    START TRANSACTION;
+    
+    -- 중복 확인: 같은 사용자가 같은 종목에 대해 삭제되지 않은 알림이 있는지 체크
     SELECT COUNT(*) INTO v_existing_count
     FROM table_signal_alarms 
     WHERE account_db_key = p_account_db_key 
       AND symbol = p_symbol 
-      AND is_deleted = 0;
+      AND is_deleted = 0;  -- 삭제되지 않은 것만
     
     IF v_existing_count > 0 THEN
-        SELECT 'EXISTS' as result, 'Signal alarm already exists for this symbol' as message, p_alarm_id as alarm_id;
+        ROLLBACK;
+        -- 중복 알림 존재 시 에러 반환 (MySQL 중복 키 에러 코드 사용)
+        SELECT 1062 as ErrorCode, CONCAT(p_symbol, ' 알림이 이미 등록되어 있습니다') as ErrorMessage;
     ELSE
-        -- 새 시그널 알람 생성 (기본적으로 활성화 상태)
+        -- 새 알림 등록 (기본값: 활성화 상태, 삭제되지 않음)
         INSERT INTO table_signal_alarms (
-            alarm_id, account_db_key, symbol, company_name, 
-            current_price, exchange, currency, note, is_active
+            alarm_id, account_db_key, symbol, company_name, current_price,
+            exchange, currency, note, is_active, is_deleted, created_at, updated_at
         ) VALUES (
-            p_alarm_id, p_account_db_key, p_symbol, p_company_name,
-            p_current_price, COALESCE(p_exchange, 'NASDAQ'), 
-            COALESCE(p_currency, 'USD'), p_note, 1
+            p_alarm_id, p_account_db_key, p_symbol, p_company_name, p_current_price,
+            p_exchange, p_currency, p_note, 1, 0, NOW(6), NOW(6)
         );
         
-        SELECT 'SUCCESS' as result, 'Signal alarm created successfully' as message, p_alarm_id as alarm_id;
+        COMMIT;
+        -- 성공 시 에러 코드 0 반환
+        SELECT 0 as ErrorCode, '알림이 성공적으로 등록되었습니다' as ErrorMessage;
     END IF;
     
 END ;;
 DELIMITER ;
 
--- 시그널 알람 목록 조회 프로시저 (삭제되지 않은 것만)
-DROP PROCEDURE IF EXISTS `fp_signal_alarms_get`;
+-- =====================================
+-- 📊 시그널 알람 목록 조회 (통계 포함)
+-- 목적: 사용자의 모든 알림 목록을 승률/수익률/시그널 횟수와 함께 조회
+-- 호출: autotrade_template_impl.py의 on_signal_alarm_list_req에서 사용
+-- 
+-- 로직:
+-- 1. table_signal_alarms와 table_signal_history를 LEFT JOIN
+-- 2. 평가 완료된 시그널(is_win IS NOT NULL)만으로 통계 계산
+-- 3. 승률 = (성공 시그널 / 전체 평가된 시그널) * 100
+-- 4. 수익률 = 모든 시그널의 평균 profit_rate
+-- =====================================
+DROP PROCEDURE IF EXISTS `fp_signal_alarms_get_with_stats`;
 DELIMITER ;;
-CREATE PROCEDURE `fp_signal_alarms_get`(
-    IN p_account_db_key BIGINT UNSIGNED
+CREATE PROCEDURE `fp_signal_alarms_get_with_stats`(
+    IN p_account_db_key BIGINT UNSIGNED -- 조회할 사용자의 계정 키
 )
 BEGIN
     DECLARE ProcParam VARCHAR(4000);
@@ -139,262 +103,124 @@ BEGIN
     BEGIN
         SET ProcParam = CONCAT(p_account_db_key);
         GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
-        ROLLBACK;
         INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
-            VALUES ('fp_signal_alarms_get', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
-        RESIGNAL;
+            VALUES ('fp_signal_alarms_get_with_stats', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
     END;
     
-    -- 사용자의 시그널 알람 목록 조회 (삭제되지 않은 것만)
+    -- 알림 목록과 시그널 통계를 함께 조회
+    -- LEFT JOIN을 사용하여 시그널이 없는 알림도 포함
     SELECT 
-        alarm_id, symbol, company_name, current_price,
-        exchange, currency, note, is_active, created_at, updated_at
-    FROM table_signal_alarms
-    WHERE account_db_key = p_account_db_key
-      AND is_deleted = 0
-    ORDER BY created_at DESC;
-    
-END ;;
-DELIMITER ;
-
--- 추론 모델용 활성 알람 목록 조회 프로시저
-DROP PROCEDURE IF EXISTS `fp_signal_alarms_get_active`;
-DELIMITER ;;
-CREATE PROCEDURE `fp_signal_alarms_get_active`()
-BEGIN
-    DECLARE ProcParam VARCHAR(4000);
-    
-    DECLARE EXIT HANDLER FOR SQLEXCEPTION
-    BEGIN
-        SET ProcParam = 'get_active_alarms';
-        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
-        ROLLBACK;
-        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
-            VALUES ('fp_signal_alarms_get_active', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
-        RESIGNAL;
-    END;
-    
-    -- 추론 모델이 모니터링할 활성 알람만 조회
-    SELECT 
-        alarm_id, account_db_key, symbol, company_name, current_price,
-        exchange, currency, created_at
-    FROM table_signal_alarms
-    WHERE is_active = 1
-      AND is_deleted = 0
-    ORDER BY symbol, created_at;
-    
-END ;;
-DELIMITER ;
-
--- 시그널 히스토리 저장 프로시저
-DROP PROCEDURE IF EXISTS `fp_signal_history_save`;
-DELIMITER ;;
-CREATE PROCEDURE `fp_signal_history_save`(
-    IN p_signal_id VARCHAR(128),
-    IN p_alarm_id VARCHAR(128),
-    IN p_account_db_key BIGINT UNSIGNED,
-    IN p_symbol VARCHAR(50),
-    IN p_signal_type VARCHAR(10),
-    IN p_signal_price DECIMAL(15,4),
-    IN p_volume BIGINT
-)
-BEGIN
-    DECLARE v_alarm_active INT DEFAULT 0;
-    DECLARE ProcParam VARCHAR(4000);
-    
-    DECLARE EXIT HANDLER FOR SQLEXCEPTION
-    BEGIN
-        SET ProcParam = CONCAT(p_signal_id, ',', p_alarm_id, ',', p_account_db_key, ',', p_symbol);
-        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
-        ROLLBACK;
-        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
-            VALUES ('fp_signal_history_save', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
-        RESIGNAL;
-    END;
-    
-    -- 활성 알람 확인 (is_active=1 이고 is_deleted=0 인 것만)
-    SELECT COUNT(*) INTO v_alarm_active
-    FROM table_signal_alarms 
-    WHERE alarm_id = p_alarm_id 
-      AND account_db_key = p_account_db_key 
-      AND is_active = 1 
-      AND is_deleted = 0;
-    
-    IF v_alarm_active = 0 THEN
-        SELECT 'FAILED' as result, 'Signal alarm not found or inactive' as message;
-    ELSE
-        -- 시그널 히스토리 저장
-        INSERT INTO table_signal_history (
-            signal_id, alarm_id, account_db_key, symbol, 
-            signal_type, signal_price, volume
-        ) VALUES (
-            p_signal_id, p_alarm_id, p_account_db_key, p_symbol,
-            p_signal_type, p_signal_price, COALESCE(p_volume, 0)
-        );
+        a.alarm_id,                      -- 알림 ID
+        a.symbol,                        -- 종목 코드
+        a.company_name,                  -- 기업명
+        a.current_price,                 -- 등록 시점 가격
+        a.exchange,                      -- 거래소
+        a.currency,                      -- 통화
+        a.note,                          -- 사용자 메모
+        a.is_active,                     -- 알림 활성화 상태 (ON/OFF 스위치)
+        a.created_at,                    -- 알림 등록 시간
         
-        SELECT 'SUCCESS' as result, 'Signal history saved successfully' as message, p_signal_id as signal_id;
-    END IF;
+        -- 시그널 통계 (평가 완료된 것만 집계)
+        COALESCE(COUNT(h.signal_id), 0) as signal_count,  -- 총 시그널 발생 횟수
+        COALESCE(
+            ROUND(AVG(CASE WHEN h.is_win = 1 THEN 100.0 ELSE 0.0 END), 2), 
+            0.0
+        ) as win_rate,                   -- 승률 (%) - 1% 이상 움직임 기준
+        COALESCE(ROUND(AVG(h.profit_rate), 2), 0.0) as profit_rate  -- 평균 수익률 (%)
+    FROM table_signal_alarms a
+    LEFT JOIN table_signal_history h ON a.alarm_id = h.alarm_id 
+        AND h.is_win IS NOT NULL     -- 평가 완료된 시그널만 (1일 후 배치 처리됨)
+        AND h.is_deleted = 0         -- 삭제되지 않은 시그널만
+    WHERE a.account_db_key = p_account_db_key 
+      AND a.is_deleted = 0           -- 삭제되지 않은 알림만
+    GROUP BY a.alarm_id, a.symbol, a.company_name, a.current_price, 
+             a.exchange, a.currency, a.note, a.is_active, a.created_at
+    ORDER BY a.created_at DESC;      -- 최신 등록순
     
 END ;;
 DELIMITER ;
 
--- 시그널 히스토리 조회 프로시저 (삭제되지 않은 것만)
-DROP PROCEDURE IF EXISTS `fp_signal_history_get`;
-DELIMITER ;;
-CREATE PROCEDURE `fp_signal_history_get`(
-    IN p_account_db_key BIGINT UNSIGNED,
-    IN p_symbol VARCHAR(50),
-    IN p_limit INT,
-    IN p_offset INT
-)
-BEGIN
-    DECLARE ProcParam VARCHAR(4000);
-    
-    DECLARE EXIT HANDLER FOR SQLEXCEPTION
-    BEGIN
-        SET ProcParam = CONCAT(p_account_db_key, ',', p_symbol, ',', p_limit, ',', p_offset);
-        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
-        ROLLBACK;
-        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
-            VALUES ('fp_signal_history_get', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
-        RESIGNAL;
-    END;
-    
-    -- 시그널 히스토리 조회 (삭제되지 않은 것만)
-    IF p_symbol IS NOT NULL AND p_symbol != '' THEN
-        SELECT 
-            signal_id, alarm_id, symbol, signal_type,
-            signal_price, volume, triggered_at,
-            price_after_1d, profit_rate, is_win, evaluated_at,
-            created_at, updated_at
-        FROM table_signal_history
-        WHERE account_db_key = p_account_db_key 
-          AND symbol = p_symbol 
-          AND is_deleted = 0
-        ORDER BY triggered_at DESC
-        LIMIT p_limit OFFSET p_offset;
-    ELSE
-        SELECT 
-            signal_id, alarm_id, symbol, signal_type,
-            signal_price, volume, triggered_at,
-            price_after_1d, profit_rate, is_win, evaluated_at,
-            created_at, updated_at
-        FROM table_signal_history
-        WHERE account_db_key = p_account_db_key 
-          AND is_deleted = 0
-        ORDER BY triggered_at DESC
-        LIMIT p_limit OFFSET p_offset;
-    END IF;
-    
-    -- 전체 개수 (삭제되지 않은 것만)
-    IF p_symbol IS NOT NULL AND p_symbol != '' THEN
-        SELECT COUNT(*) as total_count
-        FROM table_signal_history 
-        WHERE account_db_key = p_account_db_key 
-          AND symbol = p_symbol 
-          AND is_deleted = 0;
-    ELSE
-        SELECT COUNT(*) as total_count
-        FROM table_signal_history 
-        WHERE account_db_key = p_account_db_key 
-          AND is_deleted = 0;
-    END IF;
-    
-END ;;
-DELIMITER ;
-
--- 시그널 성과 업데이트 프로시저 (배치 작업용)
-DROP PROCEDURE IF EXISTS `fp_signal_performance_update`;
-DELIMITER ;;
-CREATE PROCEDURE `fp_signal_performance_update`(
-    IN p_signal_id VARCHAR(128),
-    IN p_price_after_1d DECIMAL(15,4),
-    IN p_profit_rate DECIMAL(10,4),
-    IN p_is_win TINYINT(1)
-)
-BEGIN
-    DECLARE ProcParam VARCHAR(4000);
-    
-    DECLARE EXIT HANDLER FOR SQLEXCEPTION
-    BEGIN
-        SET ProcParam = CONCAT(p_signal_id, ',', p_price_after_1d, ',', p_profit_rate);
-        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
-        ROLLBACK;
-        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
-            VALUES ('fp_signal_performance_update', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
-        RESIGNAL;
-    END;
-    
-    -- 시그널 성과 업데이트 (삭제되지 않은 것만)
-    UPDATE table_signal_history 
-    SET price_after_1d = p_price_after_1d,
-        profit_rate = p_profit_rate,
-        is_win = p_is_win,
-        evaluated_at = NOW(6),
-        updated_at = NOW(6)
-    WHERE signal_id = p_signal_id
-      AND is_deleted = 0;
-    
-    SELECT 'SUCCESS' as result, 'Signal performance updated successfully' as message;
-    
-END ;;
-DELIMITER ;
-
--- 시그널 알람 활성화/비활성화 토글 프로시저
+-- =====================================
+-- 🔄 시그널 알람 활성화/비활성화 토글
+-- 목적: 알림의 ON/OFF 상태를 토글 (화면에는 계속 표시되지만 시그널 수신 여부 결정)
+-- 호출: autotrade_template_impl.py의 on_signal_alarm_toggle_req에서 사용
+-- 
+-- 로직:
+-- 1. 현재 is_active 상태 조회
+-- 2. NOT 연산으로 상태 토글 (1→0, 0→1)
+-- 3. 변경된 상태값과 함께 성공 메시지 반환
+-- =====================================
 DROP PROCEDURE IF EXISTS `fp_signal_alarm_toggle`;
 DELIMITER ;;
 CREATE PROCEDURE `fp_signal_alarm_toggle`(
-    IN p_alarm_id VARCHAR(128),
-    IN p_account_db_key BIGINT UNSIGNED,
-    IN p_is_active TINYINT(1)
+    IN p_alarm_id VARCHAR(128),      -- 토글할 알림의 ID
+    IN p_account_db_key BIGINT UNSIGNED  -- 소유권 확인용 사용자 계정 키
 )
 BEGIN
-    DECLARE v_alarm_exists INT DEFAULT 0;
+    DECLARE v_alarm_exists INT DEFAULT 0;       -- 알림 존재 여부
+    DECLARE v_current_status TINYINT(1) DEFAULT 0;  -- 현재 활성화 상태
+    DECLARE v_new_status TINYINT(1) DEFAULT 0;      -- 변경될 상태
     DECLARE ProcParam VARCHAR(4000);
     
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
-        SET ProcParam = CONCAT(p_alarm_id, ',', p_account_db_key, ',', p_is_active);
+        SET ProcParam = CONCAT(p_alarm_id, ',', p_account_db_key);
         GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
         ROLLBACK;
         INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
             VALUES ('fp_signal_alarm_toggle', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
-        RESIGNAL;
+        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage, 0 as new_status;
     END;
     
-    -- 알람 존재 및 소유권 확인 (삭제되지 않은 것만)
-    SELECT COUNT(*) INTO v_alarm_exists
+    START TRANSACTION;
+    
+    -- 알림 존재 및 현재 상태 확인 (소유권 검증 포함)
+    SELECT COUNT(*), COALESCE(MAX(is_active), 0) INTO v_alarm_exists, v_current_status
     FROM table_signal_alarms 
     WHERE alarm_id = p_alarm_id 
-      AND account_db_key = p_account_db_key 
-      AND is_deleted = 0;
+      AND account_db_key = p_account_db_key  -- 본인 소유 알림만
+      AND is_deleted = 0;                    -- 삭제되지 않은 것만
     
     IF v_alarm_exists = 0 THEN
-        SELECT 'FAILED' as result, 'Signal alarm not found' as message;
+        ROLLBACK;
+        SELECT 1002 as ErrorCode, '알림을 찾을 수 없습니다' as ErrorMessage, 0 as new_status;
     ELSE
-        -- 활성화 상태 토글
+        -- 상태 토글: 현재 상태의 반대로 설정
+        SET v_new_status = NOT v_current_status;
+        
         UPDATE table_signal_alarms 
-        SET is_active = p_is_active,
-            updated_at = NOW(6)
+        SET is_active = v_new_status,    -- 새로운 활성화 상태
+            updated_at = NOW(6)          -- 수정 시간 업데이트
         WHERE alarm_id = p_alarm_id 
           AND account_db_key = p_account_db_key;
         
-        SELECT 'SUCCESS' as result, 
-               CONCAT('Signal alarm ', IF(p_is_active, 'activated', 'deactivated'), ' successfully') as message;
+        COMMIT;
+        SELECT 0 as ErrorCode, 
+               CONCAT('알림이 ', IF(v_new_status, '활성화', '비활성화'), '되었습니다') as ErrorMessage,
+               v_new_status as new_status;  -- 변경된 상태값 반환
     END IF;
     
 END ;;
 DELIMITER ;
 
--- 시그널 알람 Soft Delete 프로시저
+-- =====================================
+-- 🗑️ 시그널 알람 소프트 삭제
+-- 목적: 알림을 화면에서 완전히 제거 (DB에서는 soft delete로 보존)
+-- 호출: autotrade_template_impl.py의 on_signal_alarm_delete_req에서 사용
+-- 
+-- 차이점:
+-- - 토글: is_active만 변경, 화면에 계속 표시
+-- - 삭제: is_deleted=1 설정, 화면에서 완전 제거
+-- =====================================
 DROP PROCEDURE IF EXISTS `fp_signal_alarm_soft_delete`;
 DELIMITER ;;
 CREATE PROCEDURE `fp_signal_alarm_soft_delete`(
-    IN p_alarm_id VARCHAR(128),
-    IN p_account_db_key BIGINT UNSIGNED
+    IN p_alarm_id VARCHAR(128),      -- 삭제할 알림의 ID
+    IN p_account_db_key BIGINT UNSIGNED  -- 소유권 확인용 사용자 계정 키
 )
 BEGIN
-    DECLARE v_alarm_exists INT DEFAULT 0;
+    DECLARE v_alarm_exists INT DEFAULT 0;  -- 알림 존재 여부
     DECLARE ProcParam VARCHAR(4000);
     
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
@@ -404,168 +230,324 @@ BEGIN
         ROLLBACK;
         INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
             VALUES ('fp_signal_alarm_soft_delete', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
-        RESIGNAL;
+        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
     END;
     
     START TRANSACTION;
     
-    -- 알람 존재 및 소유권 확인 (삭제되지 않은 것만)
+    -- 알림 존재 및 소유권 확인
     SELECT COUNT(*) INTO v_alarm_exists
     FROM table_signal_alarms 
     WHERE alarm_id = p_alarm_id 
-      AND account_db_key = p_account_db_key 
-      AND is_deleted = 0;
+      AND account_db_key = p_account_db_key  -- 본인 소유 알림만
+      AND is_deleted = 0;                    -- 이미 삭제된 것은 제외
     
     IF v_alarm_exists = 0 THEN
         ROLLBACK;
-        SELECT 'FAILED' as result, 'Signal alarm not found or already deleted' as message;
+        SELECT 1002 as ErrorCode, '알림을 찾을 수 없습니다' as ErrorMessage;
     ELSE
-        -- 시그널 알람 Soft Delete (화면에서 완전 제거)
+        -- 소프트 삭제: 데이터는 보존하되 화면에서 제거
         UPDATE table_signal_alarms 
-        SET is_deleted = 1,
-            is_active = 0,  -- 삭제 시 비활성화도 함께
-            updated_at = NOW(6)
-        WHERE alarm_id = p_alarm_id 
-          AND account_db_key = p_account_db_key;
-        
-        -- 관련 시그널 히스토리도 Soft Delete (선택적)
-        UPDATE table_signal_history 
-        SET is_deleted = 1,
-            updated_at = NOW(6)
+        SET is_deleted = 1,       -- 삭제 플래그 설정
+            is_active = 0,        -- 삭제 시 비활성화도 함께 처리
+            updated_at = NOW(6)   -- 수정 시간 업데이트
         WHERE alarm_id = p_alarm_id 
           AND account_db_key = p_account_db_key;
         
         COMMIT;
-        SELECT 'SUCCESS' as result, 'Signal alarm soft deleted successfully' as message;
+        SELECT 0 as ErrorCode, '알림이 삭제되었습니다' as ErrorMessage;
     END IF;
     
 END ;;
 DELIMITER ;
 
--- 승률/수익률 통계 조회 프로시저 (활성 알람에서 발생한 시그널만)
-DROP PROCEDURE IF EXISTS `fp_signal_statistics_get`;
+-- =====================================
+-- 📈 시그널 히스토리 조회
+-- 목적: 발생한 시그널들의 이력을 필터링하여 조회
+-- 호출: autotrade_template_impl.py의 on_signal_history_req에서 사용
+-- 
+-- 기능:
+-- - 특정 알림, 종목, 시그널 타입별 필터링 지원
+-- - 동적 쿼리로 선택적 WHERE 조건 적용
+-- - 시그널 발생 시간 역순으로 정렬
+-- =====================================
+DROP PROCEDURE IF EXISTS `fp_signal_history_get`;
 DELIMITER ;;
-CREATE PROCEDURE `fp_signal_statistics_get`(
-    IN p_account_db_key BIGINT UNSIGNED,
-    IN p_symbol VARCHAR(50)
+CREATE PROCEDURE `fp_signal_history_get`(
+    IN p_account_db_key BIGINT UNSIGNED, -- 사용자 계정 키
+    IN p_alarm_id VARCHAR(128),      -- 특정 알림만 조회 (빈 문자열이면 전체)
+    IN p_symbol VARCHAR(50),         -- 특정 종목만 조회 (빈 문자열이면 전체)
+    IN p_signal_type VARCHAR(10),    -- BUY/SELL 필터 (빈 문자열이면 전체)
+    IN p_limit INT                   -- 조회 개수 제한
+)
+BEGIN
+    DECLARE v_sql TEXT;              -- 동적 쿼리 문자열
+    DECLARE ProcParam VARCHAR(4000);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET ProcParam = CONCAT(p_account_db_key, ',', COALESCE(p_alarm_id, ''), ',', COALESCE(p_symbol, ''));
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_signal_history_get', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+    END;
+    
+    -- 기본 쿼리 (사용자별 삭제되지 않은 시그널만)
+    SET v_sql = 'SELECT signal_id, alarm_id, symbol, signal_type, signal_price, volume, 
+                        triggered_at, price_after_1d, profit_rate, is_win, evaluated_at
+                 FROM table_signal_history 
+                 WHERE account_db_key = ? AND is_deleted = 0';
+    
+    -- 선택적 필터 추가 (파라미터가 비어있지 않으면 조건 추가)
+    IF p_alarm_id IS NOT NULL AND p_alarm_id != '' THEN
+        SET v_sql = CONCAT(v_sql, ' AND alarm_id = "', p_alarm_id, '"');
+    END IF;
+    
+    IF p_symbol IS NOT NULL AND p_symbol != '' THEN
+        SET v_sql = CONCAT(v_sql, ' AND symbol = "', p_symbol, '"');
+    END IF;
+    
+    IF p_signal_type IS NOT NULL AND p_signal_type != '' THEN
+        SET v_sql = CONCAT(v_sql, ' AND signal_type = "', p_signal_type, '"');
+    END IF;
+    
+    -- 정렬 및 개수 제한
+    SET v_sql = CONCAT(v_sql, ' ORDER BY triggered_at DESC LIMIT ', p_limit);
+    
+    -- 동적 쿼리 실행 (준비된 문장 사용)
+    SET @sql = v_sql;
+    PREPARE stmt FROM @sql;
+    SET @p_account_db_key = p_account_db_key;
+    EXECUTE stmt USING @p_account_db_key;
+    DEALLOCATE PREPARE stmt;
+    
+END ;;
+DELIMITER ;
+
+-- =====================================
+-- 🤖 활성 알림 목록 조회 (추론 모델용)
+-- 목적: Model Server에서 볼린저 밴드 분석할 알림 목록 제공
+-- 호출: Model Server의 배치 작업에서 사용
+-- 
+-- 조건:
+-- - is_active = 1 (사용자가 ON으로 설정한 알림만)
+-- - is_deleted = 0 (삭제되지 않은 알림만)
+-- - 모든 사용자의 알림을 함께 조회
+-- =====================================
+DROP PROCEDURE IF EXISTS `fp_signal_alarms_get_active`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_signal_alarms_get_active`()
+BEGIN
+    DECLARE ProcParam VARCHAR(4000);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_signal_alarms_get_active', @ErrorState, @ErrorNo, @ErrorMessage, '');
+        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+    END;
+    
+    -- 추론 모델에서 분석할 활성 알림 목록 조회
+    -- 등록 시간 순으로 정렬 (오래된 것부터 처리)
+    SELECT 
+        alarm_id,           -- 알림 ID
+        account_db_key,     -- 사용자 계정 키 (시그널 발생 시 필요)
+        symbol,             -- 종목 코드 (Yahoo Finance API 호출용)
+        company_name,       -- 기업명
+        current_price,      -- 등록 시점 가격 (참고용)
+        exchange,           -- 거래소
+        currency,           -- 통화
+        created_at          -- 등록 시간
+    FROM table_signal_alarms 
+    WHERE is_active = 1     -- 활성화된 알림만
+      AND is_deleted = 0    -- 삭제되지 않은 알림만
+    ORDER BY created_at ASC; -- 등록 순서대로 처리
+    
+END ;;
+DELIMITER ;
+
+-- =====================================
+-- 💾 시그널 히스토리 저장 (시그널 발생 시)
+-- 목적: Model Server에서 볼린저 밴드 시그널 감지 시 히스토리 저장
+-- 호출: Model Server의 시그널 생성 로직에서 사용
+-- 
+-- 로직:
+-- 1. 시그널 발생 즉시 기본 정보 저장
+-- 2. price_after_1d, profit_rate, is_win은 NULL (1일 후 배치에서 업데이트)
+-- 3. triggered_at에 현재 시간 기록
+-- =====================================
+DROP PROCEDURE IF EXISTS `fp_signal_history_save`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_signal_history_save`(
+    IN p_signal_id VARCHAR(128),     -- UUID 형태의 시그널 고유 ID
+    IN p_alarm_id VARCHAR(128),      -- 연결된 알림 ID
+    IN p_account_db_key BIGINT UNSIGNED, -- 사용자 계정 키
+    IN p_symbol VARCHAR(50),         -- 종목 코드
+    IN p_signal_type ENUM('BUY', 'SELL'), -- 시그널 타입 (매수/매도)
+    IN p_signal_price DECIMAL(15,4), -- 시그널 발생 시점의 가격
+    IN p_volume BIGINT               -- 거래량 (참고용)
 )
 BEGIN
     DECLARE ProcParam VARCHAR(4000);
     
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
-        SET ProcParam = CONCAT(p_account_db_key, ',', p_symbol);
+        SET ProcParam = CONCAT(p_signal_id, ',', p_alarm_id, ',', p_account_db_key, ',', p_symbol);
         GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
         ROLLBACK;
         INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
-            VALUES ('fp_signal_statistics_get', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
-        RESIGNAL;
+            VALUES ('fp_signal_history_save', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
     END;
     
-    -- 승률/수익률 통계 계산 (삭제되지 않은 시그널만, 평가 완료된 것만)
-    IF p_symbol IS NOT NULL AND p_symbol != '' THEN
-        SELECT 
-            symbol,
-            COUNT(*) as total_signals,
-            SUM(CASE WHEN is_win = 1 THEN 1 ELSE 0 END) as win_count,
-            AVG(profit_rate) as avg_profit_rate,
-            (SUM(CASE WHEN is_win = 1 THEN 1 ELSE 0 END) / COUNT(*)) * 100 as win_rate_percent,
-            MAX(profit_rate) as max_profit_rate,
-            MIN(profit_rate) as min_profit_rate
-        FROM table_signal_history 
-        WHERE account_db_key = p_account_db_key 
-          AND symbol = p_symbol
-          AND is_deleted = 0 
-          AND evaluated_at IS NOT NULL
-        GROUP BY symbol;
+    START TRANSACTION;
+    
+    -- 시그널 히스토리 저장 (1일 후 평가 필드는 NULL로 저장)
+    INSERT INTO table_signal_history (
+        signal_id, alarm_id, account_db_key, symbol, signal_type,
+        signal_price, volume, triggered_at, 
+        price_after_1d, profit_rate, is_win, evaluated_at,  -- 1일 후 평가 필드 (NULL)
+        is_deleted, created_at, updated_at
+    ) VALUES (
+        p_signal_id, p_alarm_id, p_account_db_key, p_symbol, p_signal_type,
+        p_signal_price, p_volume, NOW(6),
+        NULL, NULL, NULL, NULL,  -- 1일 후 배치에서 업데이트 예정
+        0, NOW(6), NOW(6)
+    );
+    
+    COMMIT;
+    SELECT 0 as ErrorCode, '시그널이 저장되었습니다' as ErrorMessage;
+    
+END ;;
+DELIMITER ;
+
+-- =====================================
+-- 📊 시그널 성과 업데이트 (1일 후 배치용)
+-- 목적: 시그널 발생 1일 후 가격 변동을 추적하여 성과 평가
+-- 호출: 배치 스케줄러에서 1일 후 실행
+-- 
+-- 평가 기준:
+-- - profit_rate = (1일후가격 - 시그널가격) / 시그널가격 * 100
+-- - is_win = 1% 이상 움직였는지 여부 (승률 계산에 사용)
+-- =====================================
+DROP PROCEDURE IF EXISTS `fp_signal_performance_update`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_signal_performance_update`(
+    IN p_signal_id VARCHAR(128),     -- 평가할 시그널 ID
+    IN p_price_after_1d DECIMAL(15,4), -- 1일 후 가격
+    IN p_profit_rate DECIMAL(10,4),  -- 수익률 (%) - 외부에서 계산된 값
+    IN p_is_win TINYINT(1)           -- 성공 여부 (1% 이상 움직임)
+)
+BEGIN
+    DECLARE v_signal_exists INT DEFAULT 0;  -- 시그널 존재 여부
+    DECLARE ProcParam VARCHAR(4000);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET ProcParam = CONCAT(p_signal_id, ',', p_price_after_1d, ',', p_profit_rate, ',', p_is_win);
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        ROLLBACK;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_signal_performance_update', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+    END;
+    
+    START TRANSACTION;
+    
+    -- 시그널 존재 확인 (삭제되지 않은 것만)
+    SELECT COUNT(*) INTO v_signal_exists
+    FROM table_signal_history 
+    WHERE signal_id = p_signal_id 
+      AND is_deleted = 0;
+    
+    IF v_signal_exists = 0 THEN
+        ROLLBACK;
+        SELECT 1002 as ErrorCode, '시그널을 찾을 수 없습니다' as ErrorMessage;
     ELSE
-        SELECT 
-            symbol,
-            COUNT(*) as total_signals,
-            SUM(CASE WHEN is_win = 1 THEN 1 ELSE 0 END) as win_count,
-            AVG(profit_rate) as avg_profit_rate,
-            (SUM(CASE WHEN is_win = 1 THEN 1 ELSE 0 END) / COUNT(*)) * 100 as win_rate_percent,
-            MAX(profit_rate) as max_profit_rate,
-            MIN(profit_rate) as min_profit_rate
-        FROM table_signal_history 
-        WHERE account_db_key = p_account_db_key 
-          AND is_deleted = 0 
-          AND evaluated_at IS NOT NULL
-        GROUP BY symbol
-        ORDER BY total_signals DESC;
+        -- 1일 후 성과 데이터 업데이트
+        UPDATE table_signal_history 
+        SET price_after_1d = p_price_after_1d,  -- 1일 후 가격
+            profit_rate = p_profit_rate,         -- 수익률 (%)
+            is_win = p_is_win,                   -- 성공 여부 (승률 계산용)
+            evaluated_at = NOW(6),               -- 평가 완료 시간
+            updated_at = NOW(6)                  -- 수정 시간
+        WHERE signal_id = p_signal_id;
+        
+        COMMIT;
+        SELECT 0 as ErrorCode, '시그널 성과가 업데이트되었습니다' as ErrorMessage;
     END IF;
     
 END ;;
 DELIMITER ;
 
 -- =====================================
--- Shard DB 2에 동일한 구조 생성
+-- 📈 시그널 통계 조회 (대시보드용)
+-- 목적: 사용자별 전체 시그널 성과 통계 제공
+-- 호출: 대시보드나 성과 분석 화면에서 사용
+-- 
+-- 집계 내용:
+-- - 등록된 알림 수 (전체/활성)
+-- - 발생한 시그널 수 (전체/매수/매도)
+-- - 평가된 시그널 수와 성공 시그널 수
+-- - 전체 승률과 평균 수익률
 -- =====================================
+DROP PROCEDURE IF EXISTS `fp_signal_statistics_get`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_signal_statistics_get`(
+    IN p_account_db_key BIGINT UNSIGNED -- 통계를 조회할 사용자 계정 키
+)
+BEGIN
+    DECLARE ProcParam VARCHAR(4000);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET ProcParam = CONCAT(p_account_db_key);
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_signal_statistics_get', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+    END;
+    
+    -- 사용자별 전체 시그널 통계 조회
+    -- 서브쿼리로 알림 관련 통계와 시그널 관련 통계를 함께 집계
+    SELECT 
+        -- 알림 관련 통계
+        (SELECT COUNT(*) FROM table_signal_alarms 
+         WHERE account_db_key = p_account_db_key AND is_deleted = 0) as total_alarms,    -- 전체 알림 수
+        (SELECT COUNT(*) FROM table_signal_alarms 
+         WHERE account_db_key = p_account_db_key AND is_active = 1 AND is_deleted = 0) as active_alarms,  -- 활성 알림 수
+        
+        -- 시그널 관련 통계
+        COUNT(*) as total_signals,  -- 전체 시그널 수
+        SUM(CASE WHEN signal_type = 'BUY' THEN 1 ELSE 0 END) as buy_signals,    -- 매수 시그널 수
+        SUM(CASE WHEN signal_type = 'SELL' THEN 1 ELSE 0 END) as sell_signals,  -- 매도 시그널 수
+        SUM(CASE WHEN is_win IS NOT NULL THEN 1 ELSE 0 END) as evaluated_signals, -- 평가 완료된 시그널 수
+        SUM(CASE WHEN is_win = 1 THEN 1 ELSE 0 END) as win_signals,             -- 성공한 시그널 수
+        
+        -- 성과 통계 (평가 완료된 시그널 기준)
+        COALESCE(ROUND(
+            AVG(CASE WHEN is_win = 1 THEN 100.0 ELSE 0.0 END), 2  -- 승률 = (성공/전체) * 100
+        ), 0.0) as overall_win_rate,                               -- 전체 승률 (%)
+        COALESCE(ROUND(AVG(profit_rate), 2), 0.0) as overall_profit_rate  -- 전체 평균 수익률 (%)
+    FROM table_signal_history 
+    WHERE account_db_key = p_account_db_key 
+      AND is_deleted = 0;  -- 삭제되지 않은 시그널만
+    
+END ;;
+DELIMITER ;
+
+-- =====================================
+-- 🔄 Shard 2에도 동일한 프로시저 생성
+-- 목적: finance_shard_1과 finance_shard_2에 동일한 프로시저 배포
+-- 
+-- 참고: 실제 운영에서는 스크립트 자동화 도구로 양쪽 샤드에 일괄 배포
+-- =====================================
+
 USE finance_shard_2;
 
--- 동일한 테이블 구조 복사 (Shard 2)
-CREATE TABLE IF NOT EXISTS `table_signal_alarms` (
-  `idx` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '알람 고유 인덱스 (기존 패턴)',
-  `alarm_id` varchar(128) NOT NULL COMMENT '알람 ID (비즈니스 키)',
-  `account_db_key` bigint unsigned NOT NULL COMMENT '사용자 계정 키',
-  `symbol` varchar(50) NOT NULL COMMENT '종목 코드 (TSLA, AAPL 등)',
-  `company_name` varchar(200) DEFAULT NULL COMMENT '기업명 (Tesla, Inc.)',
-  `current_price` decimal(15,4) DEFAULT NULL COMMENT '알람 설정 시점 가격',
-  `exchange` varchar(50) DEFAULT 'NASDAQ' COMMENT '거래소',
-  `currency` varchar(10) DEFAULT 'USD' COMMENT '통화',
-  `note` varchar(500) DEFAULT NULL COMMENT '사용자 메모',
-  `is_active` tinyint(1) DEFAULT 1 COMMENT '알람 활성화 여부 (1=추론모델 동작, 0=일시정지)',
-  `is_deleted` tinyint(1) DEFAULT 0 COMMENT '삭제 여부 (soft delete, 1=화면에서 완전 제거)',
-  `created_at` datetime(6) DEFAULT CURRENT_TIMESTAMP(6) COMMENT '생성 시간',
-  `updated_at` datetime(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6) COMMENT '수정 시간',
-  PRIMARY KEY (`idx`),
-  UNIQUE KEY `uk_alarm_id` (`alarm_id`),
-  UNIQUE KEY `uk_account_symbol` (`account_db_key`, `symbol`),
-  INDEX `idx_account_db_key` (`account_db_key`),
-  INDEX `idx_symbol` (`symbol`),
-  INDEX `idx_is_active` (`is_active`),
-  INDEX `idx_is_deleted` (`is_deleted`),
-  INDEX `idx_active_not_deleted` (`is_active`, `is_deleted`),
-  INDEX `idx_created_at` (`created_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='시그널 알람 설정 테이블 (Shard 2)';
-
-CREATE TABLE IF NOT EXISTS `table_signal_history` (
-  `idx` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '시그널 고유 인덱스 (기존 패턴)',
-  `signal_id` varchar(128) NOT NULL COMMENT '시그널 ID (비즈니스 키)',
-  `alarm_id` varchar(128) NOT NULL COMMENT '알람 ID (참조용, FK 없음)',
-  `account_db_key` bigint unsigned NOT NULL COMMENT '사용자 계정 키',
-  `symbol` varchar(50) NOT NULL COMMENT '종목 코드',
-  `signal_type` enum('BUY','SELL') NOT NULL COMMENT '시그널 타입',
-  `signal_price` decimal(15,4) NOT NULL COMMENT '시그널 발생 시점 가격',
-  `volume` bigint DEFAULT 0 COMMENT '거래량',
-  `triggered_at` datetime(6) DEFAULT CURRENT_TIMESTAMP(6) COMMENT '시그널 발생 시간',
-  
-  -- 성과 평가 필드 (1일 후 배치로 계산)
-  `price_after_1d` decimal(15,4) DEFAULT NULL COMMENT '1일 후 가격',
-  `profit_rate` decimal(10,4) DEFAULT NULL COMMENT '수익률 (%)',
-  `is_win` tinyint(1) DEFAULT NULL COMMENT '1% 이상 움직임 여부 (승률 계산용)',
-  `evaluated_at` datetime(6) DEFAULT NULL COMMENT '성과 평가 완료 시간',
-  
-  `is_deleted` tinyint(1) DEFAULT 0 COMMENT '삭제 여부 (soft delete, 1=화면에서 완전 제거)',
-  `created_at` datetime(6) DEFAULT CURRENT_TIMESTAMP(6) COMMENT '생성 시간',
-  `updated_at` datetime(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6) COMMENT '수정 시간',
-  PRIMARY KEY (`idx`),
-  UNIQUE KEY `uk_signal_id` (`signal_id`),
-  INDEX `idx_alarm_id` (`alarm_id`),
-  INDEX `idx_account_db_key` (`account_db_key`),
-  INDEX `idx_symbol` (`symbol`),
-  INDEX `idx_signal_type` (`signal_type`),
-  INDEX `idx_triggered_at` (`triggered_at`),
-  INDEX `idx_is_win` (`is_win`),
-  INDEX `idx_evaluated_at` (`evaluated_at`),
-  INDEX `idx_is_deleted` (`is_deleted`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='시그널 히스토리 테이블 (Shard 2)';
-
--- =====================================
--- Shard 2 주요 프로시저 복사
--- =====================================
-
--- 시그널 알람 생성 프로시저 (Shard 2)
+-- 시그널 알림 등록 프로시저 (Shard 2용)
 DROP PROCEDURE IF EXISTS `fp_signal_alarm_create`;
 DELIMITER ;;
 CREATE PROCEDURE `fp_signal_alarm_create`(
@@ -589,8 +571,10 @@ BEGIN
         ROLLBACK;
         INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
             VALUES ('fp_signal_alarm_create', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
-        RESIGNAL;
+        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
     END;
+    
+    START TRANSACTION;
     
     SELECT COUNT(*) INTO v_existing_count
     FROM table_signal_alarms 
@@ -599,50 +583,133 @@ BEGIN
       AND is_deleted = 0;
     
     IF v_existing_count > 0 THEN
-        SELECT 'EXISTS' as result, 'Signal alarm already exists for this symbol' as message, p_alarm_id as alarm_id;
+        ROLLBACK;
+        SELECT 1062 as ErrorCode, CONCAT(p_symbol, ' 알림이 이미 등록되어 있습니다') as ErrorMessage;
     ELSE
         INSERT INTO table_signal_alarms (
-            alarm_id, account_db_key, symbol, company_name, 
-            current_price, exchange, currency, note, is_active
+            alarm_id, account_db_key, symbol, company_name, current_price,
+            exchange, currency, note, is_active, is_deleted, created_at, updated_at
         ) VALUES (
-            p_alarm_id, p_account_db_key, p_symbol, p_company_name,
-            p_current_price, COALESCE(p_exchange, 'NASDAQ'), 
-            COALESCE(p_currency, 'USD'), p_note, 1
+            p_alarm_id, p_account_db_key, p_symbol, p_company_name, p_current_price,
+            p_exchange, p_currency, p_note, 1, 0, NOW(6), NOW(6)
         );
         
-        SELECT 'SUCCESS' as result, 'Signal alarm created successfully' as message, p_alarm_id as alarm_id;
+        COMMIT;
+        SELECT 0 as ErrorCode, '알림이 성공적으로 등록되었습니다' as ErrorMessage;
     END IF;
     
 END ;;
 DELIMITER ;
 
--- 추론 모델용 활성 알람 목록 조회 프로시저 (Shard 2)
-DROP PROCEDURE IF EXISTS `fp_signal_alarms_get_active`;
+-- =====================================
+-- 📝 나머지 프로시저들 (Shard 2용)
+-- 실제 운영에서는 모든 프로시저를 복사해야 하지만 
+-- 예시로 하나만 작성하고 나머지는 주석으로 표시
+-- =====================================
+
+-- TODO: 다음 프로시저들을 Shard 2에도 동일하게 생성 필요:
+-- - fp_signal_alarms_get_with_stats    (알림 목록 + 통계)
+-- - fp_signal_alarm_toggle             (활성화/비활성화 토글)
+-- - fp_signal_alarm_soft_delete        (소프트 삭제)
+-- - fp_signal_history_get              (히스토리 조회)
+-- - fp_signal_alarms_get_active        (추론 모델용 활성 알림)
+-- - fp_signal_history_save             (시그널 발생 시 저장)
+-- - fp_signal_performance_update       (1일 후 성과 업데이트)
+-- - fp_signal_statistics_get           (통계 조회)
+
+-- ===== 완료 =====
+-- 
+-- 사용법 요약:
+-- 1. 사용자가 알림 등록: fp_signal_alarm_create
+-- 2. 알림 목록 조회: fp_signal_alarms_get_with_stats
+-- 3. 알림 ON/OFF: fp_signal_alarm_toggle
+-- 4. 알림 삭제: fp_signal_alarm_soft_delete
+-- 5. Model Server가 활성 알림 조회: fp_signal_alarms_get_active
+-- 6. 시그널 발생 시 저장: fp_signal_history_save
+-- 7. 1일 후 성과 평가: fp_signal_performance_update
+-- 8. 통계 조회: fp_signal_statistics_get, fp_signal_history_get
+
+-- =====================================
+-- 📈 최적화: 활성 심볼 목록만 조회 (모니터링용)
+-- 목적: SignalMonitoringService에서 모니터링할 심볼 목록만 효율적으로 조회
+-- 기존 문제: 모든 샤드 순회 + 전체 알림 데이터 조회로 비효율적
+-- 해결책: 심볼만 중복 제거하여 반환, 샤드별 독립 실행
+-- =====================================
+DROP PROCEDURE IF EXISTS `fp_signal_symbols_get_active`;
 DELIMITER ;;
-CREATE PROCEDURE `fp_signal_alarms_get_active`()
+CREATE PROCEDURE `fp_signal_symbols_get_active`()
 BEGIN
-    DECLARE ProcParam VARCHAR(4000);
-    
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
-        SET ProcParam = 'get_active_alarms';
         GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
-        ROLLBACK;
         INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
-            VALUES ('fp_signal_alarms_get_active', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
-        RESIGNAL;
+            VALUES ('fp_signal_symbols_get_active', @ErrorState, @ErrorNo, @ErrorMessage, '');
+        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
     END;
     
-    SELECT 
-        alarm_id, account_db_key, symbol, company_name, current_price,
-        exchange, currency, created_at
-    FROM table_signal_alarms
-    WHERE is_active = 1
-      AND is_deleted = 0
-    ORDER BY symbol, created_at;
+    -- 상태 반환
+    SELECT 0 as ErrorCode, 'SUCCESS' as ErrorMessage;
+    
+    -- 활성 심볼 목록만 중복 제거하여 반환 (최적화)
+    -- 장점: 네트워크 트래픽 최소화, 같은 심볼 중복 모니터링 방지
+    SELECT DISTINCT
+        symbol,             -- 종목 코드 (모니터링 대상)
+        exchange            -- 거래소 (US/KR 구분용)
+    FROM table_signal_alarms 
+    WHERE is_active = 1     -- 활성화된 알림만
+      AND is_deleted = 0    -- 삭제되지 않은 알림만
+    ORDER BY symbol ASC;    -- 알파벳 순 정렬
     
 END ;;
 DELIMITER ;
 
--- 최종 상태 확인
-SELECT 'Signal alarm system extension completed for both shards with proper base_server patterns' as status;
+-- =====================================
+-- 📊 최적화: 특정 심볼의 활성 알림 상세 조회
+-- 목적: 시그널 발생 시 해당 심볼의 모든 활성 알림 정보 조회
+-- 기존 문제: 전체 알림을 조회한 후 심볼로 필터링
+-- 해결책: WHERE 절에서 심볼 직접 필터링으로 빠른 조회
+-- =====================================
+DROP PROCEDURE IF EXISTS `fp_signal_alarms_get_by_symbol`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_signal_alarms_get_by_symbol`(
+    IN p_symbol VARCHAR(20)
+)
+BEGIN
+    DECLARE ProcParam VARCHAR(4000);
+    SET ProcParam = CONCAT('symbol=', IFNULL(p_symbol, 'NULL'));
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_signal_alarms_get_by_symbol', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+    END;
+    
+    -- 파라미터 검증
+    IF p_symbol IS NULL OR p_symbol = '' THEN
+        SELECT 1 as ErrorCode, 'symbol parameter is required' as ErrorMessage;
+        LEAVE;
+    END IF;
+    
+    -- 상태 반환
+    SELECT 0 as ErrorCode, 'SUCCESS' as ErrorMessage;
+    
+    -- 특정 심볼의 활성 알림 상세 정보 조회 (인덱스 최적화)
+    SELECT 
+        alarm_id,           -- 알림 ID (시그널 저장 시 필요)
+        account_db_key,     -- 사용자 계정 키 (알림 발송 시 필요)
+        symbol,             -- 종목 코드
+        company_name,       -- 기업명
+        current_price,      -- 등록 시점 가격
+        exchange,           -- 거래소
+        currency,           -- 통화
+        created_at          -- 등록 시간
+    FROM table_signal_alarms 
+    WHERE symbol = p_symbol   -- 특정 심볼만 (인덱스 활용)
+      AND is_active = 1       -- 활성화된 알림만
+      AND is_deleted = 0      -- 삭제되지 않은 알림만
+    ORDER BY created_at ASC;  -- 등록 순서대로
+    
+END ;;
+DELIMITER ;

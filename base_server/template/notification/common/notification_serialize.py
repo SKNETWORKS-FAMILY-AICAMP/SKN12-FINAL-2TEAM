@@ -1,60 +1,83 @@
 from typing import Optional, List, Dict, Any
+from pydantic import BaseModel
 from service.net.protocol_base import BaseRequest, BaseResponse
-from .notification_model import Notification, PriceAlert, AlertRule
+from .notification_model import InAppNotification, NotificationStats
 
-# ============================================================================
-# 알림 관리
-# ============================================================================
-
+# ========================================
+# 인앱 알림 목록 조회
+# ========================================
 class NotificationListRequest(BaseRequest):
-    """알림 목록 조회"""
-    type_filter: str = "ALL"
-    read_status: str = "ALL"  # ALL, READ, UNREAD
+    """인앱 알림 목록 조회 요청"""
+    read_filter: str = "unread_only"  # all, unread_only, read_only (게임 패턴)
+    type_id: Optional[str] = None  # SIGNAL_ALERT, TRADE_COMPLETE 등
     page: int = 1
     limit: int = 20
 
 class NotificationListResponse(BaseResponse):
-    """알림 목록 응답"""
-    notifications: List[Notification] = []
+    """인앱 알림 목록 조회 응답"""
+    notifications: List[InAppNotification] = []
     total_count: int = 0
-    unread_count: int = 0
+    unread_count: int = 0  # 현재 총 미읽음 수
+    has_more: bool = False
 
+# ========================================
+# 알림 읽음 처리
+# ========================================
 class NotificationMarkReadRequest(BaseRequest):
-    """알림 읽음 처리"""
-    notification_ids: List[str]
+    """알림 읽음 처리 요청"""
+    notification_id: str = ""
 
 class NotificationMarkReadResponse(BaseResponse):
     """알림 읽음 처리 응답"""
-    updated_count: int = 0
+    result: str = ""  # SUCCESS, FAILED, ALREADY_READ
     message: str = ""
 
-class NotificationCreateAlertRequest(BaseRequest):
-    """가격 알림 생성"""
-    symbol: str
-    alert_type: str
-    target_value: float
-    message: Optional[str] = ""
+# ========================================
+# 알림 일괄 읽음 처리
+# ========================================
+class NotificationMarkAllReadRequest(BaseRequest):
+    """알림 일괄 읽음 처리 요청"""
+    type_id: Optional[str] = None  # 특정 타입만 읽음 처리 (None이면 전체)
 
-class NotificationCreateAlertResponse(BaseResponse):
-    """가격 알림 생성 응답"""
-    alert: Optional[PriceAlert] = None
+class NotificationMarkAllReadResponse(BaseResponse):
+    """알림 일괄 읽음 처리 응답"""
+    result: str = ""  # SUCCESS, FAILED
     message: str = ""
+    updated_count: int = 0  # 읽음 처리된 개수
 
-class NotificationAlertListRequest(BaseRequest):
-    """알림 설정 목록"""
-    symbol: Optional[str] = None
-    status_filter: str = "ACTIVE"  # ALL, ACTIVE, TRIGGERED
+# ========================================
+# 알림 삭제 (소프트 삭제)
+# ========================================
+class NotificationDeleteRequest(BaseRequest):
+    """알림 삭제 요청"""
+    notification_id: str = ""
 
-class NotificationAlertListResponse(BaseResponse):
-    """알림 설정 목록 응답"""
-    alerts: List[PriceAlert] = []
-    total_count: int = 0
-
-class NotificationDeleteAlertRequest(BaseRequest):
-    """알림 삭제"""
-    alert_ids: List[str]
-
-class NotificationDeleteAlertResponse(BaseResponse):
+class NotificationDeleteResponse(BaseResponse):
     """알림 삭제 응답"""
-    deleted_count: int = 0
+    result: str = ""  # SUCCESS, FAILED
     message: str = ""
+
+# ========================================
+# 알림 통계 조회
+# ========================================
+class NotificationStatsRequest(BaseRequest):
+    """알림 통계 조회 요청"""
+    days: int = 7  # 최근 N일
+
+class NotificationStatsResponse(BaseResponse):
+    """알림 통계 조회 응답"""
+    daily_stats: List[NotificationStats] = []  # 일별 통계
+    current_unread_count: int = 0  # 현재 미읽음 수
+
+# ========================================
+# 알림 생성 (서버 내부용 - 클라이언트 요청 없음)
+# ========================================
+class InternalNotificationCreateRequest(BaseModel):
+    """서버 내부 알림 생성 요청 (SignalMonitoringService에서 사용)"""
+    account_db_key: int
+    type_id: str  # NotificationType 사용
+    title: str
+    message: str
+    data: Optional[Dict[str, Any]] = None
+    priority: int = 3  # NotificationPriority 사용
+    expires_at: Optional[str] = None

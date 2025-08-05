@@ -34,6 +34,7 @@ class ServiceContainer:
     _scheduler_service_initialized: bool = False
     _queue_service_initialized: bool = False
     _websocket_service_initialized: bool = False
+    _notification_service_initialized: bool = False
     _korea_investment_service_initialized: bool = False
     
     def __new__(cls):
@@ -134,6 +135,15 @@ class ServiceContainer:
         return getattr(cls(), "_queue_service_initialized", False)
 
     @classmethod
+    def set_notification_service_initialized(cls, initialized: bool) -> None:
+        """NotificationService 초기화 상태 설정"""
+        cls()._notification_service_initialized = initialized
+
+    @classmethod
+    def is_notification_service_initialized(cls) -> bool:
+        return getattr(cls(), "_notification_service_initialized", False)
+
+    @classmethod
     def set_korea_investment_service(cls, service, websocket_service) -> None:
         """Korea Investment 서비스 인스턴스 설정"""
         container = cls()
@@ -176,6 +186,7 @@ class ServiceContainer:
             "vectordb": container._vectordb_service is not None,
             "ai_chat": container._ai_chat_service is not None,
             "websocket": container._websocket_service_initialized,
+            "notification": container._notification_service_initialized,
             "korea_investment": container._korea_investment_service_initialized
         }
 

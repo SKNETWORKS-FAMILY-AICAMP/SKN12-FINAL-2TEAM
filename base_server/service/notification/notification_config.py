@@ -3,7 +3,7 @@
 """
 from enum import Enum
 from typing import Optional, Dict, Any
-from dataclasses import dataclass
+from pydantic import BaseModel
 
 
 class NotificationChannel(Enum):
@@ -33,40 +33,27 @@ class NotificationType(Enum):
     ACCOUNT_SECURITY = "account_security"           # 계정 보안
 
 
-@dataclass
-class NotificationConfig:
-    """알림 서비스 설정"""
+class NotificationConfig(BaseModel):
+    """간소화된 알림 서비스 설정 - 실제 사용 항목만 포함"""
+    
     # 채널별 활성화 여부
-    enabled_channels: Dict[str, bool] = None
+    enabled_channels: Optional[Dict[str, bool]] = None
     
     # 배치 설정
     batch_size: int = 100
     batch_timeout_seconds: float = 5.0
     
-    # 재시도 설정
-    max_retries: int = 3
-    retry_delay_seconds: int = 60
-    
     # 중복 방지 설정
     dedup_window_hours: int = 24
     
-    # 우선순위 설정
-    priority_channels: Dict[str, int] = None  # 낮을수록 높은 우선순위
+    # 우선순위 설정  
+    priority_channels: Optional[Dict[str, int]] = None
     
-    # 제한 설정
+    # Rate Limiting 설정
     rate_limit_per_user_per_hour: int = 100
-    rate_limit_per_channel_per_hour: Dict[str, int] = None
     
-    # 템플릿 설정
-    template_path: str = "templates/notifications"
-    
-    # 외부 서비스 설정
-    push_service_config: Optional[Dict[str, Any]] = None
-    email_service_config: Optional[Dict[str, Any]] = None
-    sms_service_config: Optional[Dict[str, Any]] = None
-    
-    def __post_init__(self):
-        """기본값 설정"""
+    def model_post_init(self, __context):
+        """기본값 설정 (pydantic v2)"""
         if self.enabled_channels is None:
             self.enabled_channels = {
                 NotificationChannel.WEBSOCKET.value: True,
@@ -83,13 +70,4 @@ class NotificationConfig:
                 NotificationChannel.IN_APP.value: 3,
                 NotificationChannel.EMAIL.value: 4,
                 NotificationChannel.SMS.value: 5
-            }
-        
-        if self.rate_limit_per_channel_per_hour is None:
-            self.rate_limit_per_channel_per_hour = {
-                NotificationChannel.WEBSOCKET.value: 1000,
-                NotificationChannel.PUSH.value: 50,
-                NotificationChannel.EMAIL.value: 10,
-                NotificationChannel.SMS.value: 5,
-                NotificationChannel.IN_APP.value: 200
             }
