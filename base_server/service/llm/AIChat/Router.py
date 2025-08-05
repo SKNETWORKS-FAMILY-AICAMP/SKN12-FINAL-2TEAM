@@ -80,7 +80,10 @@ class AIChatRouter:
     """LLM + LangGraph 기반 금융 분석 라우터"""
 
     # ────────────────── 초기화 ───────────────────────────────
-    def __init__(self):
+    def __init__(self, client_session=None):
+        # 🆕 세션 정보 저장
+        self.client_session = client_session
+        
         # 서비스 컨테이너에서 AI 서비스 싱글톤 주입
         from service.service_container import ServiceContainer
 
@@ -207,7 +210,47 @@ class AIChatRouter:
         def kalman_regime_filter_tool(**params):
             """칼만 필터 기반 레짐 전환 감지 결과를 제공합니다."""
             agent = KalmanRegimeFilterTool(self.ai_chat_service)
-            return agent.get_data(**params).summary
+            
+            # 🆕 세션 정보 주입 (SessionAwareTool 지원)
+            print(f"[Router] client_session: {self.client_session}")
+            if self.client_session:
+                print(f"[Router] client_session.session: {self.client_session.session}")
+                from service.llm.AIChat.SessionAwareTool import ClientSession
+                session = ClientSession.from_template_session(self.client_session.session)
+                print(f"[Router] created session: {session}")
+                if session:
+                    agent.inject_session(session)
+                    print(f"[Router] 세션 주입 완료: account_db_key={session.account_db_key}")
+                else:
+                    print(f"[Router] 세션 생성 실패")
+            else:
+                print(f"[Router] client_session이 None")
+            
+            result = agent.get_data(**params)
+            
+            # 🆕 상세 정보를 포함한 포맷된 결과 반환
+            detailed_summary = f"""
+{result.summary}
+
+📊 **상세 분석 결과:**
+• **트레이딩 신호**: {result.recommendations.get('trading_signal', 'N/A')}
+• **전략**: {result.recommendations.get('strategy', 'N/A')}
+• **종합 신호 강도**: {result.recommendations.get('combined_signal', 'N/A')}
+• **포지션 크기**: {result.recommendations.get('position_size', 'N/A')} 주
+• **레버리지**: {result.recommendations.get('leverage', 'N/A')}x
+• **손절가**: ${result.recommendations.get('stop_loss', 'N/A')}
+• **목표가**: ${result.recommendations.get('take_profit', 'N/A')}
+• **리스크 점수**: {result.recommendations.get('risk_score', 'N/A')}
+• **시장 안정성**: {result.recommendations.get('market_stability', 'N/A')}
+
+📈 **상태 추정치:**
+• **트렌드**: {result.recommendations.get('state_estimates', {}).get('trend', 'N/A')}
+• **모멘텀**: {result.recommendations.get('state_estimates', {}).get('momentum', 'N/A')}
+• **변동성**: {result.recommendations.get('state_estimates', {}).get('volatility', 'N/A')}
+• **거시 신호**: {result.recommendations.get('state_estimates', {}).get('macro_signal', 'N/A')}
+• **기술 신호**: {result.recommendations.get('state_estimates', {}).get('tech_signal', 'N/A')}
+"""
+            return detailed_summary
 
         return [
             income_statement_tool,

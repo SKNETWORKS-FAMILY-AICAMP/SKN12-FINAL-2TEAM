@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import json
 from datetime import datetime
 from typing import Dict, Any, List
 import numpy as np
@@ -8,8 +9,9 @@ from numpy.typing import NDArray
 from pydantic import BaseModel, Field
 
 # --- 외부 툴 의존부 ---
-from service.llm.AIChat.BaseFinanceTool import BaseFinanceTool
+from service.llm.AIChat.SessionAwareTool import SessionAwareTool
 from service.llm.AIChat.manager.KalmanStateManager import KalmanStateManager
+from service.llm.AIChat.tool.KalmanRegimeFilterCore import KalmanRegimeFilterCore
 
 __all__ = ["KalmanRegimeFilterTool"]
 
@@ -159,7 +161,7 @@ class KalmanRegimeFilterCore:
 
 # ─────────────────────────── Tool Wrapper ───────────────────────── #
 
-class KalmanRegimeFilterTool(BaseFinanceTool):
+class KalmanRegimeFilterTool(SessionAwareTool):
     """
     매 호출 시:
       1) 거시·기술·가격 데이터 수집 (raw 값)
@@ -169,6 +171,9 @@ class KalmanRegimeFilterTool(BaseFinanceTool):
     """
     
     def __init__(self, ai_chat_service):
+        # SessionAwareTool 초기화
+        super().__init__()
+        
         from service.llm.AIChat_service import AIChatService
         if not isinstance(ai_chat_service, AIChatService):
             raise TypeError("Expected AIChatService instance")
@@ -177,16 +182,24 @@ class KalmanRegimeFilterTool(BaseFinanceTool):
         
         # 🆕 Redis + SQL 하이브리드 상태 관리
         try:
-            from service.cache.cache_client_pool import CacheClientPool
-            from service.db.database_service import DatabaseService
+            from service.service_container import ServiceContainer
+            from service.cache.cache_service import CacheService
             
-            redis_client = CacheClientPool.get_client()
-            db_service = DatabaseService()
-            self.state_manager = KalmanStateManager(redis_client, db_service)
+            # ServiceContainer에서 기존 서비스 가져오기
+            db_service = ServiceContainer.get_database_service()
+            
+            # Redis 클라이언트 풀 생성 (기존 설정 사용)
+            redis_pool = CacheService._client_pool
+            
+            self.state_manager = KalmanStateManager(redis_pool, db_service)
             print("[KalmanRegimeFilterTool] Redis + SQL 하이브리드 상태 관리 초기화 완료")
         except Exception as e:
             print(f"[KalmanRegimeFilterTool] 상태 관리 초기화 실패: {e}")
             self.state_manager = None
+    
+    def require_session(self) -> bool:
+        """세션은 선택사항 (fallback 지원)"""
+        return False
 
     # ---------- 정규화 유틸리티 함수들 ----------
     # ❌ 중복 정규화 메서드 제거 - FeaturePipelineTool에서 처리
@@ -210,6 +223,8 @@ class KalmanRegimeFilterTool(BaseFinanceTool):
         Returns:
             KalmanRegimeFilterActionOutput: 트레이딩 추천사항
         """
+        # SessionAwareTool의 세션 검증 (세션은 선택사항)
+        self.validate_session()
         t_start = time.time()
         
         # 1️⃣ kwargs → input class 파싱
@@ -323,23 +338,186 @@ class KalmanRegimeFilterTool(BaseFinanceTool):
         # 5️⃣ 칼만 필터 실행 (Redis + SQL 하이브리드 상태 관리)
         ticker = inp.tickers[0]
         
-        # 🆕 상태 관리자에서 필터 가져오기 (Redis → SQL → 새로 생성 순서)
+        # 🆕 경고 메시지 리스트 초기화
+        warning_messages: List[str] = []
+        
+        # 🆕 상태 관리자에서 필터 가져오기 (Redis → SQL → Rule-Based 초기화 순서)
         if self.state_manager:
-            # account_db_key는 임시로 0 사용 (실제로는 사용자 인증에서 가져와야 함)
-            account_db_key = 0
-            filter_instance = self.state_manager.get_filter(ticker, account_db_key)
+            # SessionAwareTool에서 사용자 정보 가져오기 (fallback 포함)
+            account_db_key = self.get_account_db_key()
+            shard_id = getattr(self.get_session(), 'shard_id', 1) if self.get_session() else 1
             
-            # 칼만 필터 실행
-            filter_instance.step(z)
-            state, cov = filter_instance.x.copy(), filter_instance.P.copy()
+            # 🆕 세션 유효성 검증 및 fallback
+            if account_db_key == 0:
+                # 임시로 고유한 계정 키 생성 (세션 ID 기반)
+                import hashlib
+                session_hash = hashlib.md5(f"session_{ticker}".encode()).hexdigest()[:8]
+                account_db_key = int(session_hash, 16) % 10000  # 0-9999 범위
+                warning_messages.append(f"⚠️ 사용자 세션이 없어 임시 계정({account_db_key})으로 실행됩니다")
+                print(f"[KalmanFilter] 세션 없음, 임시 계정 사용: {ticker} -> {account_db_key} (샤드 {shard_id})")
             
-            # Redis에 상태 저장
-            self.state_manager.save_state(ticker, account_db_key, filter_instance)
-            
-            # 성능 모니터링
-            performance_metrics = filter_instance.get_performance_metrics()
-            
-            print(f"[KalmanFilter] Redis+SQL 하이브리드 상태 관리: {ticker} (step_count: {filter_instance.step_count})")
+            try:
+                # 🆕 동기 방식으로 SQL에서 직접 복원
+                def restore_from_sql_sync():
+                    try:
+                        import pymysql
+                        import json
+                        import numpy as np
+                        
+                        # 설정 파일에서 데이터베이스 정보 읽기
+                        config_path = "application/base_web_server/base_web_server-config_local.json"
+                        with open(config_path, 'r', encoding='utf-8') as f:
+                            config = json.load(f)
+                        
+                        db_config = config["databaseConfig"]
+                        
+                        # 직접 MySQL 연결 (동기 방식)
+                        connection = pymysql.connect(
+                            host=db_config["host"],
+                            port=db_config["port"],
+                            user=db_config["user"],
+                            password=db_config["password"],
+                            database="finance_shard_2",  # shard_id에 따라
+                            charset=db_config["charset"]
+                        )
+                        
+                        try:
+                            with connection.cursor() as cursor:
+                                # 최신 상태 조회
+                                query = """
+                                SELECT state_vector_x, covariance_matrix_p, step_count, performance_metrics
+                                FROM table_kalman_history 
+                                WHERE ticker = %s AND account_db_key = %s 
+                                ORDER BY created_at DESC LIMIT 1
+                                """
+                                cursor.execute(query, (ticker, account_db_key))
+                                result = cursor.fetchone()
+                                
+                                if result:
+                                    # 칼만 필터 인스턴스 생성 및 복원
+                                    filter_instance = KalmanRegimeFilterCore()
+                                    filter_instance.x = np.array(json.loads(result[0]))  # state_vector_x
+                                    filter_instance.P = np.array(json.loads(result[1]))  # covariance_matrix_p
+                                    filter_instance.step_count = result[2]  # step_count
+                                    
+                                    print(f"[KalmanFilter] SQL에서 복원 성공: {ticker} (step_count: {filter_instance.step_count})")
+                                    return filter_instance
+                                else:
+                                    print(f"[KalmanFilter] SQL에서 데이터 없음: {ticker}")
+                                    return None
+                                    
+                        finally:
+                            connection.close()
+                            
+                    except Exception as e:
+                        print(f"[KalmanFilter] SQL 복원 실패: {e}")
+                        return None
+                
+                # 동기적으로 SQL 복원 실행
+                filter_instance = restore_from_sql_sync()
+                
+                if filter_instance is None:
+                    # SQL에서 복원 실패 시 Rule-Based 초기화
+                    print(f"[KalmanFilter] Rule-Based 초기화: {ticker}")
+                    
+                    # 동기적으로 Rule-Based 초기화 실행
+                    try:
+                        from service.llm.AIChat.tool.KalmanInitializerTool import KalmanInitializerTool
+                        
+                        # Rule-Based 초기화 툴 사용
+                        initializer = KalmanInitializerTool()
+                        x, P = initializer.initialize_kalman_state(ticker)
+                        
+                        # 칼만 필터 인스턴스 생성 및 초기화
+                        filter_instance = KalmanRegimeFilterCore()
+                        filter_instance.x = x
+                        filter_instance.P = P
+                        filter_instance.step_count = 0  # 초기화된 상태는 step_count = 0
+                        
+                        print(f"[KalmanFilter] Rule-Based 초기화 적용 완료: {ticker}")
+                        
+                    except Exception as e:
+                        print(f"[KalmanFilter] Rule-Based 초기화 실패: {e}")
+                        # 실패 시 기본 필터 반환
+                        filter_instance = KalmanRegimeFilterCore()
+                
+                # 칼만 필터 실행
+                filter_instance.step(z)
+                state, cov = filter_instance.x.copy(), filter_instance.P.copy()
+                
+                print(f"[KalmanFilter] 상태 복원 완료: {ticker} (step_count: {filter_instance.step_count})")
+                
+                # Redis 저장 (챗봇과 동일한 방식)
+                if self.state_manager:
+                    try:
+                        # 챗봇과 동일한 방식으로 Redis 저장 (동기 방식)
+                        try:
+                            from service.cache.cache_service import CacheService
+                            import asyncio
+                            
+                            # 동기적으로 Redis 저장 실행
+                            async def save_to_redis():
+                                async with CacheService.get_client() as redis:
+                                    # 칼만 필터 상태를 JSON으로 직렬화
+                                    state_data = {
+                                        "x": filter_instance.x.tolist(),
+                                        "P": filter_instance.P.tolist(),
+                                        "step_count": filter_instance.step_count,
+                                        "last_update": datetime.now().isoformat(),
+                                        "performance": json.dumps(filter_instance.get_performance_metrics()),
+                                        "account_db_key": account_db_key,
+                                        "shard_id": shard_id
+                                    }
+                                    
+                                    # Redis에 저장 (샤드 ID 포함)
+                                    redis_key = f"kalman:{ticker}:{account_db_key}:{shard_id}"
+                                    await redis.set_string(redis_key, json.dumps(state_data), expire=3600)
+                                    print(f"[KalmanFilter] Redis 저장 완료: {ticker} (샤드 {shard_id})")
+                            
+                            # ThreadPoolExecutor에서 실행되는 경우를 대비한 안전한 처리
+                            import threading
+                            def run_async_in_thread():
+                                import asyncio
+                                loop = asyncio.new_event_loop()
+                                asyncio.set_event_loop(loop)
+                                try:
+                                    loop.run_until_complete(save_to_redis())
+                                except Exception as e:
+                                    print(f"[KalmanFilter] Redis 저장 스레드 실패: {e}")
+                                finally:
+                                    loop.close()
+                            
+                            thread = threading.Thread(target=run_async_in_thread)
+                            thread.daemon = True
+                            thread.start()
+                                
+                        except Exception as e:
+                            print(f"[KalmanFilter] Redis 저장 실패: {e}")
+                            
+                    except Exception as e:
+                        print(f"[KalmanFilter] Redis 저장 실패: {e}")
+                
+                # 성능 모니터링
+                performance_metrics = filter_instance.get_performance_metrics()
+                
+                print(f"[KalmanFilter] Redis+SQL 하이브리드 상태 관리: {ticker} (step_count: {filter_instance.step_count})")
+                
+            except Exception as e:
+                print(f"[KalmanFilter] 상태 관리 실패, fallback 사용: {e}")
+                # fallback으로 전환
+                if not hasattr(self, '_filters'):
+                    self._filters = {}
+                
+                if ticker not in self._filters:
+                    self._filters[ticker] = KalmanRegimeFilterCore()
+                    print(f"[KalmanFilter] 새로운 필터 생성 (fallback): {ticker}")
+                else:
+                    print(f"[KalmanFilter] 기존 필터 사용 (fallback): {ticker} (step_count: {self._filters[ticker].step_count})")
+                
+                self._filters[ticker].step(z)
+                state, cov = self._filters[ticker].x.copy(), self._filters[ticker].P.copy()
+                performance_metrics = self._filters[ticker].get_performance_metrics()
+                filter_instance = self._filters[ticker]  # fallback용 filter_instance 설정
         else:
             # 상태 관리자가 없으면 기존 방식 사용 (fallback)
             if not hasattr(self, '_filters'):
@@ -357,13 +535,12 @@ class KalmanRegimeFilterTool(BaseFinanceTool):
         
         # 7️⃣ 액션 엔진
         rec: Dict[str, Any] = {}
-        warnings: List[str] = []
 
         # ── 변동성 클리핑
         raw_vol = float(state[2])  # volatility
         vol = float(np.clip(raw_vol, 0.05, 2.0))
         if vol != raw_vol:
-            warnings.append(f"Volatility clipped: {raw_vol:.4f}→{vol:.2f}")
+            warning_messages.append(f"Volatility clipped: {raw_vol:.4f}→{vol:.2f}")
 
         # ── 신호 결정
         trend = state[0]
@@ -397,7 +574,7 @@ class KalmanRegimeFilterTool(BaseFinanceTool):
         target_vol = 0.5
         leverage = min(target_vol / vol, inp.max_leverage)
         if leverage >= inp.max_leverage:
-            warnings.append(f"Leverage capped at {inp.max_leverage}×")
+            warning_messages.append(f"Leverage capped at {inp.max_leverage}×")
         rec["leverage"] = round(leverage, 2)
 
         # ── SL / TP (ATR 기반)
@@ -421,24 +598,106 @@ class KalmanRegimeFilterTool(BaseFinanceTool):
             "tech_signal": round(float(state[4]), 4)
         }
 
-        # 🆕 주기적으로 SQL에 이력 저장 (step_count가 10의 배수일 때)
-        if self.state_manager and filter_instance.step_count % 10 == 0:
+                # 🆕 SQL 저장 (샤드 ID 포함)
+        if self.state_manager and hasattr(filter_instance, 'step_count'):
+            # 1분마다 SQL 저장 (샤드 ID 포함)
             market_data = {
                 "price": entry_price,
                 "exchange_rate": exchange_rate,
                 "features": norm_features,
                 "raw_features": raw_features
             }
-            self.state_manager.save_history(ticker, account_db_key, filter_instance, signal, market_data)
+            
+            # SQL 저장 조건 확인 (1분 간격 또는 첫 번째 실행)
+            should_save = self.state_manager.should_save_to_sql(ticker, account_db_key, min_interval_minutes=1)
+            is_first_run = filter_instance.step_count <= 1  # 첫 번째 실행인지 확인
+            
+            if should_save or is_first_run:
+                print(f"[KalmanFilter] SQL 저장 조건 만족: {ticker} (샤드 {shard_id}) - 첫 실행: {is_first_run}")
+                try:
+                    # SQL 저장 (aiomysql 비동기 방식)
+                    async def save_to_sql_async():
+                        try:
+                            import aiomysql
+                            import json
+                            from datetime import datetime
+                            
+                            # 설정 파일에서 데이터베이스 정보 읽기
+                            config_path = "application/base_web_server/base_web_server-config_local.json"
+                            with open(config_path, 'r', encoding='utf-8') as f:
+                                config = json.load(f)
+                            
+                            db_config = config["databaseConfig"]
+                            
+                            # aiomysql로 비동기 연결 (설정 파일에서 읽어온 값 사용)
+                            pool = await aiomysql.create_pool(
+                                host=db_config["host"],
+                                port=db_config["port"],
+                                user=db_config["user"],
+                                password=db_config["password"],
+                                db="finance_shard_2",  # shard_id에 따라
+                                charset=db_config["charset"],
+                                autocommit=True
+                            )
+                            
+                            try:
+                                async with pool.acquire() as conn:
+                                    async with conn.cursor() as cursor:
+                                        # 저장 프로시저 호출 (올바른 파라미터 순서)
+                                        stored_proc_name = "fp_kalman_history_insert"
+                                        params = (
+                                            ticker,  # p_ticker
+                                            account_db_key,  # p_account_db_key
+                                            datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],  # p_timestamp (MySQL datetime 형식)
+                                            json.dumps(filter_instance.x.tolist()),  # p_state_vector_x
+                                            json.dumps(filter_instance.P.tolist()),  # p_covariance_matrix_p
+                                            filter_instance.step_count,  # p_step_count
+                                            signal,  # p_trading_signal
+                                            json.dumps(market_data),  # p_market_data
+                                            json.dumps(filter_instance.get_performance_metrics())  # p_performance_metrics
+                                        )
+                                        
+                                        await cursor.callproc(stored_proc_name, params)
+                                        print(f"[KalmanFilter] SQL 저장 완료: {ticker} (샤드 {shard_id})")
+                                        
+                            finally:
+                                pool.close()
+                                await pool.wait_closed()
+                                
+                        except Exception as e:
+                            print(f"[KalmanFilter] SQL 저장 실패: {e}")
+                    
+                    # 새로운 이벤트 루프에서 비동기 실행
+                    def run_async_in_thread():
+                        import asyncio
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            loop.run_until_complete(save_to_sql_async())
+                        except Exception as e:
+                            print(f"[KalmanFilter] SQL 저장 스레드 실패: {e}")
+                        finally:
+                            loop.close()
+                    
+                    # 백그라운드 스레드에서 실행
+                    import threading
+                    thread = threading.Thread(target=run_async_in_thread)
+                    thread.daemon = True
+                    thread.start()
+                        
+                except Exception as e:
+                    print(f"[KalmanFilter] SQL 저장 실패: {e}")
+            else:
+                print(f"[KalmanFilter] SQL 저장 조건 불만족: {ticker} (샤드 {shard_id}) - 1분 간격 대기 중 (step_count: {filter_instance.step_count})")
 
         # ── 지연
         latency = time.time() - t_start
         if latency > self.max_latency:
-            warnings.append(f"Latency {latency:.3f}s > limit {self.max_latency}s")
+            warning_messages.append(f"Latency {latency:.3f}s > limit {self.max_latency}s")
         rec["latency"] = round(latency, 3)
 
-        if warnings:
-            rec["warnings"] = warnings
+        if warning_messages:
+            rec["warnings"] = warning_messages
 
         # 8️⃣ 결과 반환
         data_status = "완전" if not missing_features else f"부분 ({len(missing_features)}개 누락)"
