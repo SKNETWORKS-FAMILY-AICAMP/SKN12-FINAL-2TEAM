@@ -28,9 +28,9 @@ class DatabaseConfig:
         # 모델 설정 (RunPod 환경 고려)
         if self._is_runpod_environment():
             # RunPod 환경: /workspace 경로 사용 (영구 저장)
-            self.model_path = os.getenv('MODEL_PATH', '/workspace/models/final_model.pth')
-            self.preprocessor_path = os.getenv('PREPROCESSOR_PATH', '/workspace/models/preprocessor.pkl')
-            self.log_dir = os.getenv('LOG_DIR', '/workspace/logs')
+            self.model_path = os.getenv('MODEL_PATH', '/workspace/SKN12-FINAL-2TEAM/base_server/template/model/models/final_model.pth')
+            self.preprocessor_path = os.getenv('PREPROCESSOR_PATH', '/workspace/SKN12-FINAL-2TEAM/base_server/template/model/models/preprocessor.pkl')
+            self.log_dir = os.getenv('LOG_DIR', '/workspace/SKN12-FINAL-2TEAM/base_server/template/model/logs')
         else:
             # 로컬/Docker 환경: 상대 경로 사용
             self.model_path = os.getenv('MODEL_PATH', 'models/final_model.pth')
