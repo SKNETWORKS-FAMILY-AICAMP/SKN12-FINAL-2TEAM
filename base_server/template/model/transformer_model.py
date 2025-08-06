@@ -10,6 +10,7 @@ import math
 import numpy as np
 from typing import Optional, Tuple, Dict, List
 import logging
+import matplotlib.pyplot as plt
 
 class PositionalEncoding(nn.Module):
     """
@@ -571,6 +572,25 @@ class PyTorchStockTransformer:
             "device": str(self.device),
             "loss_function": getattr(self, 'loss_type', 'unknown')
         }
+    
+    def plot_training_history(self, save_path: str = None):
+        """학습 히스토리 시각화"""
+        plt.figure(figsize=(12, 4))
+        
+        plt.subplot(1, 2, 1)
+        plt.plot(self.history['train_loss'], label='Train Loss')
+        if 'val_loss' in self.history and self.history['val_loss']:
+            plt.plot(self.history['val_loss'], label='Validation Loss')
+        plt.title('Model Loss')
+        plt.xlabel('Epoch')
+        plt.ylabel('Loss')
+        plt.legend()
+        
+        if save_path:
+            plt.savefig(save_path)
+            print(f"📊 Training history saved to {save_path}")
+        else:
+            plt.show()
 
 # 모델 성능 비교 유틸리티
 class ModelComparison:
