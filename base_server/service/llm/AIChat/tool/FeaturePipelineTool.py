@@ -48,17 +48,46 @@ class CompositeFormula(BaseModel):
 class FeaturePipelineTool:
     def __init__(self, ai_chat_service) -> None:
         self.ai_chat_service = ai_chat_service
+        
+        # ✅ 인스턴스 속성으로 정의
+        self.feature_means = {
+            "RSI": 50.0, "MACD": 0.0, "EMA": 100.0, "VIX": 20.0,
+            "priceEarningsRatio": 15.0, "returnOnEquity": 10.0,
+            "positive_news_ratio": 0.5, "CPIAUCSL": 300.0,
+            "kalman_trend": 0.0, "kalman_momentum": 0.0,
+            "kalman_volatility": 0.0, "kalman_macro": 0.0, "kalman_tech": 0.0,
+            "GDP": 10.0,  # log1p(GDP) 기준치 (대략치)
+            "PRICE": 6.5  # log1p(가격) 기준치 (대략치)
+        }
+        
+        self.feature_stds = {
+            "RSI": 15.0, "MACD": 1.5, "EMA": 20.0, "VIX": 8.0,  # 🆕 MACD std 0.5 → 1.5로 상향
+            "priceEarningsRatio": 10.0, "returnOnEquity": 5.0,
+            "positive_news_ratio": 0.2, "CPIAUCSL": 20.0,
+            "kalman_trend": 1.0, "kalman_momentum": 1.0,
+            "kalman_volatility": 1.0, "kalman_macro": 1.0, "kalman_tech": 1.0,
+            "GDP": 1.0, "PRICE": 1.0
+        }
 
-    # 정규화 대상 피처 상수 정의
-    LOG_SCALE_FEATURES = {
-        "GDP", "CPIAUCSL", "marketCap", "news_count", 
-        "PRICE", "DEXKOUS", "composite_1", "composite_3"
-    }
-    
-    Z_SCORE_FEATURES = {
-        "RSI", "MACD", "EMA", "VIX", "priceEarningsRatio", 
-        "returnOnEquity", "positive_news_ratio", "composite_2"
-    }
+        # ✅ 정규화 정책 정리
+        self.LOG_SCALE_FEATURES = {"DEXKOUS", "marketCap"}  # VIX 제거
+        self.Z_SCORE_FEATURES = {"RSI", "MACD", "EMA", "VIX", "priceEarningsRatio",
+                                 "returnOnEquity", "positive_news_ratio",
+                                 "kalman_trend","kalman_momentum","kalman_volatility",
+                                 "kalman_macro","kalman_tech"}
+        # log → z-score 2단계 적용 대상
+        self.LOG_THEN_Z_FEATURES = {"GDP", "CPIAUCSL", "PRICE", "marketCap"}
+        
+        # 로그 분포용 mean/std (GDP, CPI 전용)
+        self.log_feature_means = {
+            "GDP": 10.0,        # log(GDP) 평균 (약 22,000 → 10.0)
+            "CPIAUCSL": 5.7,    # log(CPI) 평균 (약 300 → 5.7)
+        }
+        
+        self.log_feature_stds = {
+            "GDP": 0.3,         # log(GDP) 표준편차
+            "CPIAUCSL": 0.1,    # log(CPI) 표준편차
+        }
 
     # 🆕 기본 Composite 공식들 (참고용)
     @staticmethod
@@ -89,21 +118,32 @@ class FeaturePipelineTool:
         """Extracts the latest value for a given feature from macro data."""
         latest_value = 0.0
         latest_date = ""
+        
+        print(f"[FeaturePipelineTool] _extract_macro: {feature_name} 데이터 추출 시작")
+        print(f"[FeaturePipelineTool] _extract_macro: macro_data 길이 = {len(macro_data)}")
+        
         for item in macro_data:
             if item.get("series_id") == feature_name:
-                current_date = item.get("date", "")
+                current_date = item.get("date", item.get("observation_date", ""))
                 if current_date > latest_date:
                     latest_date = current_date
                     try:
-                        value_str = item.get("value", "0.0")
+                        # 'latest_value' 우선, 없으면 'value' 사용
+                        value_str = item.get("latest_value", item.get("value", "0.0"))
+                        print(f"[FeaturePipelineTool] _extract_macro: {feature_name} raw value = {value_str}, date = {current_date}")
+                        
                         if isinstance(value_str, str) and value_str != '.':
                             latest_value = float(value_str)
                         elif isinstance(value_str, (int, float)):
                             latest_value = value_str
                         else:
                             latest_value = 0.0
-                    except (ValueError, TypeError):
+                            print(f"[FeaturePipelineTool] _extract_macro: {feature_name} 값 파싱 실패 (value_str = {value_str})")
+                    except (ValueError, TypeError) as e:
                         latest_value = 0.0
+                        print(f"[FeaturePipelineTool] _extract_macro: {feature_name} 값 변환 실패 - {e}")
+        
+        print(f"[FeaturePipelineTool] _extract_macro: {feature_name} 최종 값 = {latest_value}")
         return latest_value
 
     def _log1p_normalize(self, value: float) -> float:
@@ -113,36 +153,28 @@ class FeaturePipelineTool:
         return 0.0
     
     def _zscore_normalize(self, value: float, feature_name: str) -> float:
-        """Z-score 정규화 (일반적인 범위의 값에 적용)"""
-        # 피처별 고정된 기준값 사용
-        feature_means = {
-            "RSI": 50.0,              # RSI 평균
-            "MACD": 0.0,              # MACD 평균
-            "EMA": 100.0,             # EMA 평균
-            "VIX": 20.0,              # VIX 평균
-            "priceEarningsRatio": 15.0,  # PER 평균
-            "returnOnEquity": 10.0,   # ROE 평균
-            "positive_news_ratio": 0.5,  # 긍정 뉴스 비율 평균
-            "CPIAUCSL": 300.0,        # CPI 평균
-        }
+        """Z-score 정규화 + 클리핑"""
+        if feature_name in self.LOG_THEN_Z_FEATURES:
+            # 로그 분포용 mean/std 사용
+            mean = self.log_feature_means.get(feature_name, 0.0)
+            std = self.log_feature_stds.get(feature_name, 1.0)
+        else:
+            # 기존 mean/std 사용
+            mean = self.feature_means.get(feature_name, 0.0)
+            std = self.feature_stds.get(feature_name, 1.0)
         
-        feature_stds = {
-            "RSI": 15.0,              # RSI 표준편차
-            "MACD": 0.02,             # MACD 표준편차
-            "EMA": 20.0,              # EMA 표준편차
-            "VIX": 8.0,               # VIX 표준편차
-            "priceEarningsRatio": 10.0,  # PER 표준편차
-            "returnOnEquity": 5.0,    # ROE 표준편차
-            "positive_news_ratio": 0.2,  # 긍정 뉴스 비율 표준편차
-            "CPIAUCSL": 20.0,         # CPI 표준편차
-        }
+        if std == 0:
+            return 0.0
         
-        mean_val = feature_means.get(feature_name, 0.0)
-        std_val = feature_stds.get(feature_name, 1.0)
+        z_score = (value - mean) / std
         
-        if std_val > 1e-8:
-            return (value - mean_val) / std_val
-        return 0.0
+        # 🆕 클리핑으로 이상치 제한
+        if feature_name == "MACD":
+            z_score = np.clip(z_score, -3.0, 3.0)  # MACD는 ±3으로 제한
+        else:
+            z_score = np.clip(z_score, -5.0, 5.0)  # 일반적으로 ±5로 제한
+        
+        return z_score
 
     def _generate_composite_features(
         self, 
@@ -206,6 +238,11 @@ class FeaturePipelineTool:
                     normalized[target] = self._log1p_normalize(raw_value)
                     if debug:
                         print(f"[Selective Normalize] Applied log1p for {target}, value={raw_value:.4f} -> {normalized[target]:.4f}")
+                elif target in self.LOG_THEN_Z_FEATURES:
+                    normalized[target] = self._log1p_normalize(raw_value)
+                    normalized[target] = self._zscore_normalize(normalized[target], target)
+                    if debug:
+                        print(f"[Selective Normalize] Applied log1p then z-score for {target}, value={raw_value:.4f} -> {normalized[target]:.4f}")
                 elif target in self.Z_SCORE_FEATURES:
                     normalized[target] = self._zscore_normalize(raw_value, target)
                     if debug:
@@ -238,30 +275,6 @@ class FeaturePipelineTool:
             print(f"  - debug: {debug}")
         """
         완전한 피처 파이프라인 - 복합 피처 생성 + 선택적 정규화 + Raw/Normalized 동시 반환 지원
-        
-        Parameters
-        ----------
-        tickers : List[str]
-            분석할 종목 리스트
-        start_date : str
-            데이터 시작일
-        end_date : Optional[str]
-            데이터 종료일
-        feature_set : Optional[List[str]]
-            추출할 피처 리스트
-        normalize : bool, default True
-            정규화 적용 여부
-        normalize_targets : Optional[List[str]]
-            정규화할 피처 리스트 (None이면 모든 피처 정규화)
-        generate_composites : bool, default False
-            복합 피처 생성 여부
-        composite_formula_map : Optional[Dict[str, Callable]]
-            외부에서 정의된 composite 공식 맵
-            예: {"composite_1": lambda feats: 0.5 * (feats.get("GDP", 0.0) + feats.get("CPIAUCSL", 0.0))}
-        return_raw : bool, default False
-            Raw 값과 Normalized 값을 동시에 반환할지 여부
-        debug : bool, default False
-            디버깅용 로그 출력 여부
         """
         end_date = end_date or datetime.today().strftime("%Y-%m-%d")
         feature_set = feature_set or [
@@ -277,7 +290,16 @@ class FeaturePipelineTool:
             macro = MacroEconomicTool(self.ai_chat_service).get_data(series_ids=macro_series_ids)
             if macro.data:
                 for feat in macro_series_ids:
-                    features[feat] = self._extract_macro(macro.data, feat)
+                    value = self._extract_macro(macro.data, feat)
+                    if value == 0.0:
+                        print(f"[FeaturePipelineTool] ⚠️ {feat} 값이 0.0 (데이터 미수집 가능성)")
+                    else:
+                        print(f"[FeaturePipelineTool] ✅ {feat}: {value}")
+                    features[feat] = value
+            else:
+                print(f"[FeaturePipelineTool] ⚠️ MacroEconomicTool에서 데이터를 받아오지 못함")
+                for feat in macro_series_ids:
+                    features[feat] = 0.0
 
         # Technical
         tech_features = [f for f in ["RSI", "MACD", "EMA"] if f in feature_set]
@@ -340,66 +362,73 @@ class FeaturePipelineTool:
             if "PRICE_HISTORY" in feature_set:
                 features["PRICE_HISTORY"] = pd.DataFrame(price_data) if price_data else pd.DataFrame()
 
-        # 🆕 복합 피처 생성 (외부 공식 또는 기본 공식)
-        if generate_composites:
-            composite_features = self._generate_composite_features(features, composite_formula_map, debug)
-            features.update(composite_features)
-            if debug:
-                print(f"[FeaturePipelineTool] Generated {len(composite_features)} composite features: {list(composite_features.keys())}")
-            
-            # 🆕 Composite 피처 자동 정규화 대상 추가
-            if normalize and normalize_targets is not None:
-                composite_keys = list(composite_features.keys())
-                for key in composite_keys:
-                    if key not in normalize_targets:
-                        normalize_targets.append(key)
-                if debug:
-                    print(f"[FeaturePipelineTool] Auto-added composite features to normalize_targets: {composite_keys}")
-
-        # 🆕 Raw 값 저장 (return_raw=True인 경우)
-        raw_features = features.copy() if return_raw else None
-
-        # 🆕 완전한 정규화 파이프라인
+        # 1️⃣ 먼저 개별 feature 정규화
         if normalize:
             if normalize_targets:
-                # 선택적 정규화
-                result = self._selective_normalize(features, normalize_targets, debug)
+                # 기본 피처만 정규화 (composite 제외)
+                base_targets = [t for t in normalize_targets if not t.startswith('kalman_')]
+                features_normalized = self._selective_normalize(features, base_targets, debug)
                 if debug:
-                    print(f"[FeaturePipelineTool] Selective normalization completed: {len(result)} features")
+                    print(f"[FeaturePipelineTool] Base features normalization completed: {len(features_normalized)} features")
             else:
                 # 전체 정규화 (기존 로직 유지)
-                result = {}
+                features_normalized = {}
                 for feat_name, raw_value in features.items():
                     if not isinstance(raw_value, (int, float)) or pd.isna(raw_value):
-                        result[feat_name] = 0.0
+                        features_normalized[feat_name] = 0.0
                         if debug:
                             print(f"[FeaturePipelineTool] Invalid value for {feat_name}, setting to 0.0")
                         continue
-                        
-                    # 피처별 정규화 방식 선택
                     if feat_name in self.LOG_SCALE_FEATURES:
-                        result[feat_name] = self._log1p_normalize(raw_value)
+                        features_normalized[feat_name] = self._log1p_normalize(raw_value)
                         if debug:
-                            print(f"[FeaturePipelineTool] Applied log1p for {feat_name}, value={raw_value:.4f} -> {result[feat_name]:.4f}")
+                            print(f"[FeaturePipelineTool] Applied log1p for {feat_name}, value={raw_value:.4f} -> {features_normalized[feat_name]:.4f}")
+                    elif feat_name in self.LOG_THEN_Z_FEATURES:
+                        features_normalized[feat_name] = self._log1p_normalize(raw_value)
+                        features_normalized[feat_name] = self._zscore_normalize(features_normalized[feat_name], feat_name)
+                        if debug:
+                            print(f"[FeaturePipelineTool] Applied log1p then z-score for {feat_name}, value={raw_value:.4f} -> {features_normalized[feat_name]:.4f}")
                     elif feat_name in self.Z_SCORE_FEATURES:
-                        result[feat_name] = self._zscore_normalize(raw_value, feat_name)
+                        features_normalized[feat_name] = self._zscore_normalize(raw_value, feat_name)
                         if debug:
-                            print(f"[FeaturePipelineTool] Applied z-score for {feat_name}, value={raw_value:.4f} -> {result[feat_name]:.4f}")
+                            print(f"[FeaturePipelineTool] Applied z-score for {feat_name}, value={raw_value:.4f} -> {features_normalized[feat_name]:.4f}")
                     else:
-                        # 기본적으로 Z-score 적용
-                        result[feat_name] = self._zscore_normalize(raw_value, feat_name)
+                        features_normalized[feat_name] = self._zscore_normalize(raw_value, feat_name)
                         if debug:
-                            print(f"[FeaturePipelineTool] Applied default z-score for {feat_name}, value={raw_value:.4f} -> {result[feat_name]:.4f}")
-                
+                            print(f"[FeaturePipelineTool] Applied default z-score for {feat_name}, value={raw_value:.4f} -> {features_normalized[feat_name]:.4f}")
                 if debug:
-                    print(f"[FeaturePipelineTool] Full normalization completed: {len(result)} features")
+                    print(f"[FeaturePipelineTool] Full normalization completed: {len(features_normalized)} features")
         else:
-            # 정규화하지 않고 raw 값 그대로 반환
-            result = features
+            features_normalized = features.copy()
             if debug:
-                print(f"[FeaturePipelineTool] Raw values returned: {len(result)} features")
-        
-        # 🆕 Raw + Normalized 동시 반환
+                print(f"[FeaturePipelineTool] Raw values returned: {len(features_normalized)} features")
+
+        # 2️⃣ 정규화된 값으로 composite feature 생성
+        if generate_composites:
+            composite_features = self._generate_composite_features(features_normalized, composite_formula_map, debug)
+            if debug:
+                print(f"[FeaturePipelineTool] Generated {len(composite_features)} composite features: {list(composite_features.keys())}")
+            
+            # 3️⃣ composite feature만 추가 정규화 (z-score)
+            if normalize:
+                composite_targets = list(composite_features.keys())
+                norm_composites = self._selective_normalize(composite_features, composite_targets, debug)
+                if debug:
+                    print(f"[FeaturePipelineTool] Composite normalization completed: {len(norm_composites)} features")
+                
+                # 4️⃣ 기본 피처 + 정규화된 composite 피처 병합
+                result = {**features_normalized, **norm_composites}
+            else:
+                # 정규화하지 않는 경우 기본 피처 + raw composite 피처 병합
+                result = {**features_normalized, **composite_features}
+        else:
+            # composite 생성하지 않는 경우 기본 피처만 반환
+            result = features_normalized
+
+        # Raw 값 저장 (return_raw=True인 경우)
+        raw_features = features.copy() if return_raw else None
+
+        # Raw + Normalized 동시 반환
         if return_raw:
             return {
                 "raw": raw_features,

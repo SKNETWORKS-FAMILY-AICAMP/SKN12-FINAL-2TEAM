@@ -104,7 +104,53 @@ class AIChatRouter:
                 "재무 실적, 주가, 시세, 뉴스 등 모든 금융 정보는 도구를 통해 수집해야 해. "
                 "도구를 사용해서 실제 데이터를 기반으로 정확한 정보를 제공해. "
                 "도구 사용이 불가능한 경우에도 가능한 도구를 찾아서 사용해. "
-                f"오늘 날짜는 {self.today}야."
+                f"오늘 날짜는 {self.today}야.\n\n"
+                "🎯 도구 선택 가이드라인:\n"
+                "- \"언제 사야하냐\", \"매수 타이밍\", \"진입 시점\" → kalman_regime_filter_tool 사용\n"
+                "- \"기술적 지표\", \"RSI\", \"MACD\" → technical_analysis 사용\n"
+                "- \"뉴스\", \"실적\", \"발표\" → news 사용\n"
+                "- \"재무 실적\", \"손익계산서\", \"수익성\" → income_statement_tool 사용\n"
+                "- \"재무상태표\", \"자산\", \"부채\" → balance_sheet_tool 사용\n"
+                "- \"현금흐름표\", \"현금 흐름\" → cashflow_statement_tool 사용\n"
+                "- \"재무비율\", \"ROE\", \"ROA\" → ratios_tool 사용\n"
+                "- \"핵심지표\", \"EPS\", \"배당\" → key_metrics_tool 사용\n"
+                "- \"성장률\", \"매출 성장\" → financial_growth_tool 사용\n"
+                "- \"기업가치\", \"EV\", \"시가총액\" → enterprise_value_tool 사용\n"
+                "- \"주가\", \"거래량\", \"시세\" → market_data 사용\n"
+                "- \"거시경제\", \"GDP\", \"CPI\" → macro_economic 사용\n"
+                "- \"섹터\", \"산업별\" → sector_analysis 사용\n"
+                "- \"산업\", \"Industry\" → industry_analysis 사용\n"
+                "- \"시장 레짐\", \"강세/약세\" → market_regime_detector_tool 사용\n\n"
+                "🔧 도구별 용도:\n"
+                "- kalman_regime_filter_tool: 매수/매도 시점, 포지션 크기, 손절가 예측\n"
+                "- technical_analysis: RSI, MACD 등 기술적 지표 분석\n"
+                "- news: 뉴스, 실적, 시장 감정 분석\n"
+                "- income_statement_tool: 손익계산서, 수익성 지표 분석\n"
+                "- balance_sheet_tool: 재무상태표, 자산/부채 분석\n"
+                "- cashflow_statement_tool: 현금흐름표, 현금 흐름 분석\n"
+                "- ratios_tool: 재무비율, ROE/ROA 등 분석\n"
+                "- key_metrics_tool: 핵심지표, EPS/배당 등 분석\n"
+                "- financial_growth_tool: 성장률, 매출/이익 성장 분석\n"
+                "- enterprise_value_tool: 기업가치, EV/시가총액 분석\n"
+                "- market_data: 주가, 거래량 등 시장 데이터\n"
+                "- macro_economic: 거시경제, GDP/CPI 등 분석\n"
+                "- sector_analysis: 섹터별 퍼포먼스 분석\n"
+                "- industry_analysis: 산업별 세부 분석\n"
+                "- market_regime_detector_tool: 시장 레짐(강세/약세) 분석\n\n"
+                "📋 예시:\n"
+                "사용자: \"언제 사야하냐\" → kalman_regime_filter_tool\n"
+                "답변: 📊 매수 시점 분석 결과: 매수 신호, 포지션 크기 15%, 손절가 $280.50\n\n"
+                "사용자: \"기술적 지표는?\" → technical_analysis\n"
+                "답변: 📈 기술적 분석: RSI 45.2 (중립), MACD -0.85 (하락), 20일 EMA $315.20\n\n"
+                "사용자: \"뉴스는?\" → news\n"
+                "답변: 📰 최근 뉴스: 실적 발표 예상, 시장 반응 긍정적, 투자자 관심 증가\n\n"
+                "사용자: \"재무 실적은?\" → income_statement_tool\n"
+                "답변: 💰 재무 실적: 매출 성장 12%, 순이익 증가 8%, 수익성 개선\n\n"
+                "사용자: \"주가는?\" → market_data\n"
+                "답변: 📊 현재 주가: $308.50, 거래량 85M, 전일 대비 +2.3%\n\n"
+                "사용자: \"거시경제는?\" → macro_economic\n"
+                "답변: 🌍 거시경제: GDP 성장률 2.1%, CPI 3.2%, 실업률 3.8%\n\n"
+                "중요: 질문 의도를 정확히 파악하여 적절한 도구를 선택하고, 답변 시 적절한 이모지를 사용하여 가독성을 높여라."
             ),
         }
 
@@ -123,92 +169,92 @@ class AIChatRouter:
 
         @tool(args_schema=FinancialStatementParams)
         def income_statement_tool(**params):
-            """기업의 손익계산서(Income Statement)를 조회합니다. 매출, 비용, 순이익 등 수익성 지표를 제공합니다. 재무 실적 분석에 필수적입니다."""
+            """기업의 손익계산서(Income Statement)를 조회합니다. 매출, 비용, 순이익 등 수익성 지표를 제공합니다. \"재무 실적\", \"손익계산서\", \"수익성\" 질문에 적합합니다."""
             agent = FinancialStatementTool(self.ai_chat_service, "income-statement")
             return agent.get_data(**params)
 
         @tool(args_schema=FinancialStatementParams)
         def balance_sheet_tool(**params):
-            """기업의 재무상태표(Balance Sheet)를 조회합니다. 자산, 부채, 자본 등 재무 건전성 지표를 제공합니다. 재무 실적 분석에 필수적입니다."""
+            """기업의 재무상태표(Balance Sheet)를 조회합니다. 자산, 부채, 자본 등 재무 건전성 지표를 제공합니다. \"재무상태표\", \"자산\", \"부채\", \"재무 건전성\" 질문에 적합합니다."""
             agent = FinancialStatementTool(self.ai_chat_service, "balance-sheet-statement")
             return agent.get_data(**params)
 
         @tool(args_schema=FinancialStatementParams)
         def cashflow_statement_tool(**params):
-            """기업의 현금흐름표(Cash Flow Statement)를 조회합니다. 영업, 투자, 재무 활동의 현금 흐름을 제공합니다. 재무 실적 분석에 필수적입니다."""
+            """기업의 현금흐름표(Cash Flow Statement)를 조회합니다. 영업, 투자, 재무 활동의 현금 흐름을 제공합니다. \"현금흐름표\", \"현금 흐름\", \"영업 현금\" 질문에 적합합니다."""
             agent = FinancialStatementTool(self.ai_chat_service, "cash-flow-statement")
             return agent.get_data(**params)
 
         @tool(args_schema=FinancialStatementParams)
         def ratios_tool(**params):
-            """수익성·효율성 등 재무비율(Ratios)을 조회합니다."""
+            """수익성, 효율성 등 재무비율(Ratios)을 조회합니다. \"재무비율\", \"ROE\", \"ROA\", \"수익성\" 질문에 적합합니다."""
             agent = FinancialStatementTool(self.ai_chat_service, "ratios")
             return agent.get_data(**params)
 
         @tool(args_schema=FinancialStatementParams)
         def key_metrics_tool(**params):
-            """주당지표·배당·PSR 등 핵심지표(Key Metrics)를 조회합니다."""
+            """주당지표, 배당, PSR 등 핵심지표(Key Metrics)를 조회합니다. \"핵심지표\", \"EPS\", \"배당\", \"PSR\" 질문에 적합합니다."""
             agent = FinancialStatementTool(self.ai_chat_service, "key-metrics")
             return agent.get_data(**params)
 
         @tool(args_schema=FinancialStatementParams)
         def financial_growth_tool(**params):
-            """매출·이익 성장률 등 Financial Growth 데이터를 조회합니다."""
+            """매출, 이익 성장률 등 Financial Growth 데이터를 조회합니다. \"성장률\", \"매출 성장\", \"이익 성장\" 질문에 적합합니다."""
             agent = FinancialStatementTool(self.ai_chat_service, "financial-growth")
             return agent.get_data(**params)
 
         @tool(args_schema=FinancialStatementParams)
         def enterprise_value_tool(**params):
-            """시가총액·EV/EBITDA 등 Enterprise Value 관련 지표를 조회합니다."""
+            """시가총액, EV/EBITDA 등 Enterprise Value 관련 지표를 조회합니다. \"기업가치\", \"EV\", \"시가총액\" 질문에 적합합니다."""
             agent = FinancialStatementTool(self.ai_chat_service, "enterprise-values")
             return agent.get_data(**params)
 
         @tool(args_schema=NewsInput)
         def news(**params):
-            """실시간·과거 뉴스 헤드라인을 요약해 제공합니다."""
+            """뉴스, 실적, 시장 감정 분석을 제공합니다. \"뉴스\", \"실적\", \"발표\" 질문에 적합합니다."""
             agent = NewsTool(self.ai_chat_service)
             return agent.get_data(**params).summary
 
         @tool(args_schema=TechnicalAnalysisInput)
         def technical_analysis(**params):
-            """RSI·MACD 등 기술적 분석 결과를 요약해 제공합니다."""
+            """RSI, MACD, EMA 등 기술적 지표 분석을 제공합니다. \"기술적 지표\", \"RSI\", \"MACD\" 질문에 적합합니다."""
             agent = TechnicalAnalysisTool(self.ai_chat_service)
             results = agent.get_data(**params).results
             return "\n".join(r if isinstance(r, str) else r.summary for r in results)
 
         @tool(args_schema=MarketDataInput)
         def market_data(**params):
-            """주가·거래량 등 일/분/틱 Market Data를 요약합니다."""
+            """주가, 거래량 등 일/분/틱 Market Data를 요약합니다. \"주가\", \"거래량\", \"시세\" 질문에 적합합니다."""
             agent = MarketDataTool(self.ai_chat_service)
             return agent.get_data(**params).summary
 
         @tool(args_schema=MacroEconomicInput)
         def macro_economic(**params):
-            """GDP·CPI·실업률 등 거시경제 지표를 요약합니다."""
+            """GDP, CPI, 실업률 등 거시경제 지표를 요약합니다. \"거시경제\", \"GDP\", \"CPI\", \"실업률\" 질문에 적합합니다."""
             agent = MacroEconomicTool(self.ai_chat_service)
             return agent.get_data(**params).summary
 
         @tool(args_schema=SectorAnalysisInput)
         def sector_analysis(**params):
-            """11개 GICS 섹터의 퍼포먼스·밸류에이션을 분석합니다."""
+            """11개 GICS 섹터의 퍼포먼스, 밸류에이션을 분석합니다. \"섹터\", \"산업별\", \"GICS\" 질문에 적합합니다."""
             agent = SectorAnalysisTool(self.ai_chat_service)
             return agent.get_data(**params).summary
 
         @tool(args_schema=IndustryAnalysisInput)
         def industry_analysis(**params):
-            """세부 산업(Industry) 레벨에서 주요 지표를 요약합니다."""
+            """세부 산업(Industry) 레벨에서 주요 지표를 요약합니다. \"산업\", \"Industry\", \"세부 산업\" 질문에 적합합니다."""
             agent = IndustryAnalysisTool(self.ai_chat_service)
             return agent.get_data(**params).summary
 
         @tool(args_schema=MarketRegimeDetectorInput)
         def market_regime_detector_tool(**params):
-            """시장 레짐(강세/약세/횡보) 판단을 위한 통계 모델을 실행합니다."""
+            """시장 레짐(강세/약세/횡보) 판단을 위한 통계 모델을 실행합니다. \"시장 레짐\", \"강세/약세\", \"시장 상태\" 질문에 적합합니다."""
             agent = MarketRegimeDetector()
             return agent.get_data(**params).summary
 
         @tool(args_schema=KalmanRegimeFilterInput)
         def kalman_regime_filter_tool(**params):
-            """칼만 필터 기반 레짐 전환 감지 결과를 제공합니다."""
+            """매수/매도 시점 예측, 포지션 크기 계산, 손절가/목표가 설정을 제공합니다. \"언제 사야하냐\", \"매수 타이밍\", \"진입 시점\" 질문에 적합합니다."""
             agent = KalmanRegimeFilterTool(self.ai_chat_service)
             
             # 🆕 세션 정보 주입 (SessionAwareTool 지원)
@@ -236,8 +282,6 @@ class AIChatRouter:
 • **트레이딩 신호**: {result.recommendations.get('trading_signal', 'N/A')}
 • **전략**: {result.recommendations.get('strategy', 'N/A')}
 • **종합 신호 강도**: {result.recommendations.get('combined_signal', 'N/A')}
-• **포지션 크기**: {result.recommendations.get('position_size', 'N/A')} 주
-• **레버리지**: {result.recommendations.get('leverage', 'N/A')}x
 • **손절가**: ${result.recommendations.get('stop_loss', 'N/A')}
 • **목표가**: ${result.recommendations.get('take_profit', 'N/A')}
 • **리스크 점수**: {result.recommendations.get('risk_score', 'N/A')}
@@ -368,3 +412,7 @@ class AIChatRouter:
                 print(f"🛠 Tool({getattr(m, 'name', '')}): {content}")
             else:
                 print(f"❓ {cls}: {content}")
+
+# 지운 항목들
+#• **포지션 크기**: {result.recommendations.get('position_size', 'N/A')} 주
+# **레버리지**: {result.recommendations.get('leverage', 'N/A')} 배
