@@ -1,6 +1,7 @@
 import asyncio
 import json
 import websockets
+from datetime import datetime
 from typing import Dict, List, Optional, Callable, Any
 from service.core.logger import Logger
 
@@ -23,6 +24,14 @@ class KoreaInvestmentWebSocket:
         self.callbacks = {}  # tr_id별 콜백 함수 저장
         self.approval_key = None  # 실제로는 appkey를 저장
         self.app_secret = None    # appsecret 저장 (WebSocket 메시지에 필요)
+        
+        # 재연결 및 구독 상태 관리
+        self.subscriptions = {}   # 활성 구독 상태 저장 {tr_key: subscription_data}
+        self.max_reconnect_attempts = 10  # 최대 재연결 시도 횟수
+        self.reconnect_delay = 5  # 재연결 대기 시간 (초)
+        self.last_heartbeat = None  # 마지막 하트비트 시간
+        self.connection_start_time = None  # 연결 시작 시간
+        self.heartbeat_timeout = 30  # 하트비트 타임아웃 (30초)
         
     async def connect(self, app_key: str, app_secret: str) -> bool:
         """한투 웹소켓 연결 (OAuth2 방식 - appkey 기반 인증)
@@ -50,6 +59,7 @@ class KoreaInvestmentWebSocket:
             self.is_connected = True
             self.approval_key = app_key  # WebSocket에서는 appkey 사용
             self.app_secret = app_secret  # appsecret 저장 (메시지 헤더에 필요)
+            self.connection_start_time = datetime.now()  # 연결 시작 시간 기록
             
             Logger.info(f"WebSocket 연결 성공, appkey: {app_key[:10]}...")
             
@@ -155,14 +165,52 @@ class KoreaInvestmentWebSocket:
             Logger.warn(f"⚠️ OAuth2 상태 확인 실패, WebSocket 직접 연결 시도: {e}")
     
     async def _message_loop(self):
-        """웹소켓 메시지 수신 루프"""
-        try:
-            while self.is_connected and self.websocket:
+        """웹소켓 메시지 수신 루프 (재연결 포함)"""
+        reconnect_attempts = 0
+        
+        while self.is_connected:
+            try:
+                # 하트비트 타임아웃 체크
+                if (self.last_heartbeat and 
+                    (datetime.now() - self.last_heartbeat).total_seconds() > self.heartbeat_timeout):
+                    Logger.warn("하트비트 타임아웃 - 재연결 필요")
+                    await self._cleanup_existing_connection()
+                
+                if not self.websocket or not self._is_websocket_open():
+                    # 재연결 시도
+                    if reconnect_attempts >= self.max_reconnect_attempts:
+                        Logger.error(f"최대 재연결 시도 횟수 초과: {self.max_reconnect_attempts}")
+                        self.is_connected = False
+                        break
+                    
+                    Logger.warn(f"WebSocket 재연결 시도 {reconnect_attempts + 1}/{self.max_reconnect_attempts}")
+                    await asyncio.sleep(self.reconnect_delay)
+                    
+                    # 기존 연결 정리 후 재연결
+                    await self._cleanup_existing_connection()
+                    connection_success = await self.connect(self.approval_key, self.app_secret)
+                    
+                    if not connection_success:
+                        reconnect_attempts += 1
+                        continue
+                    
+                    # 구독 상태 복원
+                    await self._restore_subscriptions()
+                    reconnect_attempts = 0
+                    Logger.info("WebSocket 재연결 및 구독 복원 완료")
+                
+                # 정상 메시지 수신
                 message = await self.websocket.recv()
+                self.last_heartbeat = datetime.now()
                 await self._handle_message(message)
-        except Exception as e:
-            Logger.error(f"웹소켓 메시지 루프 에러: {e}")
-            self.is_connected = False
+                
+            except Exception as e:
+                Logger.error(f"웹소켓 메시지 루프 에러: {e}")
+                reconnect_attempts += 1
+                if reconnect_attempts >= self.max_reconnect_attempts:
+                    Logger.error("재연결 한계 도달 - 연결 종료")
+                    self.is_connected = False
+                    break
     
     async def _handle_message(self, message: str):
         """메시지 처리"""
@@ -342,6 +390,14 @@ class KoreaInvestmentWebSocket:
                 callback_key = f"H1_{symbol}"
                 self.callbacks[callback_key] = callback
                 
+                # 구독 상태 저장 (재연결 시 복원용)
+                self.subscriptions[symbol] = {
+                    "type": "stock",
+                    "tr_id": "H1_",
+                    "tr_key": symbol,
+                    "callback": callback
+                }
+                
                 Logger.info(f"✅ 국내 주식 실시간 구독 등록: {symbol} -> {callback_key}")
                 
             return True
@@ -394,6 +450,14 @@ class KoreaInvestmentWebSocket:
                 # 콜백 함수 등록 ("H0_{지수코드}" 형식)
                 callback_key = f"H0_{index}"
                 self.callbacks[callback_key] = callback
+                
+                # 구독 상태 저장 (재연결 시 복원용)
+                self.subscriptions[index] = {
+                    "type": "index",
+                    "tr_id": "H0_CNT0",
+                    "tr_key": index,
+                    "callback": callback
+                }
                 
                 # 지수명 매핑 (로그용)
                 index_name = {'0001': 'KOSPI', '1001': 'KOSDAQ'}.get(index, index)
@@ -450,6 +514,15 @@ class KoreaInvestmentWebSocket:
                 # 콜백 함수 등록 ("H0_{거래소}^{심볼}" 형식)
                 callback_key = f"H0_{exchange}^{symbol}"
                 self.callbacks[callback_key] = callback
+                
+                # 구독 상태 저장 (재연결 시 복원용)
+                overseas_key = f"{exchange}^{symbol}"
+                self.subscriptions[overseas_key] = {
+                    "type": "overseas",
+                    "tr_id": "H0_OVFUTURE0",
+                    "tr_key": overseas_key,
+                    "callback": callback
+                }
                 
                 Logger.info(f"✅ 해외주식 실시간 구독 등록: {exchange}^{symbol} -> {callback_key}")
                 
@@ -583,6 +656,53 @@ class KoreaInvestmentWebSocket:
             finally:
                 self.websocket = None
                 self.is_connected = False
+    
+    async def _restore_subscriptions(self) -> None:
+        """재연결 후 구독 상태 복원"""
+        if not self.subscriptions:
+            Logger.info("복원할 구독 없음")
+            return
+        
+        Logger.info(f"구독 상태 복원 시작: {len(self.subscriptions)}개 항목")
+        
+        try:
+            for key, subscription in self.subscriptions.items():
+                # 구독 메시지 재생성
+                subscribe_message = {
+                    "header": {
+                        "appkey": self.approval_key,
+                        "appsecret": self.app_secret,
+                        "custtype": "P",
+                        "tr_type": "1",
+                        "content-type": "utf-8"
+                    },
+                    "body": {
+                        "input": {
+                            "tr_id": subscription["tr_id"],
+                            "tr_key": subscription["tr_key"]
+                        }
+                    }
+                }
+                
+                # 구독 재전송
+                await self.websocket.send(json.dumps(subscribe_message))
+                
+                # 콜백 복원
+                if subscription["type"] == "stock":
+                    callback_key = f"H1_{key}"
+                elif subscription["type"] == "index":
+                    callback_key = f"H0_{key}"
+                else:  # overseas
+                    callback_key = f"H0_{key}"
+                
+                self.callbacks[callback_key] = subscription["callback"]
+                Logger.info(f"구독 복원: {subscription['type']} - {key}")
+                
+                # 구독 간 짧은 지연
+                await asyncio.sleep(0.1)
+                
+        except Exception as e:
+            Logger.error(f"구독 상태 복원 실패: {e}")
 
 # 싱글톤 인스턴스
 _korea_investment_websocket = None

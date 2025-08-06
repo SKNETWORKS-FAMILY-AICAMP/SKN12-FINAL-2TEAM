@@ -1416,22 +1416,24 @@ DELIMITER ;;
 CREATE PROCEDURE `fp_get_user_notification_settings`(
     IN p_account_db_key BIGINT UNSIGNED
 )
-BEGIN
+proc_label: BEGIN
     DECLARE ProcParam VARCHAR(4000);
-    SET ProcParam = CONCAT('account_db_key=', IFNULL(p_account_db_key, 'NULL'));
     
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
+        SET ProcParam = CONCAT('account_db_key=', IFNULL(p_account_db_key, 'NULL'));
         GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
         INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
             VALUES ('fp_get_user_notification_settings', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
         SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
     END;
     
+    SET ProcParam = CONCAT('account_db_key=', IFNULL(p_account_db_key, 'NULL'));
+    
     -- 파라미터 검증
     IF p_account_db_key IS NULL OR p_account_db_key = 0 THEN
         SELECT 1 as ErrorCode, 'account_db_key parameter is required' as ErrorMessage;
-        LEAVE;
+        LEAVE proc_label;
     END IF;
     
     -- 상태 반환
@@ -1481,22 +1483,24 @@ DELIMITER ;;
 CREATE PROCEDURE `fp_get_user_contact_info`(
     IN p_account_db_key BIGINT UNSIGNED
 )
-BEGIN
+proc_label: BEGIN
     DECLARE ProcParam VARCHAR(4000);
-    SET ProcParam = CONCAT('account_db_key=', IFNULL(p_account_db_key, 'NULL'));
     
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
+        SET ProcParam = CONCAT('account_db_key=', IFNULL(p_account_db_key, 'NULL'));
         GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
         INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
             VALUES ('fp_get_user_contact_info', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
         SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
     END;
     
+    SET ProcParam = CONCAT('account_db_key=', IFNULL(p_account_db_key, 'NULL'));
+    
     -- 파라미터 검증
     IF p_account_db_key IS NULL OR p_account_db_key = 0 THEN
         SELECT 1 as ErrorCode, 'account_db_key parameter is required' as ErrorMessage;
-        LEAVE;
+        LEAVE proc_label;
     END IF;
     
     -- 상태 반환
@@ -1566,13 +1570,13 @@ CREATE PROCEDURE `fp_update_shard_status`(
     IN p_shard_id INT,
     IN p_status VARCHAR(20)
 )
-BEGIN
+proc_label: BEGIN
     DECLARE v_affected_rows INT DEFAULT 0;
     DECLARE ProcParam VARCHAR(4000);
-    SET ProcParam = CONCAT('shard_id=', IFNULL(p_shard_id, 'NULL'), ', status=', IFNULL(p_status, 'NULL'));
     
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
+        SET ProcParam = CONCAT('shard_id=', IFNULL(p_shard_id, 'NULL'), ', status=', IFNULL(p_status, 'NULL'));
         GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
         ROLLBACK;
         INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
@@ -1580,15 +1584,17 @@ BEGIN
         SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
     END;
     
+    SET ProcParam = CONCAT('shard_id=', IFNULL(p_shard_id, 'NULL'), ', status=', IFNULL(p_status, 'NULL'));
+    
     -- 파라미터 검증
     IF p_shard_id IS NULL OR p_shard_id <= 0 THEN
         SELECT 1 as ErrorCode, 'shard_id parameter is required and must be positive' as ErrorMessage;
-        LEAVE;
+        LEAVE proc_label;
     END IF;
     
     IF p_status NOT IN ('active', 'maintenance', 'disabled') THEN
         SELECT 1 as ErrorCode, 'status must be one of: active, maintenance, disabled' as ErrorMessage;
-        LEAVE;
+        LEAVE proc_label;
     END IF;
     
     START TRANSACTION;

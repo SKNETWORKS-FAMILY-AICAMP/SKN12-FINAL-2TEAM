@@ -145,6 +145,8 @@ BEGIN
     END;
     
     -- pending 상태 이벤트들을 파티션별 순서대로 조회
+    SET @limit_size = IF(p_batch_size IS NULL, 10, p_batch_size);
+    
     SELECT 
         `id`, `domain`, `partition_key`, `sequence_no`,
         `event_type`, `aggregate_id`, `event_data`,
@@ -154,7 +156,7 @@ BEGIN
       AND `status` = 'pending'
       AND `retry_count` < `max_retries`
     ORDER BY `partition_key`, `sequence_no`
-    LIMIT COALESCE(p_batch_size, 10);
+    LIMIT @limit_size;
 END ;;
 DELIMITER ;
 
@@ -483,7 +485,7 @@ BEGIN
       AND `status` = 'pending'
       AND `retry_count` < `max_retries`
     ORDER BY `partition_key`, `sequence_no`
-    LIMIT COALESCE(p_batch_size, 10);
+    LIMIT IFNULL(p_batch_size, 10);
 END ;;
 DELIMITER ;
 
