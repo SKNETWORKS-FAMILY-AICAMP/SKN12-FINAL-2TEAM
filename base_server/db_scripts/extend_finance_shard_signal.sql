@@ -497,10 +497,11 @@ DELIMITER ;;
 CREATE PROCEDURE `fp_signal_get_pending_evaluation`(
     IN p_evaluation_date DATE  -- 평가할 날짜 (보통 어제 날짜)
 )
-BEGIN
+proc_label:BEGIN
+    -- 변수 선언이 먼저 와야 함
     DECLARE ProcParam VARCHAR(4000);
-    SET ProcParam = CONCAT('evaluation_date=', IFNULL(p_evaluation_date, 'NULL'));
     
+    -- 그 다음 핸들러 선언
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
@@ -509,10 +510,13 @@ BEGIN
         SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
     END;
     
+    -- ProcParam 설정
+    SET ProcParam = CONCAT('evaluation_date=', IFNULL(p_evaluation_date, 'NULL'));
+    
     -- 파라미터 검증
     IF p_evaluation_date IS NULL THEN
         SELECT 1 as ErrorCode, 'evaluation_date parameter is required' as ErrorMessage;
-        LEAVE;
+        LEAVE proc_label;
     END IF;
     
     -- 상태 반환
@@ -553,16 +557,20 @@ CREATE PROCEDURE `fp_signal_statistics_get`(
     IN p_account_db_key BIGINT UNSIGNED -- 통계를 조회할 사용자 계정 키
 )
 BEGIN
+    -- 변수 선언이 먼저 와야 함
     DECLARE ProcParam VARCHAR(4000);
     
+    -- 그 다음 핸들러 선언
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
-        SET ProcParam = CONCAT(p_account_db_key);
         GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
         INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
             VALUES ('fp_signal_statistics_get', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
         SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
     END;
+    
+    -- ProcParam 설정
+    SET ProcParam = CONCAT(p_account_db_key);
     
     -- 사용자별 전체 시그널 통계 조회
     -- 서브쿼리로 알림 관련 통계와 시그널 관련 통계를 함께 집계
@@ -728,10 +736,11 @@ DELIMITER ;;
 CREATE PROCEDURE `fp_signal_alarms_get_by_symbol`(
     IN p_symbol VARCHAR(20)
 )
-BEGIN
+proc_label:BEGIN
+    -- 변수 선언이 먼저 와야 함
     DECLARE ProcParam VARCHAR(4000);
-    SET ProcParam = CONCAT('symbol=', IFNULL(p_symbol, 'NULL'));
     
+    -- 그 다음 핸들러 선언
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
@@ -740,10 +749,13 @@ BEGIN
         SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
     END;
     
+    -- ProcParam 설정
+    SET ProcParam = CONCAT('symbol=', IFNULL(p_symbol, 'NULL'));
+    
     -- 파라미터 검증
     IF p_symbol IS NULL OR p_symbol = '' THEN
         SELECT 1 as ErrorCode, 'symbol parameter is required' as ErrorMessage;
-        LEAVE;
+        LEAVE proc_label;
     END IF;
     
     -- 상태 반환
@@ -1056,10 +1068,11 @@ DELIMITER ;;
 CREATE PROCEDURE `fp_signal_get_pending_evaluation`(
     IN p_evaluation_date DATE
 )
-BEGIN
+proc_label:BEGIN
+    -- 변수 선언이 먼저 와야 함
     DECLARE ProcParam VARCHAR(4000);
-    SET ProcParam = CONCAT('evaluation_date=', IFNULL(p_evaluation_date, 'NULL'));
     
+    -- 그 다음 핸들러 선언
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
@@ -1068,9 +1081,12 @@ BEGIN
         SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
     END;
     
+    -- ProcParam 설정
+    SET ProcParam = CONCAT('evaluation_date=', IFNULL(p_evaluation_date, 'NULL'));
+    
     IF p_evaluation_date IS NULL THEN
         SELECT 1 as ErrorCode, 'evaluation_date parameter is required' as ErrorMessage;
-        LEAVE;
+        LEAVE proc_label;
     END IF;
     
     SELECT 0 as ErrorCode, 'SUCCESS' as ErrorMessage;
@@ -1092,9 +1108,10 @@ CREATE PROCEDURE `fp_signal_statistics_get`(
     IN p_account_db_key BIGINT UNSIGNED
 )
 BEGIN
+    -- 변수 선언이 먼저 와야 함
     DECLARE ProcParam VARCHAR(4000);
-    SET ProcParam = CONCAT('account_db_key=', p_account_db_key);
     
+    -- 그 다음 핸들러 선언
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
@@ -1102,6 +1119,9 @@ BEGIN
             VALUES ('fp_signal_statistics_get', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
         SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
     END;
+    
+    -- ProcParam 설정
+    SET ProcParam = CONCAT('account_db_key=', p_account_db_key);
     
     SELECT 0 as ErrorCode, 'SUCCESS' as ErrorMessage;
     

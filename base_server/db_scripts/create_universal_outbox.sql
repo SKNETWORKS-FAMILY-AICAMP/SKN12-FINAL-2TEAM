@@ -147,16 +147,21 @@ BEGIN
     -- pending 상태 이벤트들을 파티션별 순서대로 조회
     SET @limit_size = IF(p_batch_size IS NULL, 10, p_batch_size);
     
-    SELECT 
-        `id`, `domain`, `partition_key`, `sequence_no`,
-        `event_type`, `aggregate_id`, `event_data`,
-        `retry_count`, `max_retries`, `created_at`
-    FROM `universal_outbox`
-    WHERE `domain` = p_domain
-      AND `status` = 'pending'
-      AND `retry_count` < `max_retries`
-    ORDER BY `partition_key`, `sequence_no`
-    LIMIT @limit_size;
+    SET @sql = CONCAT('
+        SELECT 
+            `id`, `domain`, `partition_key`, `sequence_no`,
+            `event_type`, `aggregate_id`, `event_data`,
+            `retry_count`, `max_retries`, `created_at`
+        FROM `universal_outbox`
+        WHERE `domain` = ''', p_domain, '''
+          AND `status` = ''pending''
+          AND `retry_count` < `max_retries`
+        ORDER BY `partition_key`, `sequence_no`
+        LIMIT ', @limit_size);
+    
+    PREPARE stmt FROM @sql;
+    EXECUTE stmt;
+    DEALLOCATE PREPARE stmt;
 END ;;
 DELIMITER ;
 
@@ -476,16 +481,24 @@ BEGIN
         RESIGNAL;
     END;
     
-    SELECT 
-        `id`, `domain`, `partition_key`, `sequence_no`,
-        `event_type`, `aggregate_id`, `event_data`,
-        `retry_count`, `max_retries`, `created_at`
-    FROM `universal_outbox`
-    WHERE `domain` = p_domain
-      AND `status` = 'pending'
-      AND `retry_count` < `max_retries`
-    ORDER BY `partition_key`, `sequence_no`
-    LIMIT IFNULL(p_batch_size, 10);
+    -- pending 상태 이벤트들을 파티션별 순서대로 조회
+    SET @limit_size = IF(p_batch_size IS NULL, 10, p_batch_size);
+    
+    SET @sql = CONCAT('
+        SELECT 
+            `id`, `domain`, `partition_key`, `sequence_no`,
+            `event_type`, `aggregate_id`, `event_data`,
+            `retry_count`, `max_retries`, `created_at`
+        FROM `universal_outbox`
+        WHERE `domain` = ''', p_domain, '''
+          AND `status` = ''pending''
+          AND `retry_count` < `max_retries`
+        ORDER BY `partition_key`, `sequence_no`
+        LIMIT ', @limit_size);
+    
+    PREPARE stmt FROM @sql;
+    EXECUTE stmt;
+    DEALLOCATE PREPARE stmt;
 END ;;
 DELIMITER ;
 
