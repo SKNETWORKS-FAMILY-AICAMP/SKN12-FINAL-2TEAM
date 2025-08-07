@@ -491,6 +491,251 @@ class RagService:
             }
 
     @classmethod
+    def _preprocess_query(cls, query: str) -> str:
+        """검색어 전처리 - 주식 심볼 확장, 동의어 처리"""
+        if not query:
+            return query
+        
+        # 주식 심볼 및 회사명 매핑 (크롤러 150개 심볼 기반)
+        stock_mappings = {
+            # 대형 테크주 (FAANG+)
+            '애플': 'AAPL', 'apple': 'AAPL', 'Apple': 'AAPL',
+            '마이크로소프트': 'MSFT', 'microsoft': 'MSFT', 'Microsoft': 'MSFT',
+            '구글': 'GOOGL', 'google': 'GOOGL', 'Google': 'GOOGL',
+            '구글알파벳': 'GOOG', 'alphabet': 'GOOG', 'Alphabet': 'GOOG',
+            '아마존': 'AMZN', 'amazon': 'AMZN', 'Amazon': 'AMZN',
+            '메타': 'META', 'meta': 'META', 'Meta': 'META',
+            '페이스북': 'META', 'facebook': 'META', 'Facebook': 'META',
+            '테슬라': 'TSLA', 'tesla': 'TSLA', 'Tesla': 'TSLA',
+            '엔비디아': 'NVDA', 'nvidia': 'NVDA', 'Nvidia': 'NVDA',
+            '넷플릭스': 'NFLX', 'netflix': 'NFLX', 'Netflix': 'NFLX',
+            '오라클': 'ORCL', 'oracle': 'ORCL', 'Oracle': 'ORCL',
+            '세일즈포스': 'CRM', 'salesforce': 'CRM', 'Salesforce': 'CRM',
+            '어도비': 'ADBE', 'adobe': 'ADBE', 'Adobe': 'ADBE',
+            '인텔': 'INTC', 'intel': 'INTC', 'Intel': 'INTC',
+            'AMD': 'AMD', 'amd': 'AMD',
+            '시스코': 'CSCO', 'cisco': 'CSCO', 'Cisco': 'CSCO',
+            'IBM': 'IBM', 'ibm': 'IBM',
+            
+            # 반도체
+            '퀄컴': 'QCOM', 'qualcomm': 'QCOM', 'Qualcomm': 'QCOM',
+            '브로드컴': 'AVGO', 'broadcom': 'AVGO', 'Broadcom': 'AVGO',
+            '텍사스인스트루먼트': 'TXN', 'texas instruments': 'TXN', 'Texas Instruments': 'TXN',
+            '마이크론': 'MU', 'micron': 'MU', 'Micron': 'MU',
+            '어플라이드머티리얼즈': 'AMAT', 'applied materials': 'AMAT', 'Applied Materials': 'AMAT',
+            '라메리서치': 'LRCX', 'lam research': 'LRCX', 'Lam Research': 'LRCX',
+            '아날로그디바이스': 'ADI', 'analog devices': 'ADI', 'Analog Devices': 'ADI',
+            '마이크로칩': 'MCHP', 'microchip': 'MCHP', 'Microchip': 'MCHP',
+            '케이엘에이': 'KLAC', 'kla': 'KLAC', 'KLA': 'KLAC',
+            '마벨': 'MRVL', 'marvell': 'MRVL', 'Marvell': 'MRVL',
+            
+            # 주요 ETF들
+            '스파이더': 'SPY', 'spy': 'SPY', 'SPY': 'SPY',
+            '큐큐큐': 'QQQ', 'qqq': 'QQQ', 'QQQ': 'QQQ',
+            '벡터토탈': 'VTI', 'vti': 'VTI', 'VTI': 'VTI',
+            '러셀': 'IWM', 'iwm': 'IWM', 'IWM': 'IWM',
+            '벡터선진국': 'VEA', 'vea': 'VEA', 'VEA': 'VEA',
+            '벡터신흥국': 'VWO', 'vwo': 'VWO', 'VWO': 'VWO',
+            '이샤어': 'EFA', 'efa': 'EFA', 'EFA': 'EFA',
+            '골드': 'GLD', 'gld': 'GLD', 'GLD': 'GLD',
+            '실버': 'SLV', 'slv': 'SLV', 'SLV': 'SLV',
+            '국채': 'TLT', 'tlt': 'TLT', 'TLT': 'TLT',
+            '하이일드': 'HYG', 'hyg': 'HYG', 'HYG': 'HYG',
+            '회사채': 'LQD', 'lqd': 'LQD', 'LQD': 'LQD',
+            '금융': 'XLF', 'xlf': 'XLF', 'XLF': 'XLF',
+            '기술': 'XLK', 'xlk': 'XLK', 'XLK': 'XLK',
+            '에너지': 'XLE', 'xle': 'XLE', 'XLE': 'XLE',
+            '헬스케어': 'XLV', 'xlv': 'XLV', 'XLV': 'XLV',
+            '산업재': 'XLI', 'xli': 'XLI', 'XLI': 'XLI',
+            '소비재': 'XLP', 'xlp': 'XLP', 'XLP': 'XLP',
+            '유틸리티': 'XLU', 'xlu': 'XLU', 'XLU': 'XLU',
+            '부동산': 'XLRE', 'xlre': 'XLRE', 'XLRE': 'XLRE',
+            
+            # 금융 (은행, 보험, 핀테크)
+            'JP모건': 'JPM', 'jpmorgan': 'JPM', 'JPMorgan': 'JPM',
+            '뱅크오브아메리카': 'BAC', 'bank of america': 'BAC', 'Bank of America': 'BAC',
+            '웰스파고': 'WFC', 'wells fargo': 'WFC', 'Wells Fargo': 'WFC',
+            '시티그룹': 'C', 'citigroup': 'C', 'Citigroup': 'C',
+            '골드만삭스': 'GS', 'goldman sachs': 'GS', 'Goldman Sachs': 'GS',
+            '모건스탠리': 'MS', 'morgan stanley': 'MS', 'Morgan Stanley': 'MS',
+            '버크셔해서웨이': 'BRK-B', 'berkshire hathaway': 'BRK-B', 'Berkshire Hathaway': 'BRK-B',
+            '비자': 'V', 'visa': 'V', 'Visa': 'V',
+            '마스터카드': 'MA', 'mastercard': 'MA', 'Mastercard': 'MA',
+            '페이팔': 'PYPL', 'paypal': 'PYPL', 'PayPal': 'PYPL',
+            '스퀘어': 'SQ', 'square': 'SQ', 'Square': 'SQ',
+            '아메리칸익스프레스': 'AXP', 'american express': 'AXP', 'American Express': 'AXP',
+            'US뱅크': 'USB', 'us bank': 'USB', 'US Bank': 'USB',
+            'PNC': 'PNC', 'pnc': 'PNC',
+            '트러스트파이낸셜': 'TFC', 'truist': 'TFC', 'Truist': 'TFC',
+            '캐피탈원': 'COF', 'capital one': 'COF', 'Capital One': 'COF',
+            
+            # 헬스케어/제약
+            '존슨앤존슨': 'JNJ', 'johnson & johnson': 'JNJ', 'Johnson & Johnson': 'JNJ',
+            '화이자': 'PFE', 'pfizer': 'PFE', 'Pfizer': 'PFE',
+            '유나이티드헬스': 'UNH', 'unitedhealth': 'UNH', 'UnitedHealth': 'UNH',
+            '애브비': 'ABBV', 'abbvie': 'ABBV', 'AbbVie': 'ABBV',
+            '머크': 'MRK', 'merck': 'MRK', 'Merck': 'MRK',
+            '써모피셔': 'TMO', 'thermo fisher': 'TMO', 'Thermo Fisher': 'TMO',
+            '애보트': 'ABT', 'abbott': 'ABT', 'Abbott': 'ABT',
+            '다나허': 'DHR', 'danaher': 'DHR', 'Danaher': 'DHR',
+            '브리스톨마이어스': 'BMY', 'bristol myers': 'BMY', 'Bristol Myers': 'BMY',
+            '암젠': 'AMGN', 'amgen': 'AMGN', 'Amgen': 'AMGN',
+            '길리아드': 'GILD', 'gilead': 'GILD', 'Gilead': 'GILD',
+            '바이오젠': 'BIIB', 'biogen': 'BIIB', 'Biogen': 'BIIB',
+            'CVS': 'CVS', 'cvs': 'CVS',
+            '시그나': 'CI', 'cigna': 'CI', 'Cigna': 'CI',
+            '앤템': 'ANTM', 'anthem': 'ANTM', 'Anthem': 'ANTM',
+            '휴마나': 'HUM', 'humana': 'HUM', 'Humana': 'HUM',
+            
+            # 소비재 (필수/임의)
+            '프록터앤갬블': 'PG', 'procter & gamble': 'PG', 'Procter & Gamble': 'PG',
+            '코카콜라': 'KO', 'coca cola': 'KO', 'Coca Cola': 'KO',
+            '펩시': 'PEP', 'pepsi': 'PEP', 'Pepsi': 'PEP',
+            '월마트': 'WMT', 'walmart': 'WMT', 'Walmart': 'WMT',
+            '홈디포': 'HD', 'home depot': 'HD', 'Home Depot': 'HD',
+            '맥도날드': 'MCD', 'mcdonalds': 'MCD', 'McDonalds': 'MCD',
+            '나이키': 'NKE', 'nike': 'NKE', 'Nike': 'NKE',
+            '스타벅스': 'SBUX', 'starbucks': 'SBUX', 'Starbucks': 'SBUX',
+            '타겟': 'TGT', 'target': 'TGT', 'Target': 'TGT',
+            '로우스': 'LOW', 'lowes': 'LOW', 'Lowes': 'LOW',
+            '코스트코': 'COST', 'costco': 'COST', 'Costco': 'COST',
+            '디즈니': 'DIS', 'disney': 'DIS', 'Disney': 'DIS',
+            '알리바바': 'BABA', 'alibaba': 'BABA', 'Alibaba': 'BABA',
+            '이베이': 'EBAY', 'ebay': 'EBAY', 'eBay': 'EBAY',
+            '에츠이': 'ETSY', 'etsy': 'ETSY', 'Etsy': 'ETSY',
+            
+            # 에너지
+            '엑슨모빌': 'XOM', 'exxon mobil': 'XOM', 'Exxon Mobil': 'XOM',
+            '체브론': 'CVX', 'chevron': 'CVX', 'Chevron': 'CVX',
+            '콘코필립스': 'COP', 'conocophillips': 'COP', 'ConocoPhillips': 'COP',
+            'EOG': 'EOG', 'eog': 'EOG',
+            '슐럼버거': 'SLB', 'schlumberger': 'SLB', 'Schlumberger': 'SLB',
+            '필립스66': 'PSX', 'phillips 66': 'PSX', 'Phillips 66': 'PSX',
+            '발레로': 'VLO', 'valero': 'VLO', 'Valero': 'VLO',
+            '킨더모건': 'KMI', 'kinder morgan': 'KMI', 'Kinder Morgan': 'KMI',
+            '원에너지': 'OKE', 'oneok': 'OKE', 'Oneok': 'OKE',
+            '윌리엄': 'WMB', 'williams': 'WMB', 'Williams': 'WMB',
+            
+            # 산업재/항공
+            '보잉': 'BA', 'boeing': 'BA', 'Boeing': 'BA',
+            '캐터필러': 'CAT', 'caterpillar': 'CAT', 'Caterpillar': 'CAT',
+            '디어': 'DE', 'deere': 'DE', 'Deere': 'DE',
+            '제너럴일렉트릭': 'GE', 'general electric': 'GE', 'General Electric': 'GE',
+            '하니웰': 'HON', 'honeywell': 'HON', 'Honeywell': 'HON',
+            '3M': 'MMM', 'mmm': 'MMM',
+            'UPS': 'UPS', 'ups': 'UPS',
+            '페덱스': 'FDX', 'fedex': 'FDX', 'FedEx': 'FDX',
+            '록히드마틴': 'LMT', 'lockheed martin': 'LMT', 'Lockheed Martin': 'LMT',
+            '레이시온': 'RTX', 'raytheon': 'RTX', 'Raytheon': 'RTX',
+            '아메리칸항공': 'AAL', 'american airlines': 'AAL', 'American Airlines': 'AAL',
+            '델타항공': 'DAL', 'delta': 'DAL', 'Delta': 'DAL',
+            '유나이티드항공': 'UAL', 'united airlines': 'UAL', 'United Airlines': 'UAL',
+            '사우스웨스트': 'LUV', 'southwest': 'LUV', 'Southwest': 'LUV',
+            
+            # 통신
+            '버라이즌': 'VZ', 'verizon': 'VZ', 'Verizon': 'VZ',
+            'AT&T': 'T', 'at&t': 'T', 'at&t': 'T',
+            'T모바일': 'TMUS', 't mobile': 'TMUS', 'T Mobile': 'TMUS',
+            '차터': 'CHTR', 'charter': 'CHTR', 'Charter': 'CHTR',
+            '컴캐스트': 'CMCSA', 'comcast': 'CMCSA', 'Comcast': 'CMCSA',
+            '디시': 'DISH', 'dish': 'DISH', 'Dish': 'DISH',
+            
+            # 자동차
+            '포드': 'F', 'ford': 'F', 'Ford': 'F',
+            '제너럴모터스': 'GM', 'general motors': 'GM', 'General Motors': 'GM',
+            '리비안': 'RIVN', 'rivian': 'RIVN', 'Rivian': 'RIVN',
+            '루시드': 'LCID', 'lucid': 'LCID', 'Lucid': 'LCID',
+            '니오': 'NIO', 'nio': 'NIO', 'NIO': 'NIO',
+            'XPeng': 'XPEV', 'xpeng': 'XPEV', 'xpev': 'XPEV',
+            '리': 'LI', 'li': 'LI', 'Li': 'LI',
+            
+            # 부동산 REITs
+            '아메리칸타워': 'AMT', 'american tower': 'AMT', 'American Tower': 'AMT',
+            '프로로지스': 'PLD', 'prologis': 'PLD', 'Prologis': 'PLD',
+            '크라운캐슬': 'CCI', 'crown castle': 'CCI', 'Crown Castle': 'CCI',
+            '이퀴닉스': 'EQIX', 'equinix': 'EQIX', 'Equinix': 'EQIX',
+            '사이먼프로퍼티': 'SPG', 'simon property': 'SPG', 'Simon Property': 'SPG',
+            '리얼티인컴': 'O', 'realty income': 'O', 'Realty Income': 'O',
+            '웰타워': 'WELL', 'welltower': 'WELL', 'Welltower': 'WELL',
+            '엑스트라스페이스': 'EXR', 'extra space': 'EXR', 'Extra Space': 'EXR',
+            '애벌론베이': 'AVB', 'avalonbay': 'AVB', 'AvalonBay': 'AVB',
+            '에퀴티레지던셜': 'EQR', 'equity residential': 'EQR', 'Equity Residential': 'EQR',
+            
+            # 유틸리티
+            '넥스트에라': 'NEE', 'next era': 'NEE', 'Next Era': 'NEE',
+            '듀크에너지': 'DUK', 'duke energy': 'DUK', 'Duke Energy': 'DUK',
+            '서던': 'SO', 'southern': 'SO', 'Southern': 'SO',
+            '도미니언': 'D', 'dominion': 'D', 'Dominion': 'D',
+            '아메리칸일렉트릭': 'AEP', 'american electric': 'AEP', 'American Electric': 'AEP',
+            '엑셀론': 'EXC', 'exelon': 'EXC', 'Exelon': 'EXC',
+            '엑셀에너지': 'XEL', 'xcel energy': 'XEL', 'Xcel Energy': 'XEL',
+            'Sempra': 'SRE', 'sempra': 'SRE',
+            '퍼블릭서비스': 'PEG', 'public service': 'PEG', 'Public Service': 'PEG',
+            '컨솔리데이티드에디슨': 'ED', 'consolidated edison': 'ED', 'Consolidated Edison': 'ED',
+            
+            # 엔터테인먼트/미디어
+            '로쿠': 'ROKU', 'roku': 'ROKU', 'Roku': 'ROKU',
+            '스포티파이': 'SPOT', 'spotify': 'SPOT', 'Spotify': 'SPOT',
+            '워너브라더스': 'WBD', 'warner bros': 'WBD', 'Warner Bros': 'WBD',
+            '파라마운트': 'PARA', 'paramount': 'PARA', 'Paramount': 'PARA',
+            '폭스': 'FOX', 'fox': 'FOX', 'Fox': 'FOX',
+            '폭스뉴스': 'FOXA', 'fox news': 'FOXA', 'Fox News': 'FOXA',
+            
+            # 중국 ADR
+            '징동': 'JD', 'jd': 'JD', 'JD': 'JD',
+            '핀둬둬': 'PDD', 'pinduoduo': 'PDD', 'Pinduoduo': 'PDD',
+            '바이두': 'BIDU', 'baidu': 'BIDU', 'Baidu': 'BIDU',
+            '빌리빌리': 'BILI', 'bilibili': 'BILI', 'Bilibili': 'BILI',
+            '디디': 'DIDI', 'didi': 'DIDI', 'DiDi': 'DIDI',
+            '텐센트뮤직': 'TME', 'tencent music': 'TME', 'Tencent Music': 'TME',
+            
+            # 암호화폐 관련
+            '코인베이스': 'COIN', 'coinbase': 'COIN', 'Coinbase': 'COIN',
+            '마이크로스트래티지': 'MSTR', 'microstrategy': 'MSTR', 'MicroStrategy': 'MSTR',
+            '라이엇': 'RIOT', 'riot': 'RIOT', 'Riot': 'RIOT',
+            '마라': 'MARA', 'mara': 'MARA', 'Mara': 'MARA',
+            '비트코인': 'BITB', 'bitcoin': 'BITB', 'Bitcoin': 'BITB',
+            '아이셰어': 'IBIT', 'ishares': 'IBIT', 'iShares': 'IBIT',
+            
+            # 기타 주요 기업들
+            '우버': 'UBER', 'uber': 'UBER', 'Uber': 'UBER',
+            '라이프트': 'LYFT', 'lyft': 'LYFT', 'Lyft': 'LYFT',
+            '스냅': 'SNAP', 'snap': 'SNAP', 'Snap': 'SNAP',
+            '트위터': 'TWTR', 'twitter': 'TWTR', 'Twitter': 'TWTR',
+            '줌': 'ZOOM', 'zoom': 'ZOOM', 'Zoom': 'ZOOM',
+            '도쿠사인': 'DOCU', 'docusign': 'DOCU', 'DocuSign': 'DOCU',
+            '팔란티어': 'PLTR', 'palantir': 'PLTR', 'Palantir': 'PLTR',
+            '스노우플레이크': 'SNOW', 'snowflake': 'SNOW', 'Snowflake': 'SNOW',
+            '슬랙': 'WORK', 'slack': 'WORK', 'Slack': 'WORK',
+            '펠로톤': 'PTON', 'peloton': 'PTON', 'Peloton': 'PTON',
+            '아크': 'ARKK', 'ark': 'ARKK', 'ARK': 'ARKK',
+            '아크게놈': 'ARKG', 'ark genome': 'ARKG', 'ARK Genome': 'ARKG',
+            '아크웹': 'ARKW', 'ark web': 'ARKW', 'ARK Web': 'ARKW',
+            
+            # 한국 주식
+            '삼성전자': '005930', 'samsung': '005930', 'Samsung': '005930',
+            '현대자동차': '005380', 'hyundai': '005380', 'Hyundai': '005380',
+            'SK하이닉스': '000660', 'sk hynix': '000660', 'SK Hynix': '000660',
+            'LG에너지솔루션': '373220', 'lg energy': '373220', 'LG Energy': '373220',
+            '네이버': '035420', 'naver': '035420', 'Naver': '035420',
+            '카카오': '035720', 'kakao': '035720', 'Kakao': '035720',
+        }
+        
+        # 검색어 정규화 (소문자 변환)
+        normalized_query = query.lower().strip()
+        
+        # 매핑된 심볼이 있는지 확인
+        if normalized_query in stock_mappings:
+            symbol = stock_mappings[normalized_query]
+            # 원본 검색어 + 심볼로 확장
+            expanded_query = f"{query} {symbol}"
+            Logger.debug(f"검색어 확장: '{query}' → '{expanded_query}'")
+            return expanded_query
+        
+        # 원본 검색어 반환
+        return query
+
+    @classmethod
     async def retrieve(cls, 
                       query: str, 
                       top_k: Optional[int] = None, 
@@ -516,21 +761,24 @@ class RagService:
         start_time = time.time()
         k = top_k or cls._config.default_k
         
-        Logger.info(f"🔍 하이브리드 검색 시작: '{query}' (k={k}, hybrid={hybrid})")
+        # 검색어 전처리 추가
+        processed_query = cls._preprocess_query(query)
+        
+        Logger.info(f"🔍 하이브리드 검색 시작: '{query}' → '{processed_query}' (k={k}, hybrid={hybrid})")
         
         try:
             cls._stats["search_requests"] += 1
             
-            # 하이브리드 검색 실행
+            # 하이브리드 검색 실행 (전처리된 쿼리 사용)
             if hybrid and cls._search_available and cls._vector_available:
                 cls._stats["hybrid_searches"] += 1
-                results = await cls._hybrid_search(query, k, bm25_weight, vector_weight)
+                results = await cls._hybrid_search(processed_query, k, bm25_weight, vector_weight)
             elif cls._vector_available:
                 Logger.info("벡터 검색 모드")
-                results = await cls._vector_search_only(query, k)
+                results = await cls._vector_search_only(processed_query, k)
             elif cls._search_available:
                 Logger.info("키워드 검색 모드")
-                results = await cls._bm25_search_only(query, k)
+                results = await cls._bm25_search_only(processed_query, k)
             else:
                 Logger.error("사용 가능한 검색 서비스가 없음")
                 return []
