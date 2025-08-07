@@ -12,6 +12,7 @@ from template.autotrade.common.autotrade_model import SignalAlarmInfo, SignalHis
 from service.core.logger import Logger
 from service.service_container import ServiceContainer
 from service.external.yahoo_finance_client import YahooFinanceClient
+from dataclasses import asdict
 import uuid
 from datetime import datetime
 
@@ -31,17 +32,21 @@ class AutoTradeTemplateImpl(BaseTemplate):
             async with YahooFinanceClient(cache_service) as client:
                 result = await client.search_stocks(request.query)
                 
-                response.errorCode = result.get('errorCode', 0)
-                response.results = result.get('results', [])
+                # SearchResult 객체의 필드에 직접 접근
+                response.errorCode = result.errorCode
                 
+                # StockQuote 객체들을 dictionary로 변환
+                response.results = [asdict(stock) for stock in result.securities]
+                
+                # 에러가 있을 경우 로깅만 수행
                 if response.errorCode != 0:
-                    response.message = result.get('message', '검색 중 오류가 발생했습니다')
+                    Logger.warn(f"Search returned error: {result.message}")
                 
         except Exception as e:
             Logger.error(f"Yahoo Finance search error: {e}")
             response.errorCode = 1
             response.results = []
-            response.message = f"검색 중 오류가 발생했습니다: {str(e)}"
+            # message 필드 설정 제거, 로깅만 수행
         
         return response
 
@@ -54,7 +59,7 @@ class AutoTradeTemplateImpl(BaseTemplate):
         if not request.symbol or not isinstance(request.symbol, str) or not request.symbol.strip():
             response.errorCode = 1
             response.price_data = {}
-            response.message = f"유효하지 않은 symbol: {request.symbol}"
+            Logger.warn(f"유효하지 않은 symbol: {request.symbol}")
             return response
         
         Logger.info(f"Yahoo Finance detail request: symbol={request.symbol}")
@@ -82,7 +87,7 @@ class AutoTradeTemplateImpl(BaseTemplate):
                             "exchange": "NASDAQ"
                         }
                     }
-                    response.message = f"상세 정보를 가져올 수 없습니다: {request.symbol}"
+                    Logger.warn(f"상세 정보를 가져올 수 없습니다: {request.symbol}")
                 else:
                     # 성공 시에도 프론트엔드가 기대하는 형태로 변환
                     response.errorCode = 0
@@ -102,13 +107,13 @@ class AutoTradeTemplateImpl(BaseTemplate):
                             "exchange": result.exchange
                         }
                     }
-                    response.message = "상세 정보 조회 성공"
+                    Logger.info("상세 정보 조회 성공")
                     
         except Exception as e:
             Logger.error(f"Yahoo Finance detail error: {e}")
             response.errorCode = 1
             response.price_data = {}
-            response.message = f"상세 정보 조회 중 오류가 발생했습니다: {str(e)}"
+            # message 필드 설정 제거, 로깅은 이미 수행됨
         
         return response
 
@@ -352,11 +357,17 @@ class AutoTradeTemplateImpl(BaseTemplate):
             
             db_service = ServiceContainer.get_database_service()
             
-            # 프로시저 호출 - 히스토리 조회
+            # 프로시저 호출 - 히스토리 조회 (SQL 프로시저 파라미터에 맞춤)
             result = await db_service.execute_shard_procedure(
                 account_db_key,
                 "fp_signal_history_get",
-                (account_db_key, request.alarm_id, request.limit, request.offset)
+                (
+                    account_db_key,
+                    request.alarm_id if request.alarm_id else "",        # 특정 알림 또는 전체
+                    request.symbol if request.symbol else "",            # 특정 종목 또는 전체  
+                    request.signal_type if request.signal_type else "",  # BUY/SELL 필터 또는 전체
+                    request.limit                                        # 조회 개수 제한
+                )
             )
             
             if not result:

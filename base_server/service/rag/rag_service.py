@@ -4,6 +4,7 @@ import time
 from typing import Optional, Dict, Any, List, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from service.rag.rag_config import RagConfig
+from service.rag.rag_vectordb_client import RagVectorDbClient, RagVectorDbConfig
 from service.core.logger import Logger
 
 class RagService:
@@ -19,6 +20,9 @@ class RagService:
     _config: Optional[RagConfig] = None
     _search_available: bool = False
     _vector_available: bool = False
+    
+    # RAG 전용 벡터 클라이언트 (coroutine 재사용 문제 해결)
+    _rag_vector_client: Optional[RagVectorDbClient] = None
     
     # 성능 통계
     _stats = {
@@ -121,6 +125,28 @@ class RagService:
             # VectorDbService 상태 확인
             cls._vector_available = VectorDbService.is_initialized()
             Logger.info(f"VectorDbService 상태: {'사용 가능' if cls._vector_available else '사용 불가'}")
+            
+            # RAG 전용 벡터 클라이언트 초기화 (coroutine 재사용 문제 해결)
+            if cls._vector_available and cls._config.enable_vector_db:
+                try:
+                    # RAG 설정에서 벡터 DB 설정 추출
+                    vector_config = RagVectorDbConfig(
+                        aws_access_key_id=cls._config.aws_access_key_id,
+                        aws_secret_access_key=cls._config.aws_secret_access_key,
+                        region_name=cls._config.region_name,
+                        knowledge_base_id=cls._config.knowledge_base_id,
+                        aws_session_token=getattr(cls._config, 'aws_session_token', None),
+                        max_retries=3,
+                        retry_delay_base=1.0,
+                        timeout=30.0
+                    )
+                    
+                    cls._rag_vector_client = RagVectorDbClient(vector_config)
+                    Logger.info("✅ RAG 전용 벡터 클라이언트 초기화 완료")
+                    
+                except Exception as e:
+                    Logger.error(f"❌ RAG 전용 벡터 클라이언트 초기화 실패: {e}")
+                    cls._vector_available = False
             
             # 최소 하나의 서비스는 사용 가능해야 함
             if not (cls._search_available or cls._vector_available):
@@ -547,32 +573,56 @@ class RagService:
 
     @classmethod
     async def _bm25_search_only(cls, query: str, k: int) -> List[Dict[str, Any]]:
-        """BM25 키워드 검색만 실행"""
+        """BM25 키워드 검색만 실행 - 크롤러 구조에 맞춤"""
         try:
             from service.search.search_service import SearchService
             
+            # 크롤러에서 저장한 OpenSearch 구조에 맞춤
             search_query = {
                 "query": {
                     "multi_match": {
                         "query": query,
-                        "fields": ["content", "metadata.title"],
+                        "fields": ["title", "ticker", "source"],  # 크롤러 구조
                         "type": "best_fields"
                     }
                 },
                 "size": k
             }
             
-            response = await SearchService.search(cls._config.collection_name, search_query)
+            # 크롤러가 실제로 사용하는 인덱스 이름으로 수정
+            response = await SearchService.search("yahoo_finance_news", search_query)
             
             if not response:
                 return []
             
             results = []
             for hit in response.get("hits", {}).get("hits", []):
+                source_data = hit["_source"]
+                
+                # 크롤러 구조에서 title과 source 추출
+                title = source_data.get("title", "No title")
+                source = source_data.get("source", "unknown")
+                
+                # 크롤러 구조에 맞춰 메타데이터 구성
+                metadata = {
+                    "title": title,
+                    "source": source,
+                    "ticker": source_data.get("ticker", ""),
+                    "date": source_data.get("date", ""),
+                    "link": source_data.get("link", ""),
+                    "content_type": source_data.get("content_type", ""),
+                    "task_id": source_data.get("task_id", ""),
+                    "collected_at": source_data.get("collected_at", ""),
+                    "created_at": source_data.get("created_at", "")
+                }
+                
+                # 크롤러에서는 title이 실제 뉴스 제목이므로 content로 사용
+                content = title
+                
                 result = {
                     "id": hit["_id"],
-                    "content": hit["_source"]["content"],
-                    "metadata": hit["_source"].get("metadata", {}),
+                    "content": content,
+                    "metadata": metadata,
                     "score": hit["_score"],
                     "search_type": "bm25"
                 }
@@ -586,38 +636,64 @@ class RagService:
 
     @classmethod
     async def _vector_search_only(cls, query: str, k: int) -> List[Dict[str, Any]]:
-        """벡터 유사도 검색만 실행"""
+        """벡터 유사도 검색만 실행 - RAG 전용 클라이언트 사용"""
         try:
-            from service.vectordb.vectordb_service import VectorDbService
+            # RAG 전용 벡터 클라이언트 사용 (coroutine 재사용 문제 해결)
+            if cls._rag_vector_client:
+                vector_results = await cls._rag_vector_client.similarity_search(
+                    query=query,
+                    top_k=k
+                )
+                
+                if not vector_results.get("success"):
+                    Logger.warn(f"RAG 벡터 검색 실패: {vector_results.get('error', 'Unknown error')}")
+                    return []
+                
+                results = []
+                for result in vector_results.get("results", []):
+                    doc_result = {
+                        "id": result.get("id", ""),
+                        "content": result.get("content", ""),
+                        "metadata": result.get("metadata", {}),
+                        "score": result.get("score", 0.0),
+                        "search_type": "vector"
+                    }
+                    results.append(doc_result)
+                
+                return results
             
-            # 쿼리 임베딩 생성
-            embed_result = await VectorDbService.embed_text(query)
-            
-            if not embed_result.get("success"):
-                Logger.warn("쿼리 임베딩 생성 실패")
-                return []
-            
-            # 벡터 검색 실행
-            vector_results = await VectorDbService.similarity_search(
-                query=query,
-                top_k=k
-            )
-            
-            if not vector_results:
-                return []
-            
-            results = []
-            for result in vector_results.get("results", []):
-                doc_result = {
-                    "id": result.get("id", ""),
-                    "content": result.get("content", ""),
-                    "metadata": result.get("metadata", {}),
-                    "score": result.get("score", 0.0),
-                    "search_type": "vector"
-                }
-                results.append(doc_result)
-            
-            return results
+            else:
+                # Fallback: 기존 VectorDbService 사용
+                from service.vectordb.vectordb_service import VectorDbService
+                
+                # 쿼리 임베딩 생성
+                embed_result = await VectorDbService.embed_text(query)
+                
+                if not embed_result.get("success"):
+                    Logger.warn("쿼리 임베딩 생성 실패")
+                    return []
+                
+                # 벡터 검색 실행
+                vector_results = await VectorDbService.similarity_search(
+                    query=query,
+                    top_k=k
+                )
+                
+                if not vector_results:
+                    return []
+                
+                results = []
+                for result in vector_results.get("results", []):
+                    doc_result = {
+                        "id": result.get("id", ""),
+                        "content": result.get("content", ""),
+                        "metadata": result.get("metadata", {}),
+                        "score": result.get("score", 0.0),
+                        "search_type": "vector"
+                    }
+                    results.append(doc_result)
+                
+                return results
             
         except Exception as e:
             Logger.error(f"벡터 검색 실패: {e}")
@@ -771,11 +847,20 @@ class RagService:
             Logger.info(f"  - 하이브리드 검색: {stats['hybrid_searches']}개")
             Logger.info(f"  - 평균 검색 시간: {stats['avg_search_time']:.3f}초")
             
+            # RAG 전용 벡터 클라이언트 종료
+            if cls._rag_vector_client:
+                try:
+                    await cls._rag_vector_client.close()
+                    Logger.info("✅ RAG 전용 벡터 클라이언트 종료 완료")
+                except Exception as e:
+                    Logger.error(f"❌ RAG 전용 벡터 클라이언트 종료 실패: {e}")
+            
             # 상태 초기화
             cls._initialized = False
             cls._config = None
             cls._search_available = False
             cls._vector_available = False
+            cls._rag_vector_client = None
             cls._reset_stats()
             
             Logger.info("✅ RAG 서비스 종료 완료")

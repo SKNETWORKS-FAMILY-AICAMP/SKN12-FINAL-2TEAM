@@ -85,7 +85,18 @@ class ServiceMonitor:
             ("cache", self._check_cache),
             ("lock", self._check_lock_service),
             ("scheduler", self._check_scheduler),
-            ("queue", self._check_queue_service)
+            ("queue", self._check_queue_service),
+            ("external", self._check_external_service),
+            ("korea_investment", self._check_korea_investment_service),
+            ("storage", self._check_storage_service),
+            ("search", self._check_search_service),
+            ("vectordb", self._check_vectordb_service),
+            ("notification", self._check_notification_service),
+            ("email", self._check_email_service),
+            ("sms", self._check_sms_service),
+            ("websocket", self._check_websocket_service),
+            ("rag", self._check_rag_service),
+            ("signal_monitoring", self._check_signal_monitoring_service)
         ]
         
         for service_name, check_func in checks:
@@ -194,6 +205,211 @@ class ServiceMonitor:
                 
             queue_service = QueueService.get_instance()
             stats = queue_service.get_stats()
+            response_time = (time.time() - start_time) * 1000
+            self._record_success(service_name, response_time)
+            
+        except Exception as e:
+            response_time = (time.time() - start_time) * 1000
+            self._record_failure(service_name, str(e), response_time)
+    
+    async def _check_external_service(self, service_name: str):
+        """External 서비스 상태 체크"""
+        start_time = time.time()
+        
+        try:
+            from service.external.external_service import ExternalService
+            if not ExternalService.is_initialized():
+                self._record_success(service_name, 0, ServiceStatus.DEGRADED)
+                return
+                
+            # ExternalService는 정적 클래스이므로 초기화 상태만 확인
+            response_time = (time.time() - start_time) * 1000
+            self._record_success(service_name, response_time)
+            
+        except Exception as e:
+            response_time = (time.time() - start_time) * 1000
+            self._record_failure(service_name, str(e), response_time)
+    
+    async def _check_korea_investment_service(self, service_name: str):
+        """한국투자증권 서비스 상태 체크"""
+        start_time = time.time()
+        
+        try:
+            from service.external.korea_investment_service import KoreaInvestmentService
+            if not KoreaInvestmentService.is_initialized():
+                self._record_success(service_name, 0, ServiceStatus.DEGRADED)
+                return
+            
+            # WebSocket 연결 상태도 체크
+            from service.external.korea_investment_websocket import get_korea_investment_websocket
+            websocket = await get_korea_investment_websocket()
+            
+            response_time = (time.time() - start_time) * 1000
+            
+            if websocket.is_connected:
+                self._record_success(service_name, response_time)
+            else:
+                self._record_success(service_name, response_time, ServiceStatus.DEGRADED)
+                
+        except Exception as e:
+            response_time = (time.time() - start_time) * 1000
+            self._record_failure(service_name, str(e), response_time)
+    
+    async def _check_storage_service(self, service_name: str):
+        """Storage 서비스 상태 체크"""
+        start_time = time.time()
+        
+        try:
+            from service.storage.storage_service import StorageService
+            if not StorageService.is_initialized():
+                self._record_success(service_name, 0, ServiceStatus.DEGRADED)
+                return
+                
+            # StorageService는 정적 클래스 - 초기화 상태만 확인
+            response_time = (time.time() - start_time) * 1000
+            self._record_success(service_name, response_time)
+            
+        except Exception as e:
+            response_time = (time.time() - start_time) * 1000
+            self._record_failure(service_name, str(e), response_time)
+    
+    async def _check_search_service(self, service_name: str):
+        """Search 서비스 상태 체크"""
+        start_time = time.time()
+        
+        try:
+            from service.search.search_service import SearchService
+            if not SearchService.is_initialized():
+                self._record_success(service_name, 0, ServiceStatus.DEGRADED)
+                return
+                
+            # SearchService는 정적 클래스 - 초기화 상태만 확인
+            response_time = (time.time() - start_time) * 1000
+            self._record_success(service_name, response_time)
+            
+        except Exception as e:
+            response_time = (time.time() - start_time) * 1000
+            self._record_failure(service_name, str(e), response_time)
+    
+    async def _check_vectordb_service(self, service_name: str):
+        """VectorDB 서비스 상태 체크"""
+        start_time = time.time()
+        
+        try:
+            from service.vectordb.vectordb_service import VectorDbService
+            if not VectorDbService.is_initialized():
+                self._record_success(service_name, 0, ServiceStatus.DEGRADED)
+                return
+                
+            # VectorDbService는 정적 클래스 - 초기화 상태만 확인
+            response_time = (time.time() - start_time) * 1000
+            self._record_success(service_name, response_time)
+            
+        except Exception as e:
+            response_time = (time.time() - start_time) * 1000
+            self._record_failure(service_name, str(e), response_time)
+    
+    async def _check_notification_service(self, service_name: str):
+        """Notification 서비스 상태 체크"""
+        start_time = time.time()
+        
+        try:
+            from service.notification.notification_service import NotificationService
+            if not NotificationService.is_initialized():
+                self._record_success(service_name, 0, ServiceStatus.DEGRADED)
+                return
+                
+            # NotificationService는 정적 클래스 - 초기화 상태만 확인
+            response_time = (time.time() - start_time) * 1000
+            self._record_success(service_name, response_time)
+            
+        except Exception as e:
+            response_time = (time.time() - start_time) * 1000
+            self._record_failure(service_name, str(e), response_time)
+    
+    async def _check_email_service(self, service_name: str):
+        """Email 서비스 상태 체크"""
+        start_time = time.time()
+        
+        try:
+            from service.email.email_service import EmailService
+            if not EmailService.is_initialized():
+                self._record_success(service_name, 0, ServiceStatus.DEGRADED)
+                return
+                
+            # EmailService는 정적 클래스 - 초기화 상태만 확인
+            response_time = (time.time() - start_time) * 1000
+            self._record_success(service_name, response_time)
+            
+        except Exception as e:
+            response_time = (time.time() - start_time) * 1000
+            self._record_failure(service_name, str(e), response_time)
+    
+    async def _check_sms_service(self, service_name: str):
+        """SMS 서비스 상태 체크"""
+        start_time = time.time()
+        
+        try:
+            from service.sms.sms_service import SmsService
+            if not SmsService.is_initialized():
+                self._record_success(service_name, 0, ServiceStatus.DEGRADED)
+                return
+                
+            # SmsService는 정적 클래스 - 초기화 상태만 확인
+            response_time = (time.time() - start_time) * 1000
+            self._record_success(service_name, response_time)
+            
+        except Exception as e:
+            response_time = (time.time() - start_time) * 1000
+            self._record_failure(service_name, str(e), response_time)
+    
+    async def _check_websocket_service(self, service_name: str):
+        """WebSocket 서비스 상태 체크"""
+        start_time = time.time()
+        
+        try:
+            from service.websocket.websocket_service import WebSocketService
+            if not WebSocketService.is_initialized():
+                self._record_success(service_name, 0, ServiceStatus.DEGRADED)
+                return
+                
+            # WebSocketService는 정적 클래스 - 초기화 상태만 확인
+            response_time = (time.time() - start_time) * 1000
+            self._record_success(service_name, response_time)
+            
+        except Exception as e:
+            response_time = (time.time() - start_time) * 1000
+            self._record_failure(service_name, str(e), response_time)
+    
+    async def _check_rag_service(self, service_name: str):
+        """RAG 서비스 상태 체크"""
+        start_time = time.time()
+        
+        try:
+            from service.rag.rag_service import RagService
+            if not RagService.is_initialized():
+                self._record_success(service_name, 0, ServiceStatus.DEGRADED)
+                return
+                
+            # RagService는 정적 클래스 - 초기화 상태만 확인
+            response_time = (time.time() - start_time) * 1000
+            self._record_success(service_name, response_time)
+            
+        except Exception as e:
+            response_time = (time.time() - start_time) * 1000
+            self._record_failure(service_name, str(e), response_time)
+    
+    async def _check_signal_monitoring_service(self, service_name: str):
+        """Signal Monitoring 서비스 상태 체크"""
+        start_time = time.time()
+        
+        try:
+            from service.signal.signal_monitoring_service import SignalMonitoringService
+            if not SignalMonitoringService.is_initialized():
+                self._record_success(service_name, 0, ServiceStatus.DEGRADED)
+                return
+                
+            # SignalMonitoringService는 정적 클래스 - 초기화 상태만 확인
             response_time = (time.time() - start_time) * 1000
             self._record_success(service_name, response_time)
             

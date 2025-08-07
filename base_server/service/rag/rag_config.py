@@ -197,6 +197,35 @@ class RagConfig(BaseModel):
         description="캐시 최대 항목 수"
     )
     
+    # =================== AWS Bedrock 설정 ===================
+    
+    # AWS 인증 정보
+    aws_access_key_id: str = Field(
+        default="",
+        description="AWS Access Key ID"
+    )
+    
+    aws_secret_access_key: str = Field(
+        default="",
+        description="AWS Secret Access Key"
+    )
+    
+    region_name: str = Field(
+        default="us-east-1",
+        description="AWS 리전"
+    )
+    
+    aws_session_token: Optional[str] = Field(
+        default=None,
+        description="AWS Session Token (임시 자격 증명용)"
+    )
+    
+    # Bedrock Knowledge Base 설정
+    knowledge_base_id: str = Field(
+        default="",
+        description="Bedrock Knowledge Base ID"
+    )
+    
     # =================== 벡터 임베딩 설정 ===================
     
     # VectorDbConfig 기반
@@ -374,6 +403,23 @@ class RagConfig(BaseModel):
         # rerank_top_k는 max_k보다 작거나 같아야 함
         if self.rerank_top_k > self.max_k:
             self.rerank_top_k = self.max_k
+        
+        return self
+
+    @model_validator(mode='after')
+    def validate_aws_settings(self) -> 'RagConfig':
+        """AWS Bedrock 설정 검증"""
+        
+        # 벡터 DB가 활성화된 경우 AWS 설정 필수
+        if self.enable_vector_db:
+            if not self.aws_access_key_id or not self.aws_secret_access_key:
+                raise ValueError("벡터 DB 활성화 시 AWS Access Key ID와 Secret Access Key가 필요합니다")
+            
+            if not self.knowledge_base_id:
+                raise ValueError("벡터 DB 활성화 시 Knowledge Base ID가 필요합니다")
+            
+            if not self.region_name:
+                self.region_name = "us-east-1"  # 기본값 설정
         
         return self
 
