@@ -11,9 +11,18 @@ from sklearn.preprocessing import MinMaxScaler
 import warnings
 warnings.filterwarnings('ignore')
 
+# 🚀 고급 피처 엔지니어링 import
+from advanced_features import AdvancedFeatureEngineering
+
 class StockDataPreprocessor:
-    def __init__(self):
+    def __init__(self, use_log_transform: bool = True):
         self.logger = logging.getLogger(__name__)
+        
+        # 🔧 로그 변환 설정 (2단계 해결책)
+        self.use_log_transform = use_log_transform
+        self.price_columns = ['Open', 'High', 'Low', 'Close']  # 로그 변환 대상 컬럼
+        self.ma_columns = ['MA_5', 'MA_20', 'MA_60']  # 이동평균도 로그 변환 대상
+        self.bb_price_columns = ['BB_Upper', 'BB_Middle', 'BB_Lower']  # 볼린저 밴드도 로그 변환 대상
         
         # 하이브리드 스케일러 시스템
         self.global_scaler = MinMaxScaler()      # 전역 피처 스케일러 (fallback용)
@@ -23,6 +32,85 @@ class StockDataPreprocessor:
         
         # 하위 호환성을 위한 기존 스케일러 (사용 안함)
         self.scaler = MinMaxScaler()
+        
+        # 🚀 고급 피처 엔지니어링 초기화
+        self.advanced_features = AdvancedFeatureEngineering()
+        self.advanced_features_enabled = False  # 기본값: 비활성화 (호환성)
+        
+        if self.use_log_transform:
+            self.logger.info("Log transformation enabled for price scaling")
+    
+    # ============================================================================
+    # 로그 변환 함수들 (2단계 해결책)
+    # ============================================================================
+    
+    def apply_log_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        가격 관련 컬럼에 로그 변환 적용
+        
+        Args:
+            df: 원본 데이터프레임
+            
+        Returns:
+            로그 변환된 데이터프레임
+        """
+        if not self.use_log_transform:
+            return df
+        
+        df_transformed = df.copy()
+        
+        # 가격 컬럼들에 로그 변환 적용 (작은 값 처리를 위해 +1)
+        for col in self.price_columns:
+            if col in df_transformed.columns:
+                df_transformed[col] = np.log(df_transformed[col] + 1)
+        
+        # 이동평균 컬럼들에도 로그 변환 적용
+        for col in self.ma_columns:
+            if col in df_transformed.columns:
+                df_transformed[col] = np.log(df_transformed[col] + 1)
+        
+        # 볼린저 밴드 컬럼들에도 로그 변환 적용
+        for col in self.bb_price_columns:
+            if col in df_transformed.columns:
+                df_transformed[col] = np.log(df_transformed[col] + 1)
+        
+        self.logger.info(f"Applied log transformation to price columns")
+        return df_transformed
+    
+    def apply_inverse_log_transform(self, values: np.ndarray, is_price_data: bool = True) -> np.ndarray:
+        """
+        로그 변환된 데이터를 원래 스케일로 역변환
+        
+        Args:
+            values: 로그 변환된 값들
+            is_price_data: 가격 데이터 여부 (가격이 아닌 데이터는 역변환하지 않음)
+            
+        Returns:
+            원래 스케일로 복원된 값들
+        """
+        if not self.use_log_transform or not is_price_data:
+            return values
+        
+        # exp 변환 후 -1 (log(x+1)의 역변환)
+        restored_values = np.exp(values) - 1
+        
+        # 음수값 보정 (가격은 항상 양수여야 함)
+        restored_values = np.maximum(restored_values, 0.01)
+        
+        self.logger.debug(f"Applied inverse log transformation")
+        return restored_values
+    
+    def log_transform_single_value(self, value: float) -> float:
+        """단일 값에 로그 변환 적용"""
+        if not self.use_log_transform:
+            return value
+        return np.log(value + 1)
+    
+    def inverse_log_transform_single_value(self, value: float) -> float:
+        """단일 값에 로그 역변환 적용"""
+        if not self.use_log_transform:
+            return value
+        return max(np.exp(value) - 1, 0.01)
     
     def calculate_moving_averages(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -117,7 +205,18 @@ class StockDataPreprocessor:
         numeric_cols = df_copy.select_dtypes(include=[np.number]).columns
         df_copy[numeric_cols] = df_copy[numeric_cols].fillna(method='bfill').fillna(method='ffill')
         
-        self.logger.info(f"Added technical indicators for {len(df_copy)} records")
+        # 🚀 고급 피처 엔지니어링 (선택적 활성화)
+        if self.advanced_features_enabled:
+            df_copy = self.advanced_features.add_all_advanced_features(df_copy)
+            self.logger.info("고급 피처 엔지니어링 적용됨 (42개 피처 모드)")
+        else:
+            self.logger.info("기본 피처만 사용 (18개 피처 모드 - 호환성)")
+        
+        # 🔧 로그 변환 적용 (2단계 해결책)
+        df_copy = self.apply_log_transform(df_copy)
+        
+        feature_count = len(df_copy.columns)
+        self.logger.info(f"✅ Added technical indicators + advanced features: {feature_count} total features for {len(df_copy)} records")
         return df_copy
     
     def calculate_rsi(self, prices: pd.Series, window: int = 14) -> pd.Series:
@@ -184,13 +283,39 @@ class StockDataPreprocessor:
         Returns:
             (X, y) - 입력 시퀀스와 타겟 시퀀스
         """
-        # 학습에 사용할 피처 선택
-        feature_columns = [
-            'Open', 'High', 'Low', 'Close', 'Volume',
-            'MA_5', 'MA_20', 'MA_60',
-            'BB_Upper', 'BB_Middle', 'BB_Lower', 'BB_Percent', 'BB_Width',
-            'RSI', 'MACD', 'MACD_Signal', 'Price_Change', 'Volatility'
-        ]
+        # 🚀 피처 선택 (고급 피처 활성화 여부에 따라)
+        if self.advanced_features_enabled:
+            # 고급 피처 포함 (42개)
+            feature_columns = [
+                # 기본 OHLCV (5개)
+                'Open', 'High', 'Low', 'Close', 'Volume',
+                
+                # 이동평균 및 추세 (8개)
+                'MA_5', 'MA_20', 'MA_60', 'ADX', 'DI_Plus', 'DI_Minus', 'PSAR', 'PSAR_Trend',
+                
+                # 볼린저 밴드 및 변동성 (7개)
+                'BB_Upper', 'BB_Middle', 'BB_Lower', 'BB_Percent', 'BB_Width', 'ATR', 'ATR_Ratio',
+                
+                # 모멘텀 지표 (8개)
+                'RSI', 'Stoch_K', 'Stoch_D', 'Williams_R', 'CCI', 'MFI', 'ROC_10', 'Price_Momentum',
+                
+                # 거래량 지표 (4개)
+                'OBV_Ratio', 'CMF', 'Volume_Profile', 'Volume_Momentum',
+                
+                # 시장 체제 및 미시구조 (6개)
+                'Vol_Regime', 'Trend_Strength', 'VWAP', 'PV_Corr', 'Intraday_Range', 'Price_ZScore',
+                
+                # 기존 기술지표 (4개)
+                'MACD', 'MACD_Signal', 'Price_Change', 'Volatility'
+            ]
+        else:
+            # 기본 피처만 (18개 - 호환성)
+            feature_columns = [
+                'Open', 'High', 'Low', 'Close', 'Volume',
+                'MA_5', 'MA_20', 'MA_60',
+                'BB_Upper', 'BB_Middle', 'BB_Lower', 'BB_Percent', 'BB_Width',
+                'RSI', 'MACD', 'MACD_Signal', 'Price_Change', 'Volatility'
+            ]
         
         # 타겟은 다음 5일의 Close, BB_Upper, BB_Lower
         target_columns = ['Close', 'BB_Upper', 'BB_Lower']
@@ -247,21 +372,25 @@ class StockDataPreprocessor:
         # 하이브리드 역변환: 종목별 → 전역 타겟 스케일러 순서로 시도
         if symbol in self.target_scalers:
             # 우선순위 1: 종목별 타겟 스케일러 사용
-            predictions_original = self.target_scalers[symbol].inverse_transform(predictions_2d)
+            predictions_scaled_back = self.target_scalers[symbol].inverse_transform(predictions_2d)
             self.logger.info(f"Using symbol-specific target scaler for {symbol}")
         else:
             # 우선순위 2: 전역 타겟 스케일러 사용
             try:
-                predictions_original = self.global_target_scaler.inverse_transform(predictions_2d)
+                predictions_scaled_back = self.global_target_scaler.inverse_transform(predictions_2d)
                 self.logger.info(f"Using global target scaler for {symbol}")
             except Exception as e:
                 # 최후의 수단: 역변환 없이 그대로 반환
                 self.logger.warning(f"No suitable target scaler for {symbol}, returning normalized predictions: {e}")
-                predictions_original = predictions_2d
+                predictions_scaled_back = predictions_2d
+        
+        # 🔧 로그 역변환 적용 (2단계 해결책)
+        predictions_original = self.apply_inverse_log_transform(predictions_scaled_back, is_price_data=True)
         
         # 원래 shape로 복원
         predictions_original = predictions_original.reshape(original_shape)
         
+        self.logger.info(f"Applied log inverse transform for {symbol}")
         return predictions_original
     
     def preprocess_for_inference(self, df: pd.DataFrame, symbol: str = "DEFAULT") -> np.ndarray:
@@ -278,13 +407,39 @@ class StockDataPreprocessor:
         # 전처리 파이프라인 적용
         df_processed = self.preprocess_data(df)
         
-        # 피처 선택
-        feature_columns = [
-            'Open', 'High', 'Low', 'Close', 'Volume',
-            'MA_5', 'MA_20', 'MA_60',
-            'BB_Upper', 'BB_Middle', 'BB_Lower', 'BB_Percent', 'BB_Width',
-            'RSI', 'MACD', 'MACD_Signal', 'Price_Change', 'Volatility'
-        ]
+        # 🚀 피처 선택 (고급 피처 활성화 여부에 따라)
+        if self.advanced_features_enabled:
+            # 고급 피처 포함 (42개)
+            feature_columns = [
+                # 기본 OHLCV (5개)
+                'Open', 'High', 'Low', 'Close', 'Volume',
+                
+                # 이동평균 및 추세 (8개)
+                'MA_5', 'MA_20', 'MA_60', 'ADX', 'DI_Plus', 'DI_Minus', 'PSAR', 'PSAR_Trend',
+                
+                # 볼린저 밴드 및 변동성 (7개)
+                'BB_Upper', 'BB_Middle', 'BB_Lower', 'BB_Percent', 'BB_Width', 'ATR', 'ATR_Ratio',
+                
+                # 모멘텀 지표 (8개)
+                'RSI', 'Stoch_K', 'Stoch_D', 'Williams_R', 'CCI', 'MFI', 'ROC_10', 'Price_Momentum',
+                
+                # 거래량 지표 (4개)
+                'OBV_Ratio', 'CMF', 'Volume_Profile', 'Volume_Momentum',
+                
+                # 시장 체제 및 미시구조 (6개)
+                'Vol_Regime', 'Trend_Strength', 'VWAP', 'PV_Corr', 'Intraday_Range', 'Price_ZScore',
+                
+                # 기존 기술지표 (4개)
+                'MACD', 'MACD_Signal', 'Price_Change', 'Volatility'
+            ]
+        else:
+            # 기본 피처만 (18개 - 호환성)
+            feature_columns = [
+                'Open', 'High', 'Low', 'Close', 'Volume',
+                'MA_5', 'MA_20', 'MA_60',
+                'BB_Upper', 'BB_Middle', 'BB_Lower', 'BB_Percent', 'BB_Width',
+                'RSI', 'MACD', 'MACD_Signal', 'Price_Change', 'Volatility'
+            ]
         
         feature_data = df_processed[feature_columns].values
         

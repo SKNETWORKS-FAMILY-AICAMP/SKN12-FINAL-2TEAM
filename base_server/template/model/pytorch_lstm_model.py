@@ -16,9 +16,15 @@ import os
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 import matplotlib.pyplot as plt
 
+# 🚀 고급 손실함수 및 평가지표 import
+from advanced_metrics import (
+    DirectionalLoss, VolatilityAwareLoss, MultiTargetLoss, 
+    AdvancedMetrics, get_advanced_loss_function
+)
+
 class StockLSTM(nn.Module):
     def __init__(self, 
-                 input_size: int = 18,
+                 input_size: int = 42,       # 🚀 고급 피처 확장 (18 → 42)
                  hidden_size: int = 512,     # 🔥 4배 증가 (RTX 4090 활용)
                  num_layers: int = 4,        # 🔥 2배 증가 
                  output_size: int = 15,      # 5일 * 3타겟
@@ -146,7 +152,7 @@ class PyTorchStockLSTM:
     def __init__(self, 
                  sequence_length: int = 60,
                  prediction_length: int = 5,
-                 num_features: int = 18,
+                 num_features: int = 42,     # 🚀 고급 피처 확장 (18 → 42)
                  num_targets: int = 3,
                  device: str = None):
         
@@ -176,8 +182,9 @@ class PyTorchStockLSTM:
     def build_model(self, 
                    hidden_size: int = 512,    # 🔥 RTX 4090 최적화 (4배 증가)
                    num_layers: int = 4,       # 🔥 RTX 4090 최적화 (2배 증가)
-                   dropout: float = 0.2):
-        """모델 구축"""
+                   dropout: float = 0.2,
+                   loss_type: str = "multi_target"):  # 🚀 고급 손실함수 선택
+        """모델 구축 (고급 손실함수 적용)"""
         
         output_size = self.prediction_length * self.num_targets
         
@@ -189,9 +196,38 @@ class PyTorchStockLSTM:
             dropout=dropout
         ).to(self.device)  # GPU로 이동
         
-        # 옵티마이저와 손실함수
+        # 옵티마이저
         self.optimizer = optim.Adam(self.model.parameters(), lr=0.001, weight_decay=1e-5)
-        self.criterion = nn.MSELoss()
+        
+        # 🚀 고급 손실함수 적용
+        if loss_type == "multi_target":
+            self.criterion = MultiTargetLoss(
+                close_weight=0.6,      # Close 가격에 60% 가중치
+                bb_upper_weight=0.2,   # BB_Upper에 20% 가중치  
+                bb_lower_weight=0.2    # BB_Lower에 20% 가중치
+            ).to(self.device)
+            self.loss_type = "multi_target"
+        elif loss_type == "directional":
+            self.criterion = DirectionalLoss(
+                mse_weight=0.7,        # MSE에 70% 가중치
+                direction_weight=0.3   # 방향성에 30% 가중치
+            ).to(self.device)
+            self.loss_type = "directional"
+        elif loss_type == "volatility_aware":
+            self.criterion = VolatilityAwareLoss(
+                base_weight=1.0,
+                volatility_factor=0.5
+            ).to(self.device)
+            self.loss_type = "volatility_aware"
+        else:
+            # 기본 MSE (하위 호환성)
+            self.criterion = nn.MSELoss()
+            self.loss_type = "mse"
+            
+        # 🚀 고급 평가지표 계산기 초기화
+        self.metrics_calculator = AdvancedMetrics()
+        
+        self.logger.info(f"🚀 Model built with {loss_type} loss function")
         
         # 모델 파라미터 수 출력
         total_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
@@ -330,41 +366,67 @@ class PyTorchStockLSTM:
         # CPU로 이동하고 numpy로 변환
         return predictions.cpu().numpy()
     
-    def evaluate(self, X_test: np.ndarray, y_test: np.ndarray) -> Dict[str, float]:
+    def evaluate(self, X_test: np.ndarray, y_test: np.ndarray, 
+                 previous_prices: Optional[np.ndarray] = None) -> Dict[str, float]:
         """
-        모델 평가 (정규화 고려한 다양한 메트릭)
+        🚀 고급 평가지표를 사용한 모델 평가
         
         Args:
             X_test: 테스트 입력 데이터
             y_test: 테스트 타겟 데이터 (정규화된 상태)
+            previous_prices: 이전 가격 데이터 (방향성 계산용)
             
         Returns:
-            평가 메트릭 딕셔너리
+            종합 평가 메트릭 딕셔너리
         """
+        self.logger.info("🔍 Starting comprehensive model evaluation...")
+        
         predictions = self.predict(X_test)
         
-        # 1. 정규화된 상태에서의 기본 메트릭 (0-1 스케일)
+        # 1. 기본 메트릭 (하위 호환성)
         normalized_mse = mean_squared_error(y_test.reshape(-1), predictions.reshape(-1))
         normalized_mae = mean_absolute_error(y_test.reshape(-1), predictions.reshape(-1))
+        normalized_rmse = np.sqrt(normalized_mse)
         
-        # 2. MAPE (Mean Absolute Percentage Error) - 스케일 무관
         epsilon = 1e-8  # 0으로 나누기 방지
         mape = np.mean(np.abs((y_test - predictions) / (y_test + epsilon))) * 100
         
-        # 3. 방향성 정확도 (상승/하락 예측 정확도)
-        # 시계열의 연속적인 값 간 변화 방향 예측
-        pred_direction = np.sign(np.diff(predictions, axis=1))
-        true_direction = np.sign(np.diff(y_test, axis=1))
-        direction_accuracy = np.mean(pred_direction == true_direction) * 100
-        
-        # 4. 타겟별 상세 평가
-        target_names = ['Close', 'BB_Upper', 'BB_Lower']
+        # 기본 메트릭
         metrics = {
-            'Normalized_Overall_MSE': normalized_mse,
-            'Normalized_Overall_MAE': normalized_mae,
-            'Overall_MAPE': mape,
-            'Direction_Accuracy': direction_accuracy
+            'MSE': normalized_mse,
+            'MAE': normalized_mae,
+            'RMSE': normalized_rmse,
+            'MAPE': mape,
         }
+        
+        # 2. 🚀 고급 평가지표 계산
+        if hasattr(self, 'metrics_calculator'):
+            # Close 가격에 대한 고급 지표 (첫 번째 타겟)
+            close_predictions = predictions[:, :, 0].flatten()  # Close 예측
+            close_targets = y_test[:, :, 0].flatten()           # Close 실제
+            
+            # 이전 가격이 없으면 현재 데이터에서 추정
+            if previous_prices is None:
+                # 첫 번째 시점의 이전 가격을 현재 첫 값으로 근사
+                previous_prices = np.roll(close_targets, 1)
+                previous_prices[0] = close_targets[0]  # 첫 값 보정
+            else:
+                previous_prices = previous_prices[:, :, 0].flatten()
+            
+            # 🚀 종합 고급 지표 계산
+            advanced_metrics = self.metrics_calculator.calculate_comprehensive_metrics(
+                predictions=close_predictions,
+                targets=close_targets,
+                previous_prices=previous_prices
+            )
+            
+            # 고급 지표를 메인 지표에 통합
+            metrics.update(advanced_metrics)
+            
+            self.logger.info(f"✅ Advanced metrics calculated: {len(advanced_metrics)} indicators")
+        
+        # 3. 타겟별 상세 평가
+        target_names = ['Close', 'BB_Upper', 'BB_Lower']
         
         for i, target_name in enumerate(target_names):
             target_true = y_test[:, :, i]
