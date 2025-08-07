@@ -414,7 +414,237 @@ async def lifespan(app: FastAPI):
                     # RAG 서비스 상태 확인
                     health_status = await RagService.health_check()
                     Logger.info(f"RAG 서비스 상태: {health_status['status']}")
-                    
+                    # # ─────────── RAG 스모크 테스트 시작 ───────────
+                    # try:
+                    #     Logger.info("🧪 RAG 스모크 테스트 시작...")
+                        
+                    #     # 1) 테스트용 문서 추가 (다양한 금융 관련 문서)
+                    #     test_docs = [
+                    #         {
+                    #             "id": "MAINPY_TEST_001",
+                    #             "content": "이것은 main.py 삽입 테스트용 문서입니다. 금리 정책과 관련된 내용을 포함합니다.",
+                    #             "metadata": {"title": "mainTest", "source": "local", "category": "test"}
+                    #         },
+                    #         {
+                    #             "id": "MAINPY_TEST_002", 
+                    #             "content": "한국은행이 기준금리를 3.5%로 동결했습니다. 인플레이션 압력이 완화되면서 금리 인하 여지가 확대되었습니다.",
+                    #             "metadata": {"title": "한국은행 금리 동결", "source": "local", "category": "finance"}
+                    #         },
+                    #         {
+                    #             "id": "MAINPY_TEST_003",
+                    #             "content": "코스피 지수가 2,500선을 돌파했습니다. 반도체와 2차전지 주도로 상승세를 보이고 있습니다.",
+                    #             "metadata": {"title": "코스피 2,500선 돌파", "source": "local", "category": "stock"}
+                    #         }
+                    #     ]
+                        
+                    #     add_res = await RagService.add_documents(test_docs)
+                    #     Logger.info(f"✅ RAG 스모크-테스트: 문서 추가 완료 → {add_res}")
+                        
+                    #     # 2) 다양한 검색 테스트
+                    #     test_queries = [
+                    #         ("MAINPY_TEST_001", "정확한 ID 검색"),
+                    #         ("금리", "금융 키워드 검색"),
+                    #         ("코스피", "주식 키워드 검색"),
+                    #         ("한국은행", "기관명 검색"),
+                    #         ("존재하지않는키워드", "검색 결과 없음 테스트")
+                    #     ]
+                        
+                    #     for query, description in test_queries:
+                    #         try:
+                    #             retrieve_res = await RagService.retrieve(
+                    #                 query=query,
+                    #                 top_k=3,
+                    #                 hybrid=True
+                    #             )
+                    #             result_count = len(retrieve_res)
+                    #             Logger.info(f"🔍 {description} ('{query}') → {result_count}개 결과")
+                                
+                    #             if result_count > 0:
+                    #                 # 첫 번째 결과의 내용 미리보기
+                    #                 first_result = retrieve_res[0]
+                    #                 content_preview = first_result.get("content", "")[:100] + "..."
+                    #                 Logger.info(f"   📄 첫 번째 결과: {content_preview}")
+                                    
+                    #                 # 검색 점수 확인
+                    #                 score = first_result.get("score", 0)
+                    #                 search_type = first_result.get("search_type", "unknown")
+                    #                 Logger.info(f"   📊 점수: {score:.3f} (검색타입: {search_type})")
+                    #             else:
+                    #                 Logger.info(f"   📭 검색 결과 없음")
+                                    
+                    #         except Exception as query_e:
+                    #             Logger.error(f"   ❌ '{query}' 검색 실패: {query_e}")
+                        
+                    #     # 3) 하이브리드 검색 vs 단일 검색 비교
+                    #     Logger.info("🔄 하이브리드 vs 단일 검색 비교 테스트...")
+                    #     compare_query = "금리"
+                        
+                    #     # 하이브리드 검색
+                    #     hybrid_res = await RagService.retrieve(
+                    #         query=compare_query,
+                    #         top_k=2,
+                    #         hybrid=True
+                    #     )
+                        
+                    #     # BM25만 검색
+                    #     bm25_res = await RagService.retrieve(
+                    #         query=compare_query,
+                    #         top_k=2,
+                    #         hybrid=False,
+                    #         bm25_weight=1.0,
+                    #         vector_weight=0.0
+                    #     )
+                        
+                    #     Logger.info(f"   🔍 하이브리드 검색: {len(hybrid_res)}개 결과")
+                    #     Logger.info(f"   🔍 BM25 검색: {len(bm25_res)}개 결과")
+                        
+                    #     # 4) 최종 통계 조회
+                    #     stats = RagService.get_stats()
+                    #     Logger.info(f"📊 RAG 서비스 통계:")
+                    #     Logger.info(f"   - 인덱싱된 문서: {stats.get('documents_indexed', 0)}개")
+                    #     Logger.info(f"   - 검색 요청: {stats.get('search_requests', 0)}개")
+                    #     Logger.info(f"   - 하이브리드 검색: {stats.get('hybrid_searches', 0)}개")
+                    #     Logger.info(f"   - 평균 검색 시간: {stats.get('avg_search_time', 0):.3f}초")
+                        
+                    #     Logger.info("✅ RAG 스모크 테스트 완료!")
+                        
+                    #     # ─────────── 실제 AWS 데이터 검색 테스트 시작 ───────────
+                    #     try:
+                    #         Logger.info("🌐 실제 AWS 데이터 검색 테스트 시작...")
+                            
+                    #         # 1) 실제 금융 관련 검색어들로 테스트
+                    #         real_queries = [
+                    #             ("Federal Reserve", "미국 연준 관련 뉴스 검색"),
+                    #             ("interest rates", "금리 관련 뉴스 검색"),
+                    #             ("stock market", "주식시장 관련 뉴스 검색"),
+                    #             ("inflation", "인플레이션 관련 뉴스 검색"),
+                    #             ("GDP", "GDP 관련 뉴스 검색"),
+                    #             ("earnings", "기업 실적 관련 뉴스 검색"),
+                    #             ("crypto", "암호화폐 관련 뉴스 검색"),
+                    #             ("oil prices", "유가 관련 뉴스 검색")
+                    #         ]
+                            
+                    #         for query, description in real_queries:
+                    #             try:
+                    #                 Logger.info(f"🔍 {description} ('{query}') 검색 중...")
+                                    
+                    #                 retrieve_res = await RagService.retrieve(
+                    #                     query=query,
+                    #                     top_k=5,
+                    #                     hybrid=True
+                    #                 )
+                                    
+                    #                 result_count = len(retrieve_res)
+                    #                 Logger.info(f"   📊 검색 결과: {result_count}개")
+                                    
+                    #                 if result_count > 0:
+                    #                     # 상위 3개 결과 상세 분석
+                    #                     for i, result in enumerate(retrieve_res[:3]):
+                    #                         content = result.get("content", "")
+                    #                         score = result.get("score", 0)
+                    #                         search_type = result.get("search_type", "unknown")
+                    #                         metadata = result.get("metadata", {})
+                                            
+                    #                         # URL이나 소스 정보 추출
+                    #                         source = metadata.get("source", "unknown")
+                    #                         title = metadata.get("title", "No title")
+                                            
+                    #                         Logger.info(f"   📄 결과 {i+1}: 점수 {score:.3f} ({search_type})")
+                    #                         Logger.info(f"      제목: {title}")
+                    #                         Logger.info(f"      소스: {source}")
+                    #                         Logger.info(f"      내용: {content[:150]}...")
+                    #                 else:
+                    #                     Logger.info(f"   📭 검색 결과 없음")
+                                        
+                    #             except Exception as query_e:
+                    #                 Logger.error(f"   ❌ '{query}' 검색 실패: {query_e}")
+                            
+                    #         # 2) 해외 주식 관련 검색어들로 테스트
+                    #         foreign_queries = [
+                    #             ("AAPL", "애플 주식 관련 뉴스 검색"),
+                    #             ("TSLA", "테슬라 주식 관련 뉴스 검색"),
+                    #             ("MSFT", "마이크로소프트 주식 관련 뉴스 검색"),
+                    #             ("GOOGL", "알파벳 주식 관련 뉴스 검색"),
+                    #             ("AMZN", "아마존 주식 관련 뉴스 검색"),
+                    #             ("NVDA", "엔비디아 주식 관련 뉴스 검색"),
+                    #             ("META", "메타 주식 관련 뉴스 검색"),
+                    #             ("NFLX", "넷플릭스 주식 관련 뉴스 검색"),
+                    #             ("SPY", "S&P 500 ETF 관련 뉴스 검색"),
+                    #             ("QQQ", "나스닥 ETF 관련 뉴스 검색")
+                    #         ]
+                            
+                    #         Logger.info("�� 해외 주식 관련 뉴스 검색 테스트...")
+                    #         for query, description in foreign_queries:
+                    #             try:
+                    #                 Logger.info(f"🔍 {description} ('{query}') 검색 중...")
+                                    
+                    #                 retrieve_res = await RagService.retrieve(
+                    #                     query=query,
+                    #                     top_k=3,
+                    #                     hybrid=True
+                    #                 )
+                                    
+                    #                 result_count = len(retrieve_res)
+                    #                 Logger.info(f"   📊 검색 결과: {result_count}개")
+                                    
+                    #                 if result_count > 0:
+                    #                     first_result = retrieve_res[0]
+                    #                     content = first_result.get("content", "")
+                    #                     score = first_result.get("score", 0)
+                    #                     search_type = first_result.get("search_type", "unknown")
+                    #                     metadata = first_result.get("metadata", {})
+                    #                     title = metadata.get("title", "No title")
+                    #                     source = metadata.get("source", "unknown")
+                                        
+                    #                     Logger.info(f"   📄 최고 점수 결과: {score:.3f} ({search_type})")
+                    #                     Logger.info(f"      제목: {title}")
+                    #                     Logger.info(f"      소스: {source}")
+                    #                     Logger.info(f"      내용: {content[:200]}...")
+                                        
+                    #                     # 추가 결과들도 간단히 표시
+                    #                     if result_count > 1:
+                    #                         Logger.info(f"   📄 추가 결과들:")
+                    #                         for i in range(1, min(result_count, 3)):
+                    #                             additional_result = retrieve_res[i]
+                    #                             additional_title = additional_result.get("metadata", {}).get("title", "No title")
+                    #                             additional_score = additional_result.get("score", 0)
+                    #                             Logger.info(f"      {i+1}. {additional_title} (점수: {additional_score:.3f})")
+                                        
+                    #             except Exception as query_e:
+                    #                 Logger.error(f"   ❌ '{query}' 검색 실패: {query_e}")
+                            
+                    #         # 3) 성능 및 메트릭 분석
+                    #         Logger.info("📈 성능 및 메트릭 분석...")
+                            
+                    #         # RAG 서비스 통계
+                    #         stats = RagService.get_stats()
+                    #         Logger.info(f"📊 RAG 서비스 최종 통계:")
+                    #         Logger.info(f"   - 총 검색 요청: {stats.get('search_requests', 0)}개")
+                    #         Logger.info(f"   - 하이브리드 검색: {stats.get('hybrid_searches', 0)}개")
+                    #         Logger.info(f"   - 평균 검색 시간: {stats.get('avg_search_time', 0):.3f}초")
+                    #         Logger.info(f"   - 성공률: {stats.get('success_rate', 0):.1f}%")
+                            
+                    #         # VectorDB 메트릭
+                    #         if hasattr(RagService, '_rag_vector_client') and RagService._rag_vector_client:
+                    #             vector_metrics = RagService._rag_vector_client.get_metrics()
+                    #             Logger.info(f"🔍 VectorDB 메트릭:")
+                    #             Logger.info(f"   - 성공한 검색: {vector_metrics.get('successful_operations', 0)}개")
+                    #             Logger.info(f"   - 실패한 검색: {vector_metrics.get('failed_operations', 0)}개")
+                    #             Logger.info(f"   - 총 검색 시간: {vector_metrics.get('total_search_time', 0):.3f}초")
+                            
+                    #         Logger.info("✅ 실제 AWS 데이터 검색 테스트 완료!")
+                            
+                    #     except Exception as aws_test_e:
+                    #         Logger.error(f"❌ 실제 AWS 데이터 검색 테스트 실패: {aws_test_e}")
+                    #         import traceback
+                    #         Logger.error(f"상세 오류: {traceback.format_exc()}")
+                    #     # ─────────── 실제 AWS 데이터 검색 테스트 종료 ───────────
+                        
+                    # except Exception as smoke_e:
+                    #     Logger.error(f"❌ RAG 스모크-테스트 실패: {smoke_e}")
+                    #     import traceback
+                    #     Logger.error(f"상세 오류: {traceback.format_exc()}")
+                    # # ─────────── RAG 스모크 테스트 종료 ───────────
                     if health_status['status'] == 'healthy':
                         Logger.info("🔍 하이브리드 검색 시스템 준비 완료")
                     elif health_status['status'] == 'degraded':
