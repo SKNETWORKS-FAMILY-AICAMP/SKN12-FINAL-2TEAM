@@ -4,7 +4,8 @@ echo ====================================
 echo    Environment Debug Information
 echo ====================================
 
-cd /d C:\SKN12-FINAL-2TEAM\base_server
+cd /d "%~dp0"
+cd ..
 
 echo 1. Current Directory:
 echo %CD%

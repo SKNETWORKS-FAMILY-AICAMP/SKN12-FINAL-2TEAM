@@ -2,7 +2,8 @@
 echo ====================================
 echo    SKN12 Model Server 시작
 echo ====================================
-cd /d C:\SKN12-FINAL-2TEAM\base_server
+cd /d "%~dp0"
+cd ..
 echo 현재 디렉토리: %CD%
 echo.
 echo Model Server 실행 중... (Port: 8001)

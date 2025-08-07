@@ -4,7 +4,8 @@ echo ====================================
 echo    SKN12 Conda Environment Setup
 echo ====================================
 
-cd /d C:\SKN12-FINAL-2TEAM\base_server
+cd /d "%~dp0"
+cd ..
 
 echo 1. Creating Conda environment... (Python 3.11)
 conda create -n skn12 python=3.11 -y
