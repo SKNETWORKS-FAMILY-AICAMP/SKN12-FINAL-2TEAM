@@ -4,7 +4,8 @@ echo ====================================
 echo    SKN12 Server Start (Conda Env)
 echo ====================================
 
-cd /d C:\SKN12-FINAL-2TEAM\base_server
+cd /d "%~dp0"
+cd ..
 
 echo Conda environment check...
 conda env list | findstr skn12
