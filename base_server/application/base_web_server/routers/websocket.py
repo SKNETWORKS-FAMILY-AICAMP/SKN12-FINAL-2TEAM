@@ -1,8 +1,10 @@
 """
-WebSocket 라우터
+WebSocket 라우터 - 안전한 비동기 패턴 적용
 """
 import json
 import asyncio
+import uuid
+from datetime import datetime
 from typing import Optional, Dict, Any
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse

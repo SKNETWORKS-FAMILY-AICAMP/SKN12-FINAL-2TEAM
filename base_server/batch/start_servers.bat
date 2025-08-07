@@ -43,12 +43,12 @@ if %ERRORLEVEL% EQU 0 (
 
 echo.
 echo Starting Base Web Server... (Port: 8000)
-start "Base Web Server" cmd /k "chcp 65001 >nul && echo Activating conda... && conda activate skn12 && echo Environment activated && echo Starting server... && uvicorn application.base_web_server.main:app --reload --host 0.0.0.0 --port 8000 || pause"
+start "Base Web Server" cmd /k "chcp 65001 >nul && echo Activating conda... && conda activate skn12 && echo Environment activated && echo Starting server... && uvicorn application.base_web_server.main:app --reload --host 0.0.0.0 --port 8000 --reload-exclude frontend/ || pause"
 
 timeout /t 5 /nobreak >nul
 
 echo Starting Model Server... (Port: 8001)  
-start "Model Server" cmd /k "chcp 65001 >nul && echo Activating conda... && conda activate skn12 && echo Environment activated && echo Starting server... && uvicorn application.model_server.main:app --reload --host 0.0.0.0 --port 8001 || pause"
+start "Model Server" cmd /k "chcp 65001 >nul && echo Activating conda... && conda activate skn12 && echo Environment activated && echo Starting server... && uvicorn application.model_server.main:app --reload --host 0.0.0.0 --port 8001 --reload-exclude frontend/ || pause"
 
 echo.
 echo Both servers started in new windows:

@@ -33,6 +33,9 @@ class KoreaInvestmentWebSocket:
         self.connection_start_time = None  # 연결 시작 시간
         self.heartbeat_timeout = 30  # 하트비트 타임아웃 (30초)
         
+        # 중복 태스크 방지를 위한 플래그
+        self._message_loop_task = None  # 현재 실행 중인 _message_loop 태스크
+        
     async def connect(self, app_key: str, app_secret: str) -> bool:
         """한투 웹소켓 연결 (OAuth2 방식 - appkey 기반 인증)
         
@@ -70,8 +73,12 @@ class KoreaInvestmentWebSocket:
             # 4. 테스트용 구독/구독취소 실행
             asyncio.create_task(self._test_subscription())
             
-            # 5. 메시지 수신 루프 시작 (백그라운드 태스크)
-            asyncio.create_task(self._message_loop())
+            # 5. 메시지 수신 루프 시작 (중복 실행 방지)
+            if self._message_loop_task is None or self._message_loop_task.done():
+                self._message_loop_task = asyncio.create_task(self._message_loop())
+                Logger.info("새로운 메시지 루프 태스크 시작")
+            else:
+                Logger.info("메시지 루프 태스크 이미 실행 중 - 중복 생성 방지")
             
             return True
             
@@ -164,6 +171,31 @@ class KoreaInvestmentWebSocket:
         except Exception as e:
             Logger.warn(f"⚠️ OAuth2 상태 확인 실패, WebSocket 직접 연결 시도: {e}")
     
+    async def _reconnect_only(self, app_key: str, app_secret: str) -> bool:
+        """재연결 전용 메서드 - 메시지 루프 태스크는 생성하지 않음"""
+        try:
+            Logger.info("한국투자증권 웹소켓 재연결 시도 (메시지 루프 태스크 재생성 안함)")
+            
+            # OAuth2 인증 상태 확인
+            self._check_oauth2_authentication(app_key)
+            
+            # 웹소켓 연결 수행
+            self.websocket = await websockets.connect(self.ws_url)
+            self.is_connected = True
+            self.approval_key = app_key
+            self.app_secret = app_secret
+            self.connection_start_time = datetime.now()
+            
+            Logger.info(f"WebSocket 재연결 성공, appkey: {app_key[:10]}...")
+            Logger.info("한국투자증권 웹소켓 재연결 완료 - 기존 메시지 루프 계속 사용")
+            
+            return True
+            
+        except Exception as e:
+            Logger.error(f"한국투자증권 웹소켓 재연결 실패: {e}")
+            self.is_connected = False
+            return False
+    
     async def _message_loop(self):
         """웹소켓 메시지 수신 루프 (재연결 포함)"""
         reconnect_attempts = 0
@@ -186,9 +218,9 @@ class KoreaInvestmentWebSocket:
                     Logger.warn(f"WebSocket 재연결 시도 {reconnect_attempts + 1}/{self.max_reconnect_attempts}")
                     await asyncio.sleep(self.reconnect_delay)
                     
-                    # 기존 연결 정리 후 재연결
+                    # 기존 연결 정리 후 재연결 (메시지 루프 태스크는 재생성하지 않음)
                     await self._cleanup_existing_connection()
-                    connection_success = await self.connect(self.approval_key, self.app_secret)
+                    connection_success = await self._reconnect_only(self.approval_key, self.app_secret)
                     
                     if not connection_success:
                         reconnect_attempts += 1
@@ -199,18 +231,37 @@ class KoreaInvestmentWebSocket:
                     reconnect_attempts = 0
                     Logger.info("WebSocket 재연결 및 구독 복원 완료")
                 
-                # 정상 메시지 수신
-                message = await self.websocket.recv()
-                self.last_heartbeat = datetime.now()
-                await self._handle_message(message)
+                # TCP 특성상 recv()는 한 번에 하나만 호출 가능 - timeout으로 안전하게 처리
+                try:
+                    message = await asyncio.wait_for(self.websocket.recv(), timeout=10.0)
+                    self.last_heartbeat = datetime.now()
+                    await self._handle_message(message)
+                    reconnect_attempts = 0  # 성공 시 재연결 카운터 리셋
+                    
+                except asyncio.TimeoutError:
+                    # 타임아웃은 정상 - 메시지가 없을 뿐, 연결 상태만 확인
+                    if not self._is_websocket_open():
+                        Logger.warn("WebSocket 연결 끊어짐 감지 (timeout)")
+                        await self._cleanup_existing_connection()
+                        continue
+                    continue  # 연결 정상이면 다음 루프
+                    
+                except Exception as recv_error:
+                    # recv() 실제 에러 - 연결 문제이므로 정리 후 재연결
+                    Logger.error(f"웹소켓 메시지 수신 에러: {recv_error}")
+                    await self._cleanup_existing_connection()
+                    raise recv_error  # 재연결 로직으로 전달
                 
             except Exception as e:
                 Logger.error(f"웹소켓 메시지 루프 에러: {e}")
+                # 기존 recv() 코루틴 완전 정리 - TCP 동시성 충돌 방지
+                await self._cleanup_existing_connection()
                 reconnect_attempts += 1
                 if reconnect_attempts >= self.max_reconnect_attempts:
                     Logger.error("재연결 한계 도달 - 연결 종료")
                     self.is_connected = False
                     break
+                await asyncio.sleep(self.reconnect_delay)  # 재연결 대기
     
     async def _handle_message(self, message: str):
         """메시지 처리"""
@@ -557,6 +608,17 @@ class KoreaInvestmentWebSocket:
     async def disconnect(self):
         """웹소켓 연결 해제"""
         self.is_connected = False
+        
+        # 메시지 루프 태스크 정리
+        if self._message_loop_task and not self._message_loop_task.done():
+            self._message_loop_task.cancel()
+            try:
+                await self._message_loop_task
+            except asyncio.CancelledError:
+                pass
+            Logger.info("메시지 루프 태스크 종료")
+        
+        # WebSocket 연결 해제
         if self.websocket:
             await self.websocket.close()
             Logger.info("한국투자증권 웹소켓 연결 해제")

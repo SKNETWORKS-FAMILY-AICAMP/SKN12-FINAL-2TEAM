@@ -9,5 +9,5 @@ echo.
 echo Base Web Server 실행 중... (Port: 8000)
 echo 종료하려면 Ctrl+C를 누르세요
 echo.
-uvicorn application.base_web_server.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn application.base_web_server.main:app --reload --host 0.0.0.0 --port 8000 --reload-exclude frontend/
 pause
