@@ -10,7 +10,120 @@
 -- 5. 사용자별 시그널 성과 통계 제공
 -- =====================================
 
+-- =====================================
+-- 금융권 표준 DECIMAL(19,6) 적용
+-- Bloomberg Terminal 표준 준수
+-- 작성일: 2025-08-06
+--
+-- 변경사항:
+-- 1. 모든 가격 필드: DECIMAL(15,4) → DECIMAL(19,6)
+-- 2. 수익률 필드: DECIMAL(10,4) → DECIMAL(10,6)
+-- 3. 금융권 표준 정밀도 확보
+-- =====================================
+
+-- =====================================
+-- Finance Shard 1
+-- =====================================
+-- --------- SHARD 1 ---------
 USE finance_shard_1;
+
+-- 테이블 생성 (외래키 없는 버전)
+DROP TABLE IF EXISTS `table_signal_alarms`;
+CREATE TABLE `table_signal_alarms` (
+    `alarm_id` VARCHAR(128) PRIMARY KEY COMMENT '알림 고유 ID (UUID)',
+    `account_db_key` BIGINT UNSIGNED NOT NULL COMMENT '사용자 계정 키',
+    `symbol` VARCHAR(50) NOT NULL COMMENT '종목 코드 (TSLA, AAPL 등)',
+    `company_name` VARCHAR(200) COMMENT '기업명',
+    `current_price` DECIMAL(19,6) COMMENT '알림 등록 시점의 현재가 (금융권 표준)',
+    `exchange` VARCHAR(50) COMMENT '거래소 (NASDAQ, NYSE 등)',
+    `currency` VARCHAR(10) COMMENT '통화 (USD, KRW 등)',
+    `note` VARCHAR(500) COMMENT '사용자 메모',
+    `is_active` TINYINT DEFAULT 1 COMMENT '알림 수신 ON/OFF',
+    `is_deleted` TINYINT DEFAULT 0 COMMENT '삭제 여부 (soft delete)',
+    `created_at` DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6) COMMENT '생성 시각',
+    `updated_at` DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6) COMMENT '수정 시각',
+    INDEX idx_account_symbol (account_db_key, symbol),
+    INDEX idx_active (is_active, is_deleted),
+    INDEX idx_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+COMMENT='시그널 알림 등록 테이블 (금융권 표준 적용)';
+
+DROP TABLE IF EXISTS `table_signal_history`;
+CREATE TABLE `table_signal_history` (
+    `signal_id` VARCHAR(128) PRIMARY KEY COMMENT '시그널 고유 ID (UUID)',
+    `alarm_id` VARCHAR(128) NOT NULL COMMENT '알림 ID',
+    `account_db_key` BIGINT UNSIGNED NOT NULL COMMENT '사용자 계정 키',
+    `symbol` VARCHAR(50) NOT NULL COMMENT '종목 코드',
+    `signal_type` VARCHAR(10) NOT NULL COMMENT '시그널 타입 (BUY/SELL)',
+    `signal_price` DECIMAL(19,6) COMMENT '시그널 발생 시점의 가격 (금융권 표준)',
+    `volume` BIGINT COMMENT '거래량 (참고용)',
+    `triggered_at` DATETIME(6) COMMENT '시그널 발생 시각',
+    `price_after_1d` DECIMAL(19,6) COMMENT '1일 후 가격 (금융권 표준)',
+    `profit_rate` DECIMAL(10,6) COMMENT '수익률 (%) (정밀도 향상)',
+    `is_win` TINYINT COMMENT '성공 여부 (1: 성공, 0: 실패, NULL: 미평가)',
+    `evaluated_at` DATETIME(6) COMMENT '성과 평가 시각',
+    `is_deleted` TINYINT DEFAULT 0 COMMENT '삭제 여부 (soft delete)',
+    `created_at` DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6) COMMENT '생성 시각',
+    `updated_at` DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6) COMMENT '수정 시각',
+    INDEX idx_alarm (alarm_id),
+    INDEX idx_account (account_db_key),
+    INDEX idx_symbol (symbol),
+    INDEX idx_created (created_at),
+    INDEX idx_evaluated (evaluated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+COMMENT='시그널 발생 히스토리 (금융권 표준 적용)';
+
+-- =====================================
+-- Finance Shard 2
+-- =====================================
+-- --------- SHARD 2 ---------
+USE finance_shard_2;
+
+-- 테이블 생성 (외래키 없는 버전)
+DROP TABLE IF EXISTS `table_signal_alarms`;
+CREATE TABLE `table_signal_alarms` (
+    `alarm_id` VARCHAR(128) PRIMARY KEY COMMENT '알림 고유 ID (UUID)',
+    `account_db_key` BIGINT UNSIGNED NOT NULL COMMENT '사용자 계정 키',
+    `symbol` VARCHAR(50) NOT NULL COMMENT '종목 코드 (TSLA, AAPL 등)',
+    `company_name` VARCHAR(200) COMMENT '기업명',
+    `current_price` DECIMAL(19,6) COMMENT '알림 등록 시점의 현재가 (금융권 표준)',
+    `exchange` VARCHAR(50) COMMENT '거래소 (NASDAQ, NYSE 등)',
+    `currency` VARCHAR(10) COMMENT '통화 (USD, KRW 등)',
+    `note` VARCHAR(500) COMMENT '사용자 메모',
+    `is_active` TINYINT DEFAULT 1 COMMENT '알림 수신 ON/OFF',
+    `is_deleted` TINYINT DEFAULT 0 COMMENT '삭제 여부 (soft delete)',
+    `created_at` DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6) COMMENT '생성 시각',
+    `updated_at` DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6) COMMENT '수정 시각',
+    INDEX idx_account_symbol (account_db_key, symbol),
+    INDEX idx_active (is_active, is_deleted),
+    INDEX idx_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+COMMENT='시그널 알림 등록 테이블 (금융권 표준 적용)';
+
+DROP TABLE IF EXISTS `table_signal_history`;
+CREATE TABLE `table_signal_history` (
+    `signal_id` VARCHAR(128) PRIMARY KEY COMMENT '시그널 고유 ID (UUID)',
+    `alarm_id` VARCHAR(128) NOT NULL COMMENT '알림 ID',
+    `account_db_key` BIGINT UNSIGNED NOT NULL COMMENT '사용자 계정 키',
+    `symbol` VARCHAR(50) NOT NULL COMMENT '종목 코드',
+    `signal_type` VARCHAR(10) NOT NULL COMMENT '시그널 타입 (BUY/SELL)',
+    `signal_price` DECIMAL(19,6) COMMENT '시그널 발생 시점의 가격 (금융권 표준)',
+    `volume` BIGINT COMMENT '거래량 (참고용)',
+    `triggered_at` DATETIME(6) COMMENT '시그널 발생 시각',
+    `price_after_1d` DECIMAL(19,6) COMMENT '1일 후 가격 (금융권 표준)',
+    `profit_rate` DECIMAL(10,6) COMMENT '수익률 (%) (정밀도 향상)',
+    `is_win` TINYINT COMMENT '성공 여부 (1: 성공, 0: 실패, NULL: 미평가)',
+    `evaluated_at` DATETIME(6) COMMENT '성과 평가 시각',
+    `is_deleted` TINYINT DEFAULT 0 COMMENT '삭제 여부 (soft delete)',
+    `created_at` DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6) COMMENT '생성 시각',
+    `updated_at` DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6) COMMENT '수정 시각',
+    INDEX idx_alarm (alarm_id),
+    INDEX idx_account (account_db_key),
+    INDEX idx_symbol (symbol),
+    INDEX idx_created (created_at),
+    INDEX idx_evaluated (evaluated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+COMMENT='시그널 발생 히스토리 (금융권 표준 적용)';
 
 -- =====================================
 -- 📋 시그널 알람 등록 프로시저
@@ -22,48 +135,99 @@ USE finance_shard_1;
 -- 2. 중복이 없으면 새 알림 등록 (기본값: is_active=1, is_deleted=0)
 -- 3. 중복이 있으면 에러 코드 1062 반환
 -- =====================================
+USE finance_shard_1;
+
+-- MySQL VARCHAR 파라미터 바인딩 이슈 해결
+SET NAMES utf8mb4;
+
 DROP PROCEDURE IF EXISTS `fp_signal_alarm_create`;
 DELIMITER ;;
 CREATE PROCEDURE `fp_signal_alarm_create`(
-    IN p_alarm_id VARCHAR(128),         -- UUID 형태의 알림 고유 ID (Python에서 생성)
-    IN p_account_db_key BIGINT UNSIGNED, -- 사용자 계정 키 (세션에서 가져옴)
-    IN p_symbol VARCHAR(50),            -- 종목 코드 (TSLA, AAPL 등)
-    IN p_company_name VARCHAR(200),     -- 기업명 (Tesla, Inc. 등)
-    IN p_current_price DECIMAL(15,4),   -- 알림 등록 시점의 현재가
-    IN p_exchange VARCHAR(50),          -- 거래소 (NASDAQ, NYSE 등)
-    IN p_currency VARCHAR(10),          -- 통화 (USD, KRW 등)
-    IN p_note VARCHAR(500)              -- 사용자 메모 (선택사항)
+    IN p_alarm_id VARCHAR(128) CHARACTER SET utf8mb4,
+    IN p_account_db_key BIGINT UNSIGNED,
+    IN p_symbol VARCHAR(50) CHARACTER SET utf8mb4,
+    IN p_company_name VARCHAR(200) CHARACTER SET utf8mb4,
+    IN p_current_price DECIMAL(19,6),
+    IN p_exchange VARCHAR(50) CHARACTER SET utf8mb4,
+    IN p_currency VARCHAR(10) CHARACTER SET utf8mb4,
+    IN p_note VARCHAR(500) CHARACTER SET utf8mb4
 )
 BEGIN
-    DECLARE v_existing_count INT DEFAULT 0;  -- 기존 알림 개수 확인용
-    DECLARE ProcParam VARCHAR(4000);         -- 에러 로그용 파라미터 문자열
-    
-    -- 예외 발생 시 자동으로 에러 로그 기록 및 트랜잭션 롤백
+    DECLARE v_existing_count INT DEFAULT 0;
+    DECLARE ProcParam VARCHAR(4000) CHARACTER SET utf8mb4;
+    DECLARE dynamic_sql TEXT CHARACTER SET utf8mb4;
+
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
-        SET ProcParam = CONCAT(p_alarm_id, ',', p_account_db_key, ',', p_symbol);
-        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        SET ProcParam = CONCAT('ERROR: alarm_id=', IFNULL(p_alarm_id, 'NULL'), 
+                              ', account_db_key=', IFNULL(p_account_db_key, 'NULL'),
+                              ', symbol=', IFNULL(p_symbol, 'NULL'));
+        GET DIAGNOSTICS @cno = NUMBER;
+        GET DIAGNOSTICS CONDITION @cno
+        @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+        VALUES ('fp_signal_alarm_create', 
+                IFNULL(@ErrorState, 'NULL'), 
+                IFNULL(@ErrorNo, 'NULL'), 
+                CONCAT('SQL_ERROR: ', IFNULL(@ErrorMessage, 'UNKNOWN')), 
+                ProcParam, NOW());
         ROLLBACK;
-        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
-            VALUES ('fp_signal_alarm_create', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
-        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+        SELECT 1 as ErrorCode, CONCAT('SQL Error: ', IFNULL(@ErrorMessage, 'UNKNOWN ERROR')) as ErrorMessage;
     END;
+
+    -- 단계 1: 파라미터 검증 로그
+    INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+        VALUES ('fp_signal_alarm_create', 'DEBUG', 0, 'STEP1: Parameter validation started', CONCAT('alarm_id=', IFNULL(p_alarm_id, 'NULL'), ', account_db_key=', IFNULL(p_account_db_key, 'NULL'), ', symbol=', IFNULL(p_symbol, 'NULL')), NOW());
+
+    -- ===============================================
+    -- MySQL 8.x VARCHAR Binding Bug Complete Workaround
+    -- Dynamic SQL (Prepared Statement) for Safe Processing
+    -- After CONCAT, CAST, Variable Assignment All Failed
+    -- Final Solution: Complete Parameter Binding Bypass
+    -- ===============================================
     
-    START TRANSACTION;
+    -- 단계 2: 동적 SQL로 중복 체크 (Shard1)
+    INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+        VALUES ('fp_signal_alarm_create', 'DEBUG', 0, 'STEP2: Dynamic SQL duplicate check started', CONCAT('symbol=', p_symbol), NOW());
+
+    -- 동적 SQL 문자열 생성 (SQL Injection 방지 처리 포함)
+    SET dynamic_sql = CONCAT(
+        'SELECT COUNT(*) INTO @v_existing_count ',
+        'FROM table_signal_alarms ',
+        'WHERE account_db_key = ', p_account_db_key, ' ',
+        'AND symbol = ''', REPLACE(p_symbol, '''', ''''''), ''' ',  -- 작은따옴표 이스케이프
+        'AND is_deleted = 0'
+    );
+
+    -- 디버그: 생성된 SQL 로그  
+    INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+        VALUES ('fp_signal_alarm_create', 'DEBUG', 0, 'Generated SQL', dynamic_sql, NOW());
+
+    -- Prepared Statement 실행 패턴
+    SET @sql_stmt = dynamic_sql;              -- 세션 변수에 SQL 저장
+    PREPARE stmt FROM @sql_stmt;              -- SQL 준비 (파싱 + 컴파일)
+    EXECUTE stmt;                             -- SQL 실행  
+    DEALLOCATE PREPARE stmt;                  -- 메모리 정리
     
-    -- 중복 확인: 같은 사용자가 같은 종목에 대해 삭제되지 않은 알림이 있는지 체크
-    SELECT COUNT(*) INTO v_existing_count
-    FROM table_signal_alarms 
-    WHERE account_db_key = p_account_db_key 
-      AND symbol = p_symbol 
-      AND is_deleted = 0;  -- 삭제되지 않은 것만
-    
+    -- 글로벌 세션 변수에서 결과 가져오기
+    SET v_existing_count = @v_existing_count;
+
+    -- 단계 3: 중복 체크 완료
+    INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+        VALUES ('fp_signal_alarm_create', 'DEBUG', 0, 'STEP3: Duplicate check completed', CONCAT('existing_count=', v_existing_count), NOW());
+
     IF v_existing_count > 0 THEN
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+            VALUES ('fp_signal_alarm_create', 'DEBUG', 0, 'STEP4: Duplicate found, returning error', '', NOW());
         ROLLBACK;
-        -- 중복 알림 존재 시 에러 반환 (MySQL 중복 키 에러 코드 사용)
         SELECT 1062 as ErrorCode, CONCAT(p_symbol, ' 알림이 이미 등록되어 있습니다') as ErrorMessage;
     ELSE
-        -- 새 알림 등록 (기본값: 활성화 상태, 삭제되지 않음)
+        -- 단계 4: INSERT 시작
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+            VALUES ('fp_signal_alarm_create', 'DEBUG', 0, 'STEP5: INSERT started', '', NOW());
+        
+        START TRANSACTION;
         INSERT INTO table_signal_alarms (
             alarm_id, account_db_key, symbol, company_name, current_price,
             exchange, currency, note, is_active, is_deleted, created_at, updated_at
@@ -72,11 +236,13 @@ BEGIN
             p_exchange, p_currency, p_note, 1, 0, NOW(6), NOW(6)
         );
         
+        -- 단계 5: INSERT 완료
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+            VALUES ('fp_signal_alarm_create', 'DEBUG', 0, 'STEP6: INSERT completed', '', NOW());
+        
         COMMIT;
-        -- 성공 시 에러 코드 0 반환
         SELECT 0 as ErrorCode, '알림이 성공적으로 등록되었습니다' as ErrorMessage;
     END IF;
-    
 END ;;
 DELIMITER ;
 
@@ -102,13 +268,15 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         SET ProcParam = CONCAT(p_account_db_key);
-        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
-        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
-            VALUES ('fp_signal_alarms_get_with_stats', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
-        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+        GET DIAGNOSTICS @cno = NUMBER;
+        GET DIAGNOSTICS CONDITION @cno
+        @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+            VALUES ('fp_signal_alarms_get_with_stats', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam, NOW());
+        SELECT 1 as ErrorCode, COALESCE(@ErrorMessage, 'UNKNOWN ERROR') as ErrorMessage;
     END;
     
-    -- 알림 목록과 시그널 통계를 함께 조회
+    -- 불필요한 상태 메시지 제거, 알림 데이터만 반환
     -- LEFT JOIN을 사용하여 시그널이 없는 알림도 포함
     SELECT 
         a.alarm_id,                      -- 알림 ID
@@ -166,11 +334,13 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         SET ProcParam = CONCAT(p_alarm_id, ',', p_account_db_key);
-        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        GET DIAGNOSTICS @cno = NUMBER;
+        GET DIAGNOSTICS CONDITION @cno
+        @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
         ROLLBACK;
-        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
-            VALUES ('fp_signal_alarm_toggle', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
-        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage, 0 as new_status;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+            VALUES ('fp_signal_alarm_toggle', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam, NOW());
+        SELECT 1 as ErrorCode, COALESCE(@ErrorMessage, 'UNKNOWN ERROR') as ErrorMessage, 0 as new_status;
     END;
     
     START TRANSACTION;
@@ -178,7 +348,7 @@ BEGIN
     -- 알림 존재 및 현재 상태 확인 (소유권 검증 포함)
     SELECT COUNT(*), COALESCE(MAX(is_active), 0) INTO v_alarm_exists, v_current_status
     FROM table_signal_alarms 
-    WHERE alarm_id = p_alarm_id 
+    WHERE CONCAT('', alarm_id) = CONCAT('', p_alarm_id) 
       AND account_db_key = p_account_db_key  -- 본인 소유 알림만
       AND is_deleted = 0;                    -- 삭제되지 않은 것만
     
@@ -192,7 +362,7 @@ BEGIN
         UPDATE table_signal_alarms 
         SET is_active = v_new_status,    -- 새로운 활성화 상태
             updated_at = NOW(6)          -- 수정 시간 업데이트
-        WHERE alarm_id = p_alarm_id 
+        WHERE CONCAT('', alarm_id) = CONCAT('', p_alarm_id) 
           AND account_db_key = p_account_db_key;
         
         COMMIT;
@@ -226,11 +396,13 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         SET ProcParam = CONCAT(p_alarm_id, ',', p_account_db_key);
-        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        GET DIAGNOSTICS @cno = NUMBER;
+        GET DIAGNOSTICS CONDITION @cno
+        @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
         ROLLBACK;
-        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
-            VALUES ('fp_signal_alarm_soft_delete', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
-        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+            VALUES ('fp_signal_alarm_soft_delete', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam, NOW());
+        SELECT 1 as ErrorCode, COALESCE(@ErrorMessage, 'UNKNOWN ERROR') as ErrorMessage;
     END;
     
     START TRANSACTION;
@@ -238,7 +410,7 @@ BEGIN
     -- 알림 존재 및 소유권 확인
     SELECT COUNT(*) INTO v_alarm_exists
     FROM table_signal_alarms 
-    WHERE alarm_id = p_alarm_id 
+    WHERE CONCAT('', alarm_id) = CONCAT('', p_alarm_id) 
       AND account_db_key = p_account_db_key  -- 본인 소유 알림만
       AND is_deleted = 0;                    -- 이미 삭제된 것은 제외
     
@@ -251,7 +423,7 @@ BEGIN
         SET is_deleted = 1,       -- 삭제 플래그 설정
             is_active = 0,        -- 삭제 시 비활성화도 함께 처리
             updated_at = NOW(6)   -- 수정 시간 업데이트
-        WHERE alarm_id = p_alarm_id 
+        WHERE CONCAT('', alarm_id) = CONCAT('', p_alarm_id) 
           AND account_db_key = p_account_db_key;
         
         COMMIT;
@@ -287,11 +459,16 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         SET ProcParam = CONCAT(p_account_db_key, ',', COALESCE(p_alarm_id, ''), ',', COALESCE(p_symbol, ''));
-        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
-        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
-            VALUES ('fp_signal_history_get', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
-        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+        GET DIAGNOSTICS @cno = NUMBER;
+        GET DIAGNOSTICS CONDITION @cno
+        @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+            VALUES ('fp_signal_history_get', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam, NOW());
+        SELECT 1 as ErrorCode, COALESCE(@ErrorMessage, 'UNKNOWN ERROR') as ErrorMessage;
     END;
+    
+    -- 먼저 상태 결과를 반환
+    SELECT 0 as ErrorCode, 'SUCCESS' as ErrorMessage;
     
     -- 기본 쿼리 (사용자별 삭제되지 않은 시그널만)
     SET v_sql = 'SELECT signal_id, alarm_id, symbol, signal_type, signal_price, volume, 
@@ -343,11 +520,16 @@ BEGIN
     
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
-        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
-        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
-            VALUES ('fp_signal_alarms_get_active', @ErrorState, @ErrorNo, @ErrorMessage, '');
-        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+        GET DIAGNOSTICS @cno = NUMBER;
+        GET DIAGNOSTICS CONDITION @cno
+        @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+            VALUES ('fp_signal_alarms_get_active', @ErrorState, @ErrorNo, @ErrorMessage, '', NOW());
+        SELECT 1 as ErrorCode, COALESCE(@ErrorMessage, 'UNKNOWN ERROR') as ErrorMessage;
     END;
+    
+    -- 먼저 상태 결과를 반환
+    SELECT 0 as ErrorCode, 'SUCCESS' as ErrorMessage;
     
     -- 추론 모델에서 분석할 활성 알림 목록 조회
     -- 등록 시간 순으로 정렬 (오래된 것부터 처리)
@@ -386,7 +568,7 @@ CREATE PROCEDURE `fp_signal_history_save`(
     IN p_account_db_key BIGINT UNSIGNED, -- 사용자 계정 키
     IN p_symbol VARCHAR(50),         -- 종목 코드
     IN p_signal_type ENUM('BUY', 'SELL'), -- 시그널 타입 (매수/매도)
-    IN p_signal_price DECIMAL(15,4), -- 시그널 발생 시점의 가격
+    IN p_signal_price DECIMAL(19,6), -- 시그널 발생 시점의 가격 (금융권 표준)
     IN p_volume BIGINT               -- 거래량 (참고용)
 )
 BEGIN
@@ -395,11 +577,13 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         SET ProcParam = CONCAT(p_signal_id, ',', p_alarm_id, ',', p_account_db_key, ',', p_symbol);
-        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        GET DIAGNOSTICS @cno = NUMBER;
+        GET DIAGNOSTICS CONDITION @cno
+        @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
         ROLLBACK;
-        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
-            VALUES ('fp_signal_history_save', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
-        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+            VALUES ('fp_signal_history_save', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam, NOW());
+        SELECT 1 as ErrorCode, COALESCE(@ErrorMessage, 'UNKNOWN ERROR') as ErrorMessage;
     END;
     
     START TRANSACTION;
@@ -436,8 +620,8 @@ DROP PROCEDURE IF EXISTS `fp_signal_performance_update`;
 DELIMITER ;;
 CREATE PROCEDURE `fp_signal_performance_update`(
     IN p_signal_id VARCHAR(128),     -- 평가할 시그널 ID
-    IN p_price_after_1d DECIMAL(15,4), -- 1일 후 가격
-    IN p_profit_rate DECIMAL(10,4),  -- 수익률 (%) - 외부에서 계산된 값
+    IN p_price_after_1d DECIMAL(19,6), -- 1일 후 가격 (금융권 표준)
+    IN p_profit_rate DECIMAL(10,6),  -- 수익률 (%) - 외부에서 계산된 값 (정밀도 향상)
     IN p_is_win TINYINT(1)           -- 성공 여부 (1% 이상 움직임)
 )
 BEGIN
@@ -447,11 +631,13 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         SET ProcParam = CONCAT(p_signal_id, ',', p_price_after_1d, ',', p_profit_rate, ',', p_is_win);
-        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        GET DIAGNOSTICS @cno = NUMBER;
+        GET DIAGNOSTICS CONDITION @cno
+        @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
         ROLLBACK;
-        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
-            VALUES ('fp_signal_performance_update', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
-        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+            VALUES ('fp_signal_performance_update', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam, NOW());
+        SELECT 1 as ErrorCode, COALESCE(@ErrorMessage, 'UNKNOWN ERROR') as ErrorMessage;
     END;
     
     START TRANSACTION;
@@ -459,7 +645,7 @@ BEGIN
     -- 시그널 존재 확인 (삭제되지 않은 것만)
     SELECT COUNT(*) INTO v_signal_exists
     FROM table_signal_history 
-    WHERE signal_id = p_signal_id 
+    WHERE CONCAT('', signal_id) = CONCAT('', p_signal_id) 
       AND is_deleted = 0;
     
     IF v_signal_exists = 0 THEN
@@ -473,7 +659,7 @@ BEGIN
             is_win = p_is_win,                   -- 성공 여부 (승률 계산용)
             evaluated_at = NOW(6),               -- 평가 완료 시간
             updated_at = NOW(6)                  -- 수정 시간
-        WHERE signal_id = p_signal_id;
+        WHERE CONCAT('', signal_id) = CONCAT('', p_signal_id);
         
         COMMIT;
         SELECT 0 as ErrorCode, '시그널 성과가 업데이트되었습니다' as ErrorMessage;
@@ -504,10 +690,12 @@ proc_label:BEGIN
     -- 그 다음 핸들러 선언
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
-        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
-        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
-            VALUES ('fp_signal_get_pending_evaluation', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
-        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+        GET DIAGNOSTICS @cno = NUMBER;
+        GET DIAGNOSTICS CONDITION @cno
+        @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+            VALUES ('fp_signal_get_pending_evaluation', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam, NOW());
+        SELECT 1 as ErrorCode, COALESCE(@ErrorMessage, 'UNKNOWN ERROR') as ErrorMessage;
     END;
     
     -- ProcParam 설정
@@ -563,14 +751,19 @@ BEGIN
     -- 그 다음 핸들러 선언
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
-        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
-        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
-            VALUES ('fp_signal_statistics_get', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
-        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+        GET DIAGNOSTICS @cno = NUMBER;
+        GET DIAGNOSTICS CONDITION @cno
+        @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+            VALUES ('fp_signal_statistics_get', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam, NOW());
+        SELECT 1 as ErrorCode, COALESCE(@ErrorMessage, 'UNKNOWN ERROR') as ErrorMessage;
     END;
     
     -- ProcParam 설정
     SET ProcParam = CONCAT(p_account_db_key);
+    
+    -- 먼저 상태 결과를 반환
+    SELECT 0 as ErrorCode, 'SUCCESS' as ErrorMessage;
     
     -- 사용자별 전체 시그널 통계 조회
     -- 서브쿼리로 알림 관련 통계와 시그널 관련 통계를 함께 집계
@@ -617,7 +810,7 @@ CREATE PROCEDURE `fp_signal_alarm_create`(
     IN p_account_db_key BIGINT UNSIGNED,
     IN p_symbol VARCHAR(50),
     IN p_company_name VARCHAR(200),
-    IN p_current_price DECIMAL(15,4),
+    IN p_current_price DECIMAL(19,6),
     IN p_exchange VARCHAR(50),
     IN p_currency VARCHAR(10),
     IN p_note VARCHAR(500)
@@ -625,29 +818,71 @@ CREATE PROCEDURE `fp_signal_alarm_create`(
 BEGIN
     DECLARE v_existing_count INT DEFAULT 0;
     DECLARE ProcParam VARCHAR(4000);
+    DECLARE dynamic_sql TEXT;
     
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         SET ProcParam = CONCAT(p_alarm_id, ',', p_account_db_key, ',', p_symbol);
-        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        GET DIAGNOSTICS @cno = NUMBER;
+        GET DIAGNOSTICS CONDITION @cno
+        @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
         ROLLBACK;
-        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
-            VALUES ('fp_signal_alarm_create', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
-        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+            VALUES ('fp_signal_alarm_create', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam, NOW());
+        SELECT 1 as ErrorCode, COALESCE(@ErrorMessage, 'UNKNOWN ERROR') as ErrorMessage;
     END;
     
+    -- 단계 1: 파라미터 검증 로그 (Shard2)
+    INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+        VALUES ('fp_signal_alarm_create_shard2', 'DEBUG', 0, 'STEP1: Parameter validation started', CONCAT('alarm_id=', IFNULL(p_alarm_id, 'NULL'), ', account_db_key=', IFNULL(p_account_db_key, 'NULL'), ', symbol=', IFNULL(p_symbol, 'NULL')), NOW());
+
     START TRANSACTION;
     
-    SELECT COUNT(*) INTO v_existing_count
-    FROM table_signal_alarms 
-    WHERE account_db_key = p_account_db_key 
-      AND symbol = p_symbol 
-      AND is_deleted = 0;
+    -- ===============================================
+    -- MySQL 8.x VARCHAR Binding Bug Complete Workaround
+    -- Dynamic SQL (Prepared Statement) for Safe Processing
+    -- ===============================================
     
+    -- 단계 2: 동적 SQL로 중복 체크 (Shard2)
+    INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+        VALUES ('fp_signal_alarm_create_shard2', 'DEBUG', 0, 'STEP2: Dynamic SQL duplicate check started', CONCAT('symbol=', p_symbol), NOW());
+
+    -- 동적 SQL 문자열 생성 (SQL Injection 방지 처리 포함)
+    SET dynamic_sql = CONCAT(
+        'SELECT COUNT(*) INTO @v_existing_count ',
+        'FROM table_signal_alarms ',
+        'WHERE account_db_key = ', p_account_db_key, ' ',
+        'AND symbol = ''', REPLACE(p_symbol, '''', ''''''), ''' ',  -- 작은따옴표 이스케이프
+        'AND is_deleted = 0'
+    );
+
+    -- 디버그: 생성된 SQL 로그
+    INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+        VALUES ('fp_signal_alarm_create_shard2', 'DEBUG', 0, 'Generated SQL', dynamic_sql, NOW());
+
+    -- Prepared Statement 실행 패턴
+    SET @sql_stmt = dynamic_sql;              -- 세션 변수에 SQL 저장
+    PREPARE stmt FROM @sql_stmt;              -- SQL 준비 (파싱 + 컴파일)
+    EXECUTE stmt;                             -- SQL 실행
+    DEALLOCATE PREPARE stmt;                  -- 메모리 정리
+    
+    -- 글로벌 세션 변수에서 결과 가져오기
+    SET v_existing_count = @v_existing_count;
+    
+    -- 단계 3: 중복 체크 완료 (Shard2)
+    INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+        VALUES ('fp_signal_alarm_create_shard2', 'DEBUG', 0, 'STEP3: Duplicate check completed', CONCAT('existing_count=', v_existing_count), NOW());
+
     IF v_existing_count > 0 THEN
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+            VALUES ('fp_signal_alarm_create_shard2', 'DEBUG', 0, 'STEP4: Duplicate found, returning error', '', NOW());
         ROLLBACK;
         SELECT 1062 as ErrorCode, CONCAT(p_symbol, ' 알림이 이미 등록되어 있습니다') as ErrorMessage;
     ELSE
+        -- 단계 4: INSERT 시작 (Shard2)
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+            VALUES ('fp_signal_alarm_create_shard2', 'DEBUG', 0, 'STEP5: INSERT started', '', NOW());
+
         INSERT INTO table_signal_alarms (
             alarm_id, account_db_key, symbol, company_name, current_price,
             exchange, currency, note, is_active, is_deleted, created_at, updated_at
@@ -655,6 +890,10 @@ BEGIN
             p_alarm_id, p_account_db_key, p_symbol, p_company_name, p_current_price,
             p_exchange, p_currency, p_note, 1, 0, NOW(6), NOW(6)
         );
+        
+        -- 단계 5: INSERT 완료 (Shard2)
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+            VALUES ('fp_signal_alarm_create_shard2', 'DEBUG', 0, 'STEP6: INSERT completed', '', NOW());
         
         COMMIT;
         SELECT 0 as ErrorCode, '알림이 성공적으로 등록되었습니다' as ErrorMessage;
@@ -703,10 +942,12 @@ CREATE PROCEDURE `fp_signal_symbols_get_active`()
 BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
-        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
-        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
-            VALUES ('fp_signal_symbols_get_active', @ErrorState, @ErrorNo, @ErrorMessage, '');
-        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+        GET DIAGNOSTICS @cno = NUMBER;
+        GET DIAGNOSTICS CONDITION @cno
+        @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+            VALUES ('fp_signal_symbols_get_active', @ErrorState, @ErrorNo, @ErrorMessage, '', NOW());
+        SELECT 1 as ErrorCode, COALESCE(@ErrorMessage, 'UNKNOWN ERROR') as ErrorMessage;
     END;
     
     -- 상태 반환
@@ -743,10 +984,12 @@ proc_label:BEGIN
     -- 그 다음 핸들러 선언
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
-        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
-        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
-            VALUES ('fp_signal_alarms_get_by_symbol', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
-        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+        GET DIAGNOSTICS @cno = NUMBER;
+        GET DIAGNOSTICS CONDITION @cno
+        @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+            VALUES ('fp_signal_alarms_get_by_symbol', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam, NOW());
+        SELECT 1 as ErrorCode, COALESCE(@ErrorMessage, 'UNKNOWN ERROR') as ErrorMessage;
     END;
     
     -- ProcParam 설정
@@ -772,7 +1015,7 @@ proc_label:BEGIN
         currency,           -- 통화
         created_at          -- 등록 시간
     FROM table_signal_alarms 
-    WHERE symbol = p_symbol   -- 특정 심볼만 (인덱스 활용)
+    WHERE symbol = CONVERT(p_symbol USING utf8mb4)   -- 특정 심볼만 (인덱스 활용)
       AND is_active = 1       -- 활성화된 알림만
       AND is_deleted = 0      -- 삭제되지 않은 알림만
     ORDER BY created_at ASC;  -- 등록 순서대로
@@ -796,14 +1039,15 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         SET ProcParam = CONCAT('account_db_key=', p_account_db_key);
-        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
-        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
-            VALUES ('fp_signal_alarms_get_with_stats', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
-        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+        GET DIAGNOSTICS @cno = NUMBER;
+        GET DIAGNOSTICS CONDITION @cno
+        @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+            VALUES ('fp_signal_alarms_get_with_stats', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam, NOW());
+        SELECT 1 as ErrorCode, COALESCE(@ErrorMessage, 'UNKNOWN ERROR') as ErrorMessage;
     END;
     
-    SELECT 0 as ErrorCode, 'SUCCESS' as ErrorMessage;
-
+    -- 불필요한 상태 메시지 제거, 알림 데이터만 반환
     SELECT 
         a.alarm_id, a.symbol, a.company_name, a.current_price,
         a.exchange, a.currency, a.note, a.is_active, a.created_at,
@@ -835,18 +1079,20 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         SET ProcParam = CONCAT(p_alarm_id, ',', p_account_db_key);
-        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        GET DIAGNOSTICS @cno = NUMBER;
+        GET DIAGNOSTICS CONDITION @cno
+        @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
         ROLLBACK;
-        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
-            VALUES ('fp_signal_alarm_toggle', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
-        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+            VALUES ('fp_signal_alarm_toggle', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam, NOW());
+        SELECT 1 as ErrorCode, COALESCE(@ErrorMessage, 'UNKNOWN ERROR') as ErrorMessage;
     END;
     
     START TRANSACTION;
     
     SELECT is_active INTO v_current_status
     FROM table_signal_alarms 
-    WHERE alarm_id = p_alarm_id AND account_db_key = p_account_db_key AND is_deleted = 0;
+    WHERE CONCAT('', alarm_id) = CONCAT('', p_alarm_id) AND account_db_key = p_account_db_key AND is_deleted = 0;
     
     IF v_current_status IS NULL THEN
         ROLLBACK;
@@ -856,7 +1102,7 @@ BEGIN
         
         UPDATE table_signal_alarms 
         SET is_active = v_new_status, updated_at = NOW(6)
-        WHERE alarm_id = p_alarm_id AND account_db_key = p_account_db_key;
+        WHERE CONCAT('', alarm_id) = CONCAT('', p_alarm_id) AND account_db_key = p_account_db_key;
         
         COMMIT;
         SELECT 0 as ErrorCode, 
@@ -880,18 +1126,20 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         SET ProcParam = CONCAT(p_alarm_id, ',', p_account_db_key);
-        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        GET DIAGNOSTICS @cno = NUMBER;
+        GET DIAGNOSTICS CONDITION @cno
+        @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
         ROLLBACK;
-        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
-            VALUES ('fp_signal_alarm_soft_delete', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
-        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+            VALUES ('fp_signal_alarm_soft_delete', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam, NOW());
+        SELECT 1 as ErrorCode, COALESCE(@ErrorMessage, 'UNKNOWN ERROR') as ErrorMessage;
     END;
     
     START TRANSACTION;
     
     SELECT COUNT(*) INTO v_alarm_exists
     FROM table_signal_alarms 
-    WHERE alarm_id = p_alarm_id AND account_db_key = p_account_db_key AND is_deleted = 0;
+    WHERE CONCAT('', alarm_id) = CONCAT('', p_alarm_id) AND account_db_key = p_account_db_key AND is_deleted = 0;
     
     IF v_alarm_exists = 0 THEN
         ROLLBACK;
@@ -899,7 +1147,7 @@ BEGIN
     ELSE
         UPDATE table_signal_alarms 
         SET is_deleted = 1, deleted_at = NOW(6), updated_at = NOW(6)
-        WHERE alarm_id = p_alarm_id AND account_db_key = p_account_db_key;
+        WHERE CONCAT('', alarm_id) = CONCAT('', p_alarm_id) AND account_db_key = p_account_db_key;
         
         COMMIT;
         SELECT 0 as ErrorCode, '알림이 삭제되었습니다' as ErrorMessage;
@@ -924,10 +1172,12 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         SET ProcParam = CONCAT(p_account_db_key, ',', COALESCE(p_alarm_id, ''), ',', COALESCE(p_symbol, ''));
-        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
-        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
-            VALUES ('fp_signal_history_get', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
-        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+        GET DIAGNOSTICS @cno = NUMBER;
+        GET DIAGNOSTICS CONDITION @cno
+        @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+            VALUES ('fp_signal_history_get', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam, NOW());
+        SELECT 1 as ErrorCode, COALESCE(@ErrorMessage, 'UNKNOWN ERROR') as ErrorMessage;
     END;
     
     SET v_sql = 'SELECT signal_id, alarm_id, symbol, signal_type, signal_price, volume, 
@@ -970,7 +1220,7 @@ CREATE PROCEDURE `fp_signal_history_save`(
     IN p_signal_id VARCHAR(128),
     IN p_alarm_id VARCHAR(128),
     IN p_signal_type VARCHAR(10),
-    IN p_signal_price DECIMAL(15,4)
+    IN p_signal_price DECIMAL(19,6)
 )
 BEGIN
     DECLARE v_account_db_key BIGINT UNSIGNED;
@@ -980,18 +1230,20 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         SET ProcParam = CONCAT(p_signal_id, ',', p_alarm_id, ',', p_signal_type, ',', p_signal_price);
-        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        GET DIAGNOSTICS @cno = NUMBER;
+        GET DIAGNOSTICS CONDITION @cno
+        @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
         ROLLBACK;
-        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
-            VALUES ('fp_signal_history_save', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
-        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+            VALUES ('fp_signal_history_save', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam, NOW());
+        SELECT 1 as ErrorCode, COALESCE(@ErrorMessage, 'UNKNOWN ERROR') as ErrorMessage;
     END;
     
     START TRANSACTION;
     
     SELECT account_db_key, symbol INTO v_account_db_key, v_symbol
     FROM table_signal_alarms 
-    WHERE alarm_id = p_alarm_id AND is_deleted = 0;
+    WHERE CONCAT('', alarm_id) = CONCAT('', p_alarm_id) AND is_deleted = 0;
     
     IF v_account_db_key IS NULL THEN
         ROLLBACK;
@@ -1020,8 +1272,8 @@ DROP PROCEDURE IF EXISTS `fp_signal_performance_update`;
 DELIMITER ;;
 CREATE PROCEDURE `fp_signal_performance_update`(
     IN p_signal_id VARCHAR(128),
-    IN p_price_after_1d DECIMAL(15,4),
-    IN p_profit_rate DECIMAL(10,4),
+    IN p_price_after_1d DECIMAL(19,6),
+    IN p_profit_rate DECIMAL(10,6),
     IN p_is_win TINYINT(1)
 )
 BEGIN
@@ -1031,18 +1283,20 @@ BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         SET ProcParam = CONCAT(p_signal_id, ',', p_price_after_1d, ',', p_profit_rate, ',', p_is_win);
-        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        GET DIAGNOSTICS @cno = NUMBER;
+        GET DIAGNOSTICS CONDITION @cno
+        @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
         ROLLBACK;
-        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
-            VALUES ('fp_signal_performance_update', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
-        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+            VALUES ('fp_signal_performance_update', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam, NOW());
+        SELECT 1 as ErrorCode, COALESCE(@ErrorMessage, 'UNKNOWN ERROR') as ErrorMessage;
     END;
     
     START TRANSACTION;
     
     SELECT COUNT(*) INTO v_signal_exists
     FROM table_signal_history 
-    WHERE signal_id = p_signal_id AND is_deleted = 0;
+    WHERE CONCAT('', signal_id) = CONCAT('', p_signal_id) AND is_deleted = 0;
     
     IF v_signal_exists = 0 THEN
         ROLLBACK;
@@ -1054,7 +1308,7 @@ BEGIN
             is_win = p_is_win,
             evaluated_at = NOW(6),
             updated_at = NOW(6)
-        WHERE signal_id = p_signal_id;
+        WHERE CONCAT('', signal_id) = CONCAT('', p_signal_id);
         
         COMMIT;
         SELECT 0 as ErrorCode, '시그널 성과가 업데이트되었습니다' as ErrorMessage;
@@ -1075,10 +1329,12 @@ proc_label:BEGIN
     -- 그 다음 핸들러 선언
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
-        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
-        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
-            VALUES ('fp_signal_get_pending_evaluation', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
-        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+        GET DIAGNOSTICS @cno = NUMBER;
+        GET DIAGNOSTICS CONDITION @cno
+        @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+            VALUES ('fp_signal_get_pending_evaluation', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam, NOW());
+        SELECT 1 as ErrorCode, COALESCE(@ErrorMessage, 'UNKNOWN ERROR') as ErrorMessage;
     END;
     
     -- ProcParam 설정
@@ -1114,10 +1370,12 @@ BEGIN
     -- 그 다음 핸들러 선언
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
-        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
-        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
-            VALUES ('fp_signal_statistics_get', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
-        SELECT 1 as ErrorCode, @ErrorMessage as ErrorMessage;
+        GET DIAGNOSTICS @cno = NUMBER;
+        GET DIAGNOSTICS CONDITION @cno
+        @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+            VALUES ('fp_signal_statistics_get', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam, NOW());
+        SELECT 1 as ErrorCode, COALESCE(@ErrorMessage, 'UNKNOWN ERROR') as ErrorMessage;
     END;
     
     -- ProcParam 설정

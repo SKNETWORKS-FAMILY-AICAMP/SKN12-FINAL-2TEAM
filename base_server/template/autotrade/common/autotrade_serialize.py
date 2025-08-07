@@ -28,16 +28,13 @@ class AutoTradeYahooDetailResponse(BaseResponse):
 class SignalAlarmCreateRequest(BaseRequest):
     """시그널 알림 등록 요청"""
     symbol: str                              # 종목 코드 (필수)
-    company_name: Optional[str] = None       # 기업명
-    current_price: Optional[float] = None    # 현재 가격
-    exchange: str = "NASDAQ"                 # 거래소
-    currency: str = "USD"                    # 통화
-    note: Optional[str] = None               # 사용자 메모
+    note: Optional[str] = None               # 사용자 메모 (선택)
 
 class SignalAlarmCreateResponse(BaseResponse):
     """시그널 알림 등록 응답"""
     alarm_id: str = ""                       # 생성된 알림 ID
     alarm_info: Optional[SignalAlarmInfo] = None  # 생성된 알림 정보
+    message: Optional[str] = None            # 응답 메시지
 
 class SignalAlarmListRequest(BaseRequest):
     """시그널 알림 목록 조회 요청 (is_deleted=0만 조회)"""
@@ -48,6 +45,7 @@ class SignalAlarmListResponse(BaseResponse):
     alarms: List[SignalAlarmInfo] = []       # 알림 목록 (활성/비활성 모두 포함)
     total_count: int = 0                     # 총 알림 개수
     active_count: int = 0                    # 알림 수신 활성화된 개수
+    message: Optional[str] = None            # 에러 메시지 등 부가 정보
 
 class SignalAlarmToggleRequest(BaseRequest):
     """시그널 알림 수신 ON/OFF 요청 (is_active 토글)"""
@@ -57,6 +55,7 @@ class SignalAlarmToggleResponse(BaseResponse):
     """시그널 알림 수신 ON/OFF 응답"""
     alarm_id: str = ""                       # 알림 ID
     is_active: bool = False                  # 변경된 알림 수신 상태
+    message: Optional[str] = None            # 응답 메시지
 
 class SignalAlarmDeleteRequest(BaseRequest):
     """시그널 알림 삭제 요청 (화면에서 완전 제거, is_deleted=1)"""
@@ -65,6 +64,7 @@ class SignalAlarmDeleteRequest(BaseRequest):
 class SignalAlarmDeleteResponse(BaseResponse):
     """시그널 알림 삭제 응답"""
     alarm_id: str = ""                       # 삭제된 알림 ID
+    message: Optional[str] = None            # 응답 메시지
 
 class SignalHistoryRequest(BaseRequest):
     """시그널 히스토리 조회 요청"""
@@ -77,3 +77,4 @@ class SignalHistoryResponse(BaseResponse):
     """시그널 히스토리 조회 응답"""
     signals: List[SignalHistoryItem] = []    # 시그널 히스토리 목록
     total_count: int = 0                     # 총 시그널 개수
+    message: Optional[str] = None            # 응답 메시지

@@ -15,6 +15,7 @@ from service.external.yahoo_finance_client import YahooFinanceClient
 from dataclasses import asdict
 import uuid
 from datetime import datetime
+from decimal import Decimal, ROUND_HALF_UP
 
 class AutoTradeTemplateImpl(BaseTemplate):
     def __init__(self):
@@ -130,6 +131,8 @@ class AutoTradeTemplateImpl(BaseTemplate):
                 response.message = "유효하지 않은 세션입니다"
                 return response
             
+            shard_id = getattr(client_session.session, 'shard_id', 1)
+
             # Yahoo Finance에서 종목 정보 조회
             cache_service = ServiceContainer.get_cache_service()
             async with YahooFinanceClient(cache_service) as client:
@@ -142,24 +145,34 @@ class AutoTradeTemplateImpl(BaseTemplate):
             
             # UUID 생성
             alarm_id = str(uuid.uuid4())
-            
-            db_service = ServiceContainer.get_database_service()
-            
-            # 프로시저 호출 - 전체 파라미터 전달
-            result = await db_service.execute_shard_procedure(
-                account_db_key,
-                "fp_signal_alarm_create",
-                (
-                    alarm_id,
-                    account_db_key,
-                    request.symbol,
-                    stock_detail.name if stock_detail.name else request.symbol,
-                    stock_detail.current_price,
-                    stock_detail.exchange if stock_detail.exchange else "NASDAQ",
-                    stock_detail.currency if stock_detail.currency else "USD",
-                    ""  # note (빈 문자열)
-                )
+            stock_name = str(stock_detail.name) if stock_detail.name else str(request.symbol)
+            current_price = (
+                Decimal(str(stock_detail.current_price)).quantize(Decimal('0.000001'), rounding=ROUND_HALF_UP)
+                if stock_detail.current_price is not None
+                else Decimal('0.000000')
             )
+            exchange = str(stock_detail.exchange) if stock_detail.exchange else "NASDAQ"
+            currency = str(stock_detail.currency) if stock_detail.currency else "USD"
+            note = str(request.note) if request.note else ""
+
+            params = (
+                alarm_id,                # str
+                account_db_key,          # int
+                str(request.symbol),     # str
+                stock_name,              # str
+                current_price,           # Decimal - 금융권 표준
+                exchange,                # str
+                currency,                # str
+                note                     # str
+            )
+
+            Logger.info(f"프로시저 파라미터: {params}, 개수: {len(params)}")
+
+            # 4. 프로시저 호출
+            db_service = ServiceContainer.get_database_service()
+            result = await db_service.call_shard_procedure(shard_id, "fp_signal_alarm_create", params)
+
+            Logger.info(f"프로시저 fetchall() 결과: {result}")
             
             if not result:
                 response.errorCode = 1002
@@ -176,7 +189,7 @@ class AutoTradeTemplateImpl(BaseTemplate):
                 Logger.info(f"Signal alarm created: user={account_db_key}, symbol={request.symbol}, alarm_id={alarm_id}")
             else:
                 response.message = error_message
-                Logger.warning(f"Signal alarm creation failed: {error_message}")
+                Logger.warn(f"Signal alarm creation failed: {error_message}")
                 
         except Exception as e:
             Logger.error(f"Signal alarm create error: {e}")
@@ -199,29 +212,42 @@ class AutoTradeTemplateImpl(BaseTemplate):
                 response.message = "유효하지 않은 세션입니다"
                 return response
             
+            shard_id = getattr(client_session.session, 'shard_id', 1)
+
             db_service = ServiceContainer.get_database_service()
             
             # 프로시저 호출 - 통계 정보 포함
-            result = await db_service.execute_shard_procedure(
-                account_db_key,
+            result = await db_service.call_shard_procedure(
+                shard_id,
                 "fp_signal_alarms_get_with_stats",
                 (account_db_key,)
             )
             
-            if not result:
+            # 🔍 디버그: 프로시저 반환 결과 로그
+            Logger.info(f"[DEBUG] Procedure result: {result}")
+            Logger.info(f"[DEBUG] Result type: {type(result)}, Length: {len(result) if result else 'None'}")
+            if result and len(result) > 0:
+                Logger.info(f"[DEBUG] First result: {result[0]}")
+                Logger.info(f"[DEBUG] First result keys: {list(result[0].keys()) if isinstance(result[0], dict) else 'Not dict'}")
+            
+            if result is None:
                 response.errorCode = 1002
                 response.message = "알림 목록 조회 중 오류가 발생했습니다"
                 return response
             
-            # 첫 번째 결과는 프로시저 상태
-            proc_result = result[0]
-            error_code = proc_result.get('ErrorCode', 1)
-            error_message = proc_result.get('ErrorMessage', '')
+            # 결과가 비어있는 경우
+            if len(result) == 0:
+                response.errorCode = 0
+                response.message = "등록된 알림이 없습니다"
+                response.alarms = []
+                Logger.info(f"No alarms found for user={account_db_key}")
+                return response
             
-            response.errorCode = error_code
-            if error_code == 0:
-                # 두 번째부터는 알림 데이터
-                for alarm_data in result[1:]:
+            # 간단한 로직: 모든 결과를 알림 데이터로 처리
+            response.errorCode = 0
+            for alarm_data in result:
+                # alarm_id 필드가 있으면 알림 데이터로 간주
+                if 'alarm_id' in alarm_data:
                     alarm_info = SignalAlarmInfo(
                         alarm_id=alarm_data.get('alarm_id', ''),
                         symbol=alarm_data.get('symbol', ''),
@@ -233,12 +259,13 @@ class AutoTradeTemplateImpl(BaseTemplate):
                         profit_rate=float(alarm_data.get('profit_rate', 0.0))
                     )
                     response.alarms.append(alarm_info)
-                
+            
+            if len(response.alarms) > 0:
                 response.message = f"{len(response.alarms)}개의 알림을 조회했습니다"
-                Logger.info(f"Signal alarms retrieved: user={account_db_key}, count={len(response.alarms)}")
             else:
-                response.message = error_message
-                Logger.warning(f"Signal alarm list failed: {error_message}")
+                response.message = "등록된 알림이 없습니다"
+            
+            Logger.info(f"Signal alarms retrieved: user={account_db_key}, count={len(response.alarms)}")
                 
         except Exception as e:
             Logger.error(f"Signal alarm list error: {e}")
@@ -260,11 +287,13 @@ class AutoTradeTemplateImpl(BaseTemplate):
                 response.message = "유효하지 않은 세션입니다"
                 return response
             
+            shard_id = getattr(client_session.session, 'shard_id', 1)
+
             db_service = ServiceContainer.get_database_service()
             
             # 프로시저 호출 - 알림 토글
-            result = await db_service.execute_shard_procedure(
-                account_db_key,
+            result = await db_service.call_shard_procedure(
+                shard_id,
                 "fp_signal_alarm_toggle",
                 (request.alarm_id, account_db_key)
             )
@@ -286,7 +315,7 @@ class AutoTradeTemplateImpl(BaseTemplate):
                 Logger.info(f"Signal alarm toggled: user={account_db_key}, alarm_id={request.alarm_id}, active={new_status}")
             else:
                 response.message = error_message
-                Logger.warning(f"Signal alarm toggle failed: {error_message}")
+                Logger.warn(f"Signal alarm toggle failed: {error_message}")
                 
         except Exception as e:
             Logger.error(f"Signal alarm toggle error: {e}")
@@ -308,11 +337,13 @@ class AutoTradeTemplateImpl(BaseTemplate):
                 response.message = "유효하지 않은 세션입니다"
                 return response
             
+            shard_id = getattr(client_session.session, 'shard_id', 1)
+
             db_service = ServiceContainer.get_database_service()
             
             # 프로시저 호출 - 소프트 삭제
-            result = await db_service.execute_shard_procedure(
-                account_db_key,
+            result = await db_service.call_shard_procedure(
+                shard_id,
                 "fp_signal_alarm_soft_delete",
                 (request.alarm_id, account_db_key)
             )
@@ -332,7 +363,7 @@ class AutoTradeTemplateImpl(BaseTemplate):
                 Logger.info(f"Signal alarm deleted: user={account_db_key}, alarm_id={request.alarm_id}")
             else:
                 response.message = error_message
-                Logger.warning(f"Signal alarm deletion failed: {error_message}")
+                Logger.warn(f"Signal alarm deletion failed: {error_message}")
                 
         except Exception as e:
             Logger.error(f"Signal alarm delete error: {e}")
@@ -355,11 +386,13 @@ class AutoTradeTemplateImpl(BaseTemplate):
                 response.message = "유효하지 않은 세션입니다"
                 return response
             
+            shard_id = getattr(client_session.session, 'shard_id', 1)
+
             db_service = ServiceContainer.get_database_service()
             
             # 프로시저 호출 - 히스토리 조회 (SQL 프로시저 파라미터에 맞춤)
-            result = await db_service.execute_shard_procedure(
-                account_db_key,
+            result = await db_service.call_shard_procedure(
+                shard_id,
                 "fp_signal_history_get",
                 (
                     account_db_key,
@@ -397,7 +430,7 @@ class AutoTradeTemplateImpl(BaseTemplate):
                 Logger.info(f"Signal history retrieved: user={account_db_key}, alarm_id={request.alarm_id}, count={len(response.history)}")
             else:
                 response.message = error_message
-                Logger.warning(f"Signal history failed: {error_message}")
+                Logger.warn(f"Signal history failed: {error_message}")
                 
         except Exception as e:
             Logger.error(f"Signal history error: {e}")

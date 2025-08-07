@@ -147,7 +147,7 @@ class SignalMonitoringService:
     async def _get_active_shard_ids(cls, db_service) -> List[int]:
         """글로벌 DB에서 활성 샤드 ID 목록 조회"""
         try:
-            result = await db_service.execute_global_procedure(
+            result = await db_service.call_global_procedure(
                 "fp_get_active_shard_ids",
                 ()
             )
@@ -821,7 +821,7 @@ class SignalMonitoringService:
             
             # 1. 사용자 알림 설정 조회 (SQL 프로시저 사용)
             database_service = ServiceContainer.get_database_service()
-            settings_result = await database_service.execute_global_procedure(
+            settings_result = await database_service.call_global_procedure(
                 "fp_get_user_notification_settings",
                 (account_db_key,)
             )

@@ -299,7 +299,7 @@ class UniversalOutboxConsumer:
     async def _get_active_shard_ids(cls, db_service) -> List[int]:
         """활성 샤드 ID 목록 조회"""
         try:
-            result = await db_service.execute_global_procedure(
+            result = await db_service.call_global_procedure(
                 "fp_get_active_shard_ids",
                 ()
             )

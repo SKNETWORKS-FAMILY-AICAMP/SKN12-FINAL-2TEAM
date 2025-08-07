@@ -340,7 +340,7 @@ class NotificationPersistenceConsumer:
                     account_db_key = msg_data['account_db_key']
                     
                     # 사용자 연락처 정보 조회
-                    contact_result = await database_service.execute_global_procedure(
+                    contact_result = await database_service.call_global_procedure(
                         "fp_get_user_contact_info",
                         (account_db_key,)
                     )
@@ -399,7 +399,7 @@ class NotificationPersistenceConsumer:
                     account_db_key = msg_data['account_db_key']
                     
                     # 사용자 연락처 정보 조회
-                    contact_result = await database_service.execute_global_procedure(
+                    contact_result = await database_service.call_global_procedure(
                         "fp_get_user_contact_info",
                         (account_db_key,)
                     )
