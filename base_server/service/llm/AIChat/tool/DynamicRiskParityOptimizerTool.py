@@ -70,7 +70,9 @@ class DynamicRiskParityOptimizer(BaseFinanceTool):
     # --------------------------- get_data ------------------------- #
     def get_data(
         self,
-        returns: NDArray,
+        tickers: List[str],
+        start_date: str,
+        end_date: str,
         *,
         rebalance_threshold: float = 0.05,
         transaction_cost: float = 0.001,
@@ -80,18 +82,41 @@ class DynamicRiskParityOptimizer(BaseFinanceTool):
         """
         Parameters
         ----------
-        returns : np.ndarray (T, N)
-            최근 수익률 행렬
-        rebalance_threshold : float
-            기존 대비 |Δw| > threshold → 리밸런싱
+        tickers : List[str]
+            분석할 종목 리스트
+        start_date : str
+            데이터 시작일(YYYY-MM-DD)
+        end_date : str
+            데이터 종료일(YYYY-MM-DD)
         """
         t0 = time.time()
 
-        N = returns.shape[1]
+        # FeaturePipelineTool을 사용하여 가격 데이터 추출
+        from service.llm.AIChat.tool.FeaturePipelineTool import FeaturePipelineTool
+        features = FeaturePipelineTool(self.ai_chat_service).transform(
+            tickers=tickers,
+            start_date=start_date,
+            end_date=end_date,
+            feature_set=["PRICE_HISTORY"]
+        )
+
+        price_data = features.get("PRICE_HISTORY")
+        if not price_data or not isinstance(price_data, pd.DataFrame) or price_data.empty:
+            raise RuntimeError("가격 데이터를 가져올 수 없습니다.")
+
+        # 수익률 계산
+        returns = price_data.pct_change().dropna().values
+        if returns.size == 0:
+            raise RuntimeError("수익률 데이터를 계산할 수 없습니다.")
+
+        N = returns.shape[1] if returns.ndim > 1 else 1
+        if N == 1: # 단일 종목인 경우 2차원 배열로 변환
+            returns = returns.reshape(-1, 1)
+
         cov = self._ewma_cov(returns, lambda_decay)
 
         # 초기 weights
-        if self.prev_weights is None:
+        if self.prev_weights is None or self.prev_weights.shape[0] != N:
             self.prev_weights = np.ones(N) / N
 
         # ----- 최적화 (SLSQP) ------------------------------------ #

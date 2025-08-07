@@ -73,8 +73,9 @@ class StressTestingFramework(BaseFinanceTool):
     def get_data(
         self,
         weights: NDArray,
-        mu: NDArray,
-        cov: NDArray,
+        tickers: List[str],
+        start_date: str,
+        end_date: str,
         *,
         n_sim: int = 10_000,
         nu: int = 6,
@@ -86,6 +87,23 @@ class StressTestingFramework(BaseFinanceTool):
         """
         t0 = time.time()
         conf_lvls = conf_lvls or [0.99, 0.95]
+
+        # FeaturePipelineTool을 사용하여 가격 데이터 추출
+        from service.llm.AIChat.tool.FeaturePipelineTool import FeaturePipelineTool
+        from service.llm.AIChat.BasicTools.MarketDataTool import MarketDataTool # MarketDataTool 임포트
+
+        # MarketDataTool을 사용하여 mu와 cov 계산
+        market_data_tool = MarketDataTool(self.ai_chat_service)
+        # MarketDataTool의 _expected_returns와 _covariance_matrix는 내부 메서드이므로,
+        # FeaturePipelineTool에서 이들을 호출하거나, MarketDataTool의 get_data를 통해
+        # 필요한 통계량을 얻어야 합니다. 여기서는 MarketDataTool의 get_data를 활용합니다.
+        market_output = market_data_tool.get_data(tickers=tickers, start_date=start_date, end_date=end_date)
+
+        mu = np.array([market_output.expected_returns.get(t, 0.0) for t in tickers])
+        cov_dict = market_output.covariance_matrix
+        if cov_dict is None:
+            raise RuntimeError("공분산 행렬을 가져올 수 없습니다.")
+        cov = pd.DataFrame(cov_dict).values # dict를 pandas DataFrame으로 변환 후 numpy 배열로
 
         # ① 시나리오
         scen = self._mc_scenarios(mu, cov, n_sim, nu)

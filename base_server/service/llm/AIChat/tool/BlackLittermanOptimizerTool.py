@@ -54,14 +54,14 @@ class BlackLittermanOptimizer(BaseFinanceTool):
     #                     1) 투자자 View 생성                           #
     # ----------------------------------------------------------------- #
     def _generate_views(
-        self, specialist_data: Dict, assets: List[str]
+        self, features: Dict, assets: List[str]
     ) -> List[Dict]:
         """거시·기술·펀더멘털 정보를 바탕으로 투자자 관점 생성"""
         views = []
 
         # ※ 예시는 간단 로직 — 실제 서비스에서는 복잡한 룰/ML 활용
         # ① 거시: GDP 성장률이 높으면 주식 ETF relative view
-        if specialist_data["macro"]["gdp_growth"] > 2.5:
+        if features.get("GDP", 0.0) > 2.5:
             views.append(
                 {
                     "assets": ["SPY", "QQQ"],
@@ -71,8 +71,13 @@ class BlackLittermanOptimizer(BaseFinanceTool):
             )
 
         # ② 기술: RSI<30 자산은 mean-reversion long view
-        for ast, info in specialist_data["technical"].items():
-            if info["rsi"] < 30 and ast in assets:
+        # features 딕셔너리에서 각 티커별 RSI를 직접 가져오는 방식으로 변경
+        for ast in assets:
+            # 예시: features["RSI_AAPL"], features["RSI_MSFT"] 와 같이 저장된다고 가정
+            # FeaturePipelineTool에서 각 티커별 RSI를 반환하도록 수정 필요
+            # 현재 FeaturePipelineTool은 단일 RSI만 반환하므로, 이 부분은 더 정교한 설계가 필요함
+            # 여기서는 간단히 첫 번째 티커의 RSI를 사용한다고 가정
+            if ast == assets[0] and features.get("RSI", 0.0) < 30:
                 views.append(
                     {
                         "assets": [ast],
@@ -139,7 +144,9 @@ class BlackLittermanOptimizer(BaseFinanceTool):
     def get_data(
         self,
         market_data: Dict,
-        specialist_data: Dict,
+        tickers: List[str],
+        start_date: str,
+        end_date: str,
         risk_free: float = 0.02,
         *,
         max_latency: float = 1.0,
@@ -153,8 +160,17 @@ class BlackLittermanOptimizer(BaseFinanceTool):
         cov = market_data["cov"]
         mu_prior = market_data["mu_prior"]
 
+        # FeaturePipelineTool을 사용하여 필요한 피처 추출
+        from service.llm.AIChat.tool.FeaturePipelineTool import FeaturePipelineTool
+        features = FeaturePipelineTool(self.ai_chat_service).transform(
+            tickers=tickers,
+            start_date=start_date,
+            end_date=end_date,
+            feature_set=["GDP", "RSI"]
+        )
+
         # ① View 생성
-        views = self._generate_views(specialist_data, assets)
+        views = self._generate_views(features, assets)
         if not views:  # 관점 없으면 균형 포트폴리오 사용
             weights = self._max_sharpe_weights(mu_prior, cov, risk_free)
             elapsed = time.time() - t0

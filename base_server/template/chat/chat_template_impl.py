@@ -342,7 +342,7 @@ class ChatTemplateImpl(BaseTemplate):
             
             # 6) LLM에 질문 보내고 답변 받기
             try:
-                result = await ai_service.chat(request.content, session_id=session_id)
+                result = await ai_service.chat(request.content, session_id=session_id, client_session=client_session)
                 reply_text = result["reply"]
             except Exception as llm_error:
                 # LLM 호출 실패 시 AI 메시지 상태를 DELETED로 전이

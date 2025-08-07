@@ -68,6 +68,7 @@ class MacroEconomicTool(BaseFinanceTool):
             print(f"[MacroEconomicTool] Processing: {input.series_ids}")
             api_key = self.ai_chat_service.llm_config.API_Key.get("FRED_API_KEY")
             if not api_key:
+                print("[MacroEconomicTool] FRED API 키 없음")
                 return MacroEconomicOutput(agent="error", summary="FRED API 키가 없습니다.", series=[], data=None)
 
             series_list = []
@@ -79,7 +80,12 @@ class MacroEconomicTool(BaseFinanceTool):
                 )
 
                 resp = get_with_retry(url)
+                print(f"[MacroEconomicTool] {sid} status: {resp.status_code}")
+                print(f"[MacroEconomicTool] {sid} URL: {url}")
+                print(f"[MacroEconomicTool] {sid} raw response: {resp.text[:500]}...")  # 응답 일부만 출력
+                
                 if resp.status_code != 200:
+                    print(f"[MacroEconomicTool] {sid} API 호출 실패: status {resp.status_code}")
                     series_list.append({
                         "series_id": sid,
                         "latest_value": None,
@@ -94,8 +100,10 @@ class MacroEconomicTool(BaseFinanceTool):
                     value = float(latest["value"]) if latest["value"] not in ("", ".") else None
                     date = latest["date"]
                     units = resp.json().get("units", "")
+                    print(f"[MacroEconomicTool] {sid} 파싱 성공: value={value}, date={date}, units={units}")
                 else:
                     value, date, units = None, None, None
+                    print(f"[MacroEconomicTool] {sid} observations 배열이 비어있음")
 
                 series_list.append({
                     "series_id": sid,

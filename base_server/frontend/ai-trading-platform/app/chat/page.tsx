@@ -212,7 +212,7 @@ export default function ChatPage() {
         </div>
       )}
       {/* Sidebar */}
-      <div className={`${sidebarOpen ? 'w-80' : 'w-0'} transition-all duration-300 bg-black/40 border-r border-[#23243a] backdrop-blur-xl overflow-hidden flex flex-col`}>
+      <div className={`${sidebarOpen ? 'w-64' : 'w-0'} transition-all duration-300 bg-black/40 border-r border-[#23243a] backdrop-blur-xl overflow-hidden flex flex-col`}>
         {/* Back Button */}
         <div className="p-4 border-b border-[#23243a] flex flex-col gap-2">
           <button
@@ -398,7 +398,7 @@ export default function ChatPage() {
                   </div>
                 ) : (
                   // 메시지 목록
-                  <div className="max-w-4xl mx-auto">
+                  <div className="max-w-5xl mx-auto px-1">
                     {messages.map((msg) => (
                       <ChatMessage
                         key={msg.id}
@@ -413,7 +413,7 @@ export default function ChatPage() {
                     {/* 로딩 인디케이터 - AI 답변 스타일 */}
                     {isLoading && (
                       <div className="w-full py-8 border-b border-gray-800">
-                        <div className="max-w-4xl mx-auto px-4">
+                        <div className="max-w-5xl mx-auto px-1">
                           <div className="text-gray-400 text-base flex items-center gap-3 opacity-70">
                             <div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
                             <span>AI가 응답을 생성하고 있습니다...</span>
@@ -431,7 +431,7 @@ export default function ChatPage() {
         </div>
         {/* Input Area - ChatGPT Style */}
         <div className="border-t border-gray-800 bg-black/60 backdrop-blur-xl">
-          <div className="max-w-4xl mx-auto p-4">
+          <div className="max-w-5xl mx-auto p-4">
             <div className="relative">
               <input
                 ref={inputRef}

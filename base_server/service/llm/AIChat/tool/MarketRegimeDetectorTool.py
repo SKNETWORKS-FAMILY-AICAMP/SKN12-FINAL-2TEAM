@@ -145,42 +145,28 @@ class MarketRegimeDetectorTool(BaseFinanceTool):
         input_data = MarketRegimeDetectorInput(**kwargs)
         print("  [1] input_data:", input_data)
 
-        # [2] MacroEconomicTool 호출 (series_ids를 키워드 인자로)
-        macro_tool = MacroEconomicTool(self.ai_chat_service)
-        macro_output = macro_tool.get_data(series_ids=input_data.series_ids)
-        macro_data_list = macro_output.data if macro_output.data is not None else []
-        macro_data = {s['series_id']: s['latest_value'] for s in macro_data_list if s.get('latest_value') is not None}
-        print("  [2] macro_data:", macro_data)
-
-        # [3] TechnicalAnalysisTool 호출 (**키워드 인자 사용**)
-        ta_tool = TechnicalAnalysisTool(self.ai_chat_service)
-        ta_input = TechnicalAnalysisInput(tickers=input_data.tickers)
-        ta_output = ta_tool.get_data(**ta_input.dict())
-        if isinstance(ta_output.results, list):
-            ta_result = ta_output.results[0]
-        elif isinstance(ta_output.results, dict):
-            ticker = input_data.tickers[0]
-            ta_result = ta_output.results[ticker]
-        else:
-            raise Exception("TechnicalAnalysisTool 결과 구조가 예상과 다릅니다.")
-
-        technical_data = {
-            'rsi': ta_result.rsi,
-            'macd': ta_result.macd,
-            'ema': ta_result.ema
-        }
-        print("  [3] technical_data:", technical_data)
-
-        # [4] MarketDataTool에서 VIX 추출 (키워드 인자 방식)
-        market_data_tool = MarketDataTool(self.ai_chat_service)
-        market_input = MarketDataInput(
+        # [2] FeaturePipelineTool 호출 (거시경제 중심 선택적 정규화)
+        from service.llm.AIChat.tool.FeaturePipelineTool import FeaturePipelineTool
+        features = FeaturePipelineTool(self.ai_chat_service).transform(
             tickers=input_data.tickers,
             start_date=input_data.start_date,
-            end_date=input_data.end_date
+            end_date=input_data.end_date,
+            feature_set=input_data.series_ids + ["RSI", "MACD", "VIX"],
+            normalize=True,  # ✅ 정규화 활성화
+            normalize_targets=input_data.series_ids + ["RSI", "MACD", "VIX"],  # ✅ 거시경제 + 기술지표 정규화
+            debug=False
         )
-        market_data = market_data_tool.get_data(**market_input.dict())
-        technical_data['vix'] = market_data.vix
-        print("  [4] technical_data (with VIX):", technical_data)
+
+        macro_data = {
+            'gdp_growth': features.get('GDP', 0.0),
+            'cpi': features.get('CPIAUCSL', 0.0)
+        }
+        technical_data = {
+            'rsi': features.get('RSI', 0.0),
+            'macd': features.get('MACD', 0.0),
+            'vix': features.get('VIX', 0.0)
+        }
+        print("  [2] features:", features)
 
         # [5] prev_state
         prev_state = input_data.prev_state

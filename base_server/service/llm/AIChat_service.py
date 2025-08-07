@@ -67,16 +67,24 @@ class AIChatService:
             )
         return self._session_mem[session_id]
 
-    async def chat(self, message: str, session_id: str = ""):
+    async def chat(self, message: str, session_id: str = "", client_session=None):
         """REST API용 채팅 응답 생성"""
         if not message.strip():
             raise HTTPException(400, "message empty")
         sid = session_id or str(uuid.uuid4())
         Logger.debug(f"AIChatService.chat called with session_id={sid}, message={message}")
-        router = AIChatRouter()
+        
+        # 🆕 세션 정보를 포함한 라우터 생성
+        Logger.debug(f"AIChatService.chat client_session: {client_session}")
+        router = AIChatRouter(client_session)
+        
+        # 🆕 클로저로 안전하게 감싸기 (비동기 처리 안전성)
+        def run_question_with_session():
+            return router.run_question(message)
+        
         # 비동기 실행으로 변경하여 도구 호출이 제대로 작동하도록 함
         loop = asyncio.get_event_loop()
-        tool_out = await loop.run_in_executor(None, router.run_question, message)
+        tool_out = await loop.run_in_executor(None, run_question_with_session)
         answer = await self._full_answer(sid, message, tool_out)
         Logger.debug(f"AIChatService.chat response for session_id={sid}: {answer}")
         return {"session_id": sid, "reply": answer}

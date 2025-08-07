@@ -101,7 +101,7 @@ class MultiFactorSignalGenerator(BaseFinanceTool):
     # --------------------------- 공용 API --------------------------- #
     def get_data(
         self,
-        agent_data: Dict[str, Dict],
+        features: Dict[str, Any], # agent_data 대신 features를 직접 받음
         regime: str,
         *,
         max_latency: float = 1.0,
@@ -115,23 +115,35 @@ class MultiFactorSignalGenerator(BaseFinanceTool):
         """
         t0 = time.time()
 
-        tech = agent_data["technical"]
-        prices: NDArray = tech["prices"]
-        rsi: float = tech["rsi"]
-        boll = tech["bollinger"]
+        # features 딕셔너리에서 필요한 값 추출
+        prices: NDArray = features.get("PRICE_HISTORY", np.array([])) # 예시: 가격 히스토리
+        rsi: float = features.get("RSI", 0.0)
+        boll_mid: float = features.get("BOLLINGER_MID", 0.0)
+        boll_std: float = features.get("BOLLINGER_STD", 0.0)
+        bollinger = {"mid": boll_mid, "std": boll_std}
 
-        fund = agent_data["fundamental"]
-        macro = agent_data["macro"]
-        news = agent_data["news"]
+        roe: float = features.get("ROE", 0.0)
+        pe: float = features.get("PE", 0.0)
+        sector_roe: float = features.get("SECTOR_ROE", 0.0)
+        sector_sigma_roe: float = features.get("SECTOR_SIGMA_ROE", 0.0)
+        sector_pe: float = features.get("SECTOR_PE", 0.0)
+        sector = {"roe_sector": sector_roe, "sigma_roe": sector_sigma_roe, "pe_sector": sector_pe}
+
+        gdp_surprise: float = features.get("GDP_SURPRISE", 0.0)
+        cpi_surprise: float = features.get("CPI_SURPRISE", 0.0)
+        rate_surprise: float = features.get("RATE_SURPRISE", 0.0)
+
+        sentiment: float = features.get("NEWS_SENTIMENT", 0.0)
+        vix: float = features.get("VIX", 0.0)
 
         # ① 개별 인자 신호
         s_mom = self.momentum_signal(prices, rsi)
-        s_rev = self.reversion_signal(prices, boll)
-        s_fnd = self.fundamental_signal(fund["roe"], fund["pe"], fund["sector"])
+        s_rev = self.reversion_signal(prices, bollinger)
+        s_fnd = self.fundamental_signal(roe, pe, sector)
         s_mac = self.macro_signal(
-            macro["gdp_surprise"], macro["cpi_surprise"], macro["rate_surprise"]
+            gdp_surprise, cpi_surprise, rate_surprise
         )
-        conf = self.confidence_score(news["sentiment"], news["vix"])
+        conf = self.confidence_score(sentiment, vix)
 
         # ② Regime별 가중합
         w = self.factor_weights[regime]

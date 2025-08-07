@@ -100,7 +100,9 @@ class DynamicVaRModel(BaseFinanceTool):
     # ------------------------- get_data -------------------------- #
     def get_data(
         self,
-        returns: NDArray,
+        tickers: List[str],
+        start_date: str,
+        end_date: str,
         *,
         agent_forecasts: Optional[Dict[str, float]] = None,
         backtest: bool = False,
@@ -108,12 +110,37 @@ class DynamicVaRModel(BaseFinanceTool):
         max_latency: float = 1.0,
     ) -> Dict:
         """
-        returns : 최근 수익률 벡터 (T,)
+        tickers : 분석할 종목 리스트
+        start_date : 데이터 시작일(YYYY-MM-DD)
+        end_date : 데이터 종료일(YYYY-MM-DD)
         agent_forecasts : 구조적 μ_t 전망 (선택)
         """
         t0 = time.time()
 
         conf_lvls = confidence_lvls or [0.01, 0.05, 0.10]
+
+        # FeaturePipelineTool을 사용하여 가격 데이터 추출
+        from service.llm.AIChat.tool.FeaturePipelineTool import FeaturePipelineTool
+        features = FeaturePipelineTool(self.ai_chat_service).transform(
+            tickers=tickers,
+            start_date=start_date,
+            end_date=end_date,
+            feature_set=["PRICE_HISTORY"]
+        )
+
+        price_data = features.get("PRICE_HISTORY")
+        if not price_data or not isinstance(price_data, pd.DataFrame) or price_data.empty:
+            raise RuntimeError("가격 데이터를 가져올 수 없습니다.")
+
+        # 수익률 계산
+        returns = price_data.pct_change().dropna().values
+        if returns.size == 0:
+            raise RuntimeError("수익률 데이터를 계산할 수 없습니다.")
+
+        # 단일 종목인 경우 1차원 배열로 변환
+        if returns.ndim > 1 and returns.shape[1] == 1:
+            returns = returns.flatten()
+
         mu_t = (
             agent_forecasts.get("mu", 0.0)
             if agent_forecasts is not None
