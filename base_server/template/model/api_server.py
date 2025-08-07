@@ -19,14 +19,14 @@ import json
 from contextlib import asynccontextmanager
 
 # 프로젝트 모듈 import
-from manual_data_collector import ManualStockDataCollector
-from data_preprocessor import StockDataPreprocessor
-from pytorch_lstm_model import PyTorchStockLSTM
-from config import get_model_paths
+from .manual_data_collector import ManualStockDataCollector
+from .data_preprocessor import StockDataPreprocessor
+from .pytorch_lstm_model import PyTorchStockLSTM
+from .config import get_model_paths
 
 # Common 규격 import 
-from common.model_model import PredictionResult as CommonPredictionResult, DailyPrediction, BollingerBand, ModelInfo
-from common.model_serialize import (
+from .common.model_model import PredictionResult as CommonPredictionResult, DailyPrediction, BollingerBand, ModelInfo
+from .common.model_serialize import (
     PredictRequest as CommonPredictRequest, 
     PredictResponse as CommonPredictResponse,
     BatchPredictRequest as CommonBatchPredictRequest,

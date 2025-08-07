@@ -15,7 +15,7 @@ from sqlalchemy.exc import SQLAlchemyError
 import sqlite3
 
 # 추론 파이프라인에서 사용하는 데이터 클래스 import
-from inference_pipeline import PredictionOutput
+from .inference_pipeline import PredictionOutput
 
 class DatabaseFormatter:
     def __init__(self):

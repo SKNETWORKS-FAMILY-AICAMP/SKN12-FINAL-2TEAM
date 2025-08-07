@@ -8,11 +8,11 @@ from typing import Dict, List, Optional, Any
 import os
 
 # 프로젝트 모듈 import
-from data_collector import StockDataCollector
-from data_preprocessor import StockDataPreprocessor
-from pytorch_lstm_model import PyTorchStockLSTM
-from inference_pipeline import InferencePipeline, PredictionOutput
-from db_formatter import DatabaseFormatter
+from .data_collector import StockDataCollector
+from .data_preprocessor import StockDataPreprocessor
+from .pytorch_lstm_model import PyTorchStockLSTM
+from .inference_pipeline import InferencePipeline, PredictionOutput
+from .db_formatter import DatabaseFormatter
 
 # 기존 템플릿 import (사용 가능한 경우)
 try:

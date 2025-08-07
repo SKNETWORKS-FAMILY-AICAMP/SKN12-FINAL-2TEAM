@@ -17,7 +17,7 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error
 import matplotlib.pyplot as plt
 
 # 🚀 고급 손실함수 및 평가지표 import
-from advanced_metrics import (
+from .advanced_metrics import (
     DirectionalLoss, VolatilityAwareLoss, MultiTargetLoss, 
     AdvancedMetrics, get_advanced_loss_function
 )

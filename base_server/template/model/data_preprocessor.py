@@ -12,7 +12,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # 🚀 고급 피처 엔지니어링 import
-from advanced_features import AdvancedFeatureEngineering
+from .advanced_features import AdvancedFeatureEngineering
 
 class StockDataPreprocessor:
     def __init__(self, use_log_transform: bool = True):
