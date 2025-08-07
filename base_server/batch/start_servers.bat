@@ -25,13 +25,29 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 echo.
-echo Starting Base Web Server... (Port: 8000)
-start "Base Web Server" cmd /k "chcp 65001 >nul && conda activate skn12 && uvicorn application.base_web_server.main:app --reload --host 0.0.0.0 --port 8000"
+echo Checking ports...
+netstat -an | findstr :8000
+if %ERRORLEVEL% EQU 0 (
+    echo WARNING: Port 8000 already in use!
+) else (
+    echo Port 8000 available
+)
 
-timeout /t 3 /nobreak >nul
+netstat -an | findstr :8001
+if %ERRORLEVEL% EQU 0 (
+    echo WARNING: Port 8001 already in use!
+) else (
+    echo Port 8001 available
+)
+
+echo.
+echo Starting Base Web Server... (Port: 8000)
+start "Base Web Server" cmd /k "chcp 65001 >nul && echo Activating conda... && conda activate skn12 && echo Environment activated && echo Starting server... && uvicorn application.base_web_server.main:app --reload --host 0.0.0.0 --port 8000 || pause"
+
+timeout /t 5 /nobreak >nul
 
 echo Starting Model Server... (Port: 8001)  
-start "Model Server" cmd /k "chcp 65001 >nul && conda activate skn12 && uvicorn application.model_server.main:app --reload --host 0.0.0.0 --port 8001"
+start "Model Server" cmd /k "chcp 65001 >nul && echo Activating conda... && conda activate skn12 && echo Environment activated && echo Starting server... && uvicorn application.model_server.main:app --reload --host 0.0.0.0 --port 8001 || pause"
 
 echo.
 echo Both servers started in new windows:
