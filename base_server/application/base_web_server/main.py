@@ -412,8 +412,8 @@ async def lifespan(app: FastAPI):
                     Logger.info("✅ RAG 서비스 초기화 완료")
                     
                     # RAG 서비스 상태 확인
-                    # health_status = await RagService.health_check()
-                    # Logger.info(f"RAG 서비스 상태: {health_status['status']}")
+                    health_status = await RagService.health_check()
+                    Logger.info(f"RAG 서비스 상태: {health_status['status']}")
                     # # ─────────── RAG 스모크 테스트 시작 ───────────
                     # try:
                     #     Logger.info("🧪 RAG 스모크 테스트 시작...")
