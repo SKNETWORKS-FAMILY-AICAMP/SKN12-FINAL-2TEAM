@@ -314,6 +314,20 @@ class AIChatRouter:
             result = agent.get_data(**params)
             
             # 🆕 마크다운 형식으로 포맷된 결과 반환
+            # 예측 정보 추출
+            prediction = result.recommendations.get('prediction', {})
+            prediction_section = ""
+            if prediction and prediction.get('enabled', False):
+                prediction_section = f"""
+## 🔮 가격 예측 ({prediction.get('horizon_days', 'N/A')}일 후)
+
+- **중심 예측**: {prediction.get('center', 'N/A')} 📊
+- **신뢰구간**: {prediction.get('ci', 'N/A')} 📈
+- **하단 예측**: {prediction.get('lower', 'N/A')} 📉
+- **상단 예측**: {prediction.get('upper', 'N/A')} 📈
+- **가정**: {prediction.get('assumption', 'N/A')} 💡
+"""
+
             detailed_summary = f"""# 📊 칼만 필터 분석 결과
 
 **{result.summary}**
@@ -326,7 +340,7 @@ class AIChatRouter:
 - **손절가**: ${result.recommendations.get('stop_loss', 'N/A')} 🛡️
 - **목표가**: ${result.recommendations.get('take_profit', 'N/A')} 🎯
 - **리스크 점수**: {result.recommendations.get('risk_score', 'N/A')}
-- **시장 안정성**: {result.recommendations.get('market_stability', 'N/A')}
+- **시장 안정성**: {result.recommendations.get('market_stability', 'N/A')}{prediction_section}
 
 ## 📊 상태 추정치
 

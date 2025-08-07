@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 import json
+import math
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 import numpy as np
@@ -22,12 +23,17 @@ class KalmanRegimeFilterInput(BaseModel):
     start_date: str    = Field(..., description="데이터 시작일(YYYY-MM-DD)")
     end_date: str      = Field(..., description="데이터 종료일(YYYY-MM-DD)")
 
-    # ▶️ 실전 운용 파라미터
+    # 실전 운용 파라미터
     account_value: float = Field(... ,description="계좌 가치")
-    account_ccy: str = Field("KRW", description="계좌 통화(예시: KRW, USD)")  # 🆕 계좌 통화 명시
-    exchange_rate: str = Field("KRW", description="화폐 단위(예시: KRW, USD)" )  # ✅ KWR → KRW
-    risk_pct: float      = Field(0.02,      description="한 트레이드당 위험 비율(0~1)")
-    max_leverage: float  = Field(10.0,      description="허용 최대 레버리지")
+    account_ccy: str = Field("KRW", description="계좌 통화(예시: KRW, USD)")
+    exchange_rate: str = Field("KRW", description="화폐 단위(예시: KRW, USD)")
+    risk_pct: float      = Field(0.02, description="한 트레이드당 위험 비율(0~1)")
+    max_leverage: float  = Field(10.0, description="허용 최대 레버리지")
+
+    # 🆕 항상 예측에 쓰일 기본값
+    horizon_days: int    = Field(3,    ge=1, le=30, description="예측 기간(일)")
+    ci_level: float      = Field(0.8,  gt=0, lt=1,  description="신뢰구간 신뢰수준(예: 0.8, 0.9, 0.95)")
+    drift_scale: float   = Field(0.0015, description="combined_signal → 일간 기대수익률 변환 계수")
 
 
 class KalmanRegimeFilterActionOutput(BaseModel):
@@ -73,10 +79,27 @@ class KalmanRegimeFilterTool(SessionAwareTool):
             print(f"[KalmanRegimeFilterTool] 상태 관리 초기화 실패: {e}")
             print("[KalmanRegimeFilterTool] 메모리 기반 fallback 모드로 동작")
             self.state_manager = None
-    
+
     def require_session(self) -> bool:
         """세션은 선택사항 (fallback 지원)"""
         return False
+
+    # 🆕 예측 관련 유틸리티 함수들
+    _Z_MAP = {0.8: 1.2816, 0.9: 1.6449, 0.95: 1.96}
+
+    def _get_z(self, ci: float) -> float:
+        keys = sorted(self._Z_MAP.keys())
+        closest = min(keys, key=lambda k: abs(k - ci))
+        return self._Z_MAP[closest]
+
+    def _forecast_price(self, s0: float, mu_daily: float, sigma_daily: float,
+                        horizon_days: int, z: float) -> Dict[str, float]:
+        h = max(1, int(horizon_days))
+        center = s0 * ((1.0 + mu_daily) ** h)
+        width = sigma_daily * math.sqrt(h)
+        lower = max(0.01, center * math.exp(-z * width))
+        upper = center * math.exp(+z * width)
+        return {"center": center, "lower": lower, "upper": upper}
  
     # ---------- 유틸 ----------
     @staticmethod
@@ -642,13 +665,46 @@ class KalmanRegimeFilterTool(SessionAwareTool):
         
         rec["leverage"] = exposure_str
 
-        # ── SL / TP (ATR 기반) - 수정된 버전
-        # vol in [0.05, 2.0] → atr_pct in [0.02, 0.05] (2%~5%)
+        # ── SL/TP & ATR 먼저 계산 ---
         vol_clamped = float(np.clip(raw_vol, 0.05, 2.0))
-        atr_pct = 0.02 + 0.03 * (vol_clamped / 2.0)  # 0.02~0.05 범위로 매핑
-        
-        # ATR 계산 (가격 대비 퍼센트)
+        atr_pct = 0.02 + 0.03 * (vol_clamped / 2.0)  # 0.02~0.05
         atr = entry_price * atr_pct
+
+        # 🆕 항상 가격 예측 수행
+        # 1) 드리프트/변동성 산출
+        #    - 드리프트: combined_signal(±5) → 일간 기대수익률로 선형 매핑
+        #      예) drift_scale=0.0015이면, 신호 +1 ≈ +0.15%/일
+        mu_daily = float(np.clip(inp.drift_scale * combined_signal, -0.05, 0.05))
+        #    - 변동성: ATR%를 일간 표준편차 근사로 사용(간단하고 일관적)
+        sigma_daily = float(np.clip(atr_pct, 0.005, 0.15))
+
+        # 2) z-score 선택 (0.8/0.9/0.95 지원)
+        z = self._get_z(inp.ci_level)
+
+        # 3) 예측
+        pred = self._forecast_price(entry_price, mu_daily, sigma_daily, inp.horizon_days, z)
+
+        # 4) 출력용 포맷
+        def _pct(x): return (x / entry_price - 1.0) * 100.0
+        rec["prediction"] = {
+            "enabled": True,
+            "horizon_days": inp.horizon_days,
+            "center": f"${pred['center']:.2f} ({_pct(pred['center']):+.2f}%)",
+            "ci": f"{int(round(inp.ci_level*100))}%",
+            "lower":  f"${pred['lower']:.2f} ({_pct(pred['lower']):+.2f}%)",
+            "upper":  f"${pred['upper']:.2f} ({_pct(pred['upper']):+.2f}%)",
+            # 사용자 노출용 간단 가정(모델 내부 스케일 언급 없이)
+            "assumption": "일간 드리프트(신호 기반)·변동성(ATR%) 고정 가정"
+        }
+        
+        # 🆕 디버그 로그 추가
+        print(f"[KalmanFilter] 예측 계산 완료:")
+        print(f"  - entry_price: ${entry_price:.2f}")
+        print(f"  - combined_signal: {combined_signal:.3f}")
+        print(f"  - mu_daily: {mu_daily:.6f}")
+        print(f"  - sigma_daily: {sigma_daily:.6f}")
+        print(f"  - z-score: {z:.4f}")
+        print(f"  - prediction: {rec['prediction']}")
         
         # 손절가 및 목표가 계산 (바닥 가드 포함)
         stop_loss = max(entry_price * (1 - 1.5 * atr_pct), entry_price * 0.5)  # 최소 50% 가드
@@ -802,7 +858,11 @@ class KalmanRegimeFilterTool(SessionAwareTool):
 
         # 8️⃣ 결과 반환
         data_status = "완전" if not missing_features else f"부분 ({len(missing_features)}개 누락)"
-        summary = f"5차원 칼만 필터 분석 완료 - {signal} 신호, 변동성: {vol:.3f}, 성능: {performance_metrics['status']}, 데이터: {data_status}"
+        summary = (
+            f"5차원 칼만 필터 분석 완료 - {signal} 신호, 변동성: {vol:.3f}, "
+            f"성능: {performance_metrics['status']}, 데이터: {data_status} · "
+            f"예측:{inp.horizon_days}D {int(round(inp.ci_level*100))}%CI"
+        )
         
         if missing_features:
             rec["data_warnings"] = f"다음 피처들이 기본값으로 대체됨: {missing_features}"
