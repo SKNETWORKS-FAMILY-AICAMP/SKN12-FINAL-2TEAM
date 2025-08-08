@@ -419,42 +419,91 @@ CREATE PROCEDURE `fp_signal_alarm_soft_delete`(
 )
 BEGIN
     DECLARE v_alarm_exists INT DEFAULT 0;  -- 알림 존재 여부
-    DECLARE ProcParam VARCHAR(4000);
+    DECLARE ProcParam VARCHAR(4000) CHARACTER SET utf8mb4;
+    DECLARE dynamic_sql TEXT CHARACTER SET utf8mb4;
     
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
-        SET ProcParam = CONCAT(p_alarm_id, ',', p_account_db_key);
-        GET DIAGNOSTICS @cno = NUMBER;
-        GET DIAGNOSTICS CONDITION @cno
-        @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
         ROLLBACK;
+        SET ProcParam = CONCAT('alarm_id=', IFNULL(p_alarm_id, 'NULL'), ', account_db_key=', IFNULL(p_account_db_key, 'NULL'));
         INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
-            VALUES ('fp_signal_alarm_soft_delete', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam, NOW());
-        SELECT 1 as ErrorCode, COALESCE(@ErrorMessage, 'UNKNOWN ERROR') as ErrorMessage;
+            VALUES ('fp_signal_alarm_soft_delete', 'SQLEXCEPTION', 0, 'MySQL 8.x VARCHAR Bug - Using Dynamic SQL', ProcParam, NOW());
+        SELECT 1 as ErrorCode, 'UNKNOWN ERROR - Check table_errorlog for details' as ErrorMessage;
     END;
     
+    -- 단계 1: 파라미터 검증 로그
+    INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+        VALUES ('fp_signal_alarm_soft_delete', 'DEBUG', 0, 'STEP1: Parameter validation started', 
+                CONCAT('alarm_id=', IFNULL(p_alarm_id, 'NULL'), ', account_db_key=', IFNULL(p_account_db_key, 'NULL')), NOW());
+
     START TRANSACTION;
     
-    -- 알림 존재 및 소유권 확인
-    SELECT COUNT(*) INTO v_alarm_exists
-    FROM table_signal_alarms 
-    WHERE CONCAT('', alarm_id) = CONCAT('', p_alarm_id) 
-      AND account_db_key = p_account_db_key  -- 본인 소유 알림만
-      AND is_deleted = 0;                    -- 이미 삭제된 것은 제외
+    -- ===============================================
+    -- MySQL 8.x VARCHAR Binding Bug Complete Workaround
+    -- Dynamic SQL (Prepared Statement) for Safe Processing
+    -- Same pattern as fp_signal_alarm_create
+    -- ===============================================
+    
+    -- 단계 2: 동적 SQL로 존재 확인 (MySQL 8.x VARCHAR 버그 우회)
+    INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+        VALUES ('fp_signal_alarm_soft_delete', 'DEBUG', 0, 'STEP2: Dynamic SQL existence check started', 
+                CONCAT('alarm_id=', p_alarm_id), NOW());
+
+    -- 동적 SQL 문자열 생성 (SQL Injection 방지 처리 포함)
+    SET dynamic_sql = CONCAT(
+        'SELECT COUNT(*) INTO @v_alarm_exists ',
+        'FROM table_signal_alarms ',
+        'WHERE alarm_id = ''', REPLACE(p_alarm_id, '''', ''''''), ''' ',  -- 작은따옴표 이스케이프
+        'AND account_db_key = ', p_account_db_key, ' ',
+        'AND is_deleted = 0'
+    );
+
+    -- 디버그: 생성된 SQL 로그  
+    INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+        VALUES ('fp_signal_alarm_soft_delete', 'DEBUG', 0, 'Generated SQL', dynamic_sql, NOW());
+
+    -- Prepared Statement 실행 패턴
+    SET @sql_stmt = dynamic_sql;              -- 세션 변수에 SQL 저장
+    PREPARE stmt FROM @sql_stmt;              -- SQL 준비 (파싱 + 컴파일)
+    EXECUTE stmt;                             -- SQL 실행  
+    DEALLOCATE PREPARE stmt;                  -- 메모리 정리
+    
+    -- 글로벌 세션 변수에서 결과 가져오기
+    SET v_alarm_exists = IFNULL(@v_alarm_exists, 0);
+
+    -- 단계 3: 존재 확인 완료
+    INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+        VALUES ('fp_signal_alarm_soft_delete', 'DEBUG', 0, 'STEP3: Existence check completed', 
+                CONCAT('found_count=', v_alarm_exists), NOW());
     
     IF v_alarm_exists = 0 THEN
         ROLLBACK;
         SELECT 1002 as ErrorCode, '알림을 찾을 수 없습니다' as ErrorMessage;
     ELSE
-        -- 소프트 삭제: 데이터는 보존하되 화면에서 제거
-        UPDATE table_signal_alarms 
-        SET is_deleted = 1,       -- 삭제 플래그 설정
-            is_active = 0,        -- 삭제 시 비활성화도 함께 처리
-            updated_at = NOW(6)   -- 수정 시간 업데이트
-        WHERE CONCAT('', alarm_id) = CONCAT('', p_alarm_id) 
-          AND account_db_key = p_account_db_key;
+        -- 단계 4: 동적 SQL로 소프트 삭제 (UPDATE 쿼리도 동적으로 처리)
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+            VALUES ('fp_signal_alarm_soft_delete', 'DEBUG', 0, 'STEP4: Dynamic SQL update started', '', NOW());
+
+        -- 소프트 삭제 UPDATE문도 동적 SQL로 처리
+        SET dynamic_sql = CONCAT(
+            'UPDATE table_signal_alarms ',
+            'SET is_deleted = 1, is_active = 0, updated_at = NOW(6) ',
+            'WHERE alarm_id = ''', REPLACE(p_alarm_id, '''', ''''''), ''' ',
+            'AND account_db_key = ', p_account_db_key
+        );
+
+        -- Prepared Statement 실행
+        SET @sql_stmt = dynamic_sql;
+        PREPARE stmt FROM @sql_stmt;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
         
         COMMIT;
+        
+        -- 단계 5: 완료 로그
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+            VALUES ('fp_signal_alarm_soft_delete', 'DEBUG', 0, 'STEP5: Soft delete completed successfully', '', NOW());
+            
         SELECT 0 as ErrorCode, '알림이 삭제되었습니다' as ErrorMessage;
     END IF;
     
@@ -1032,21 +1081,34 @@ proc_label:BEGIN
     -- 상태 반환
     SELECT 0 as ErrorCode, 'SUCCESS' as ErrorMessage;
     
-    -- 특정 심볼의 활성 알림 상세 정보 조회 (인덱스 최적화)
-    SELECT 
-        alarm_id,           -- 알림 ID (시그널 저장 시 필요)
-        account_db_key,     -- 사용자 계정 키 (알림 발송 시 필요)
-        symbol,             -- 종목 코드
-        company_name,       -- 기업명
-        current_price,      -- 등록 시점 가격
-        exchange,           -- 거래소
-        currency,           -- 통화
-        created_at          -- 등록 시간
-    FROM table_signal_alarms 
-    WHERE symbol = CONVERT(p_symbol USING utf8mb4)   -- 특정 심볼만 (인덱스 활용)
-      AND is_active = 1       -- 활성화된 알림만
-      AND is_deleted = 0      -- 삭제되지 않은 알림만
-    ORDER BY created_at ASC;  -- 등록 순서대로
+    -- ===============================================
+    -- MySQL 8.x VARCHAR Binding Bug Complete Workaround  
+    -- Dynamic SQL (Prepared Statement) for Safe Processing
+    -- After CONVERT, CAST, Variable Assignment All Failed
+    -- Final Solution: Complete Parameter Binding Bypass
+    -- ===============================================
+    
+    -- 동적 SQL로 특정 심볼의 활성 알림 상세 정보 조회 (MySQL 8.x VARCHAR 버그 우회)
+    SET @select_sql = CONCAT(
+        'SELECT ',
+        'alarm_id, ',           -- 알림 ID (시그널 저장 시 필요)
+        'account_db_key, ',     -- 사용자 계정 키 (알림 발송 시 필요)
+        'symbol, ',             -- 종목 코드
+        'company_name, ',       -- 기업명
+        'current_price, ',      -- 등록 시점 가격
+        'exchange, ',           -- 거래소
+        'currency, ',           -- 통화
+        'created_at ',          -- 등록 시간
+        'FROM table_signal_alarms ',
+        'WHERE symbol = ''', REPLACE(p_symbol, '''', ''''''), ''' ',  -- 작은따옴표 이스케이프
+        'AND is_active = 1 ',       -- 활성화된 알림만
+        'AND is_deleted = 0 ',      -- 삭제되지 않은 알림만
+        'ORDER BY created_at ASC'   -- 등록 순서대로
+    );
+    
+    PREPARE stmt FROM @select_sql;
+    EXECUTE stmt;
+    DEALLOCATE PREPARE stmt;
     
 END ;;
 DELIMITER ;
