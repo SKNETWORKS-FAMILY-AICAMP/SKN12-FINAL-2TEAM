@@ -48,7 +48,7 @@ class MySQLClient:
                             all_results.extend(result)
                         
                         # Check if there are more result sets
-                        if not cursor.nextset():
+                        if not await cursor.nextset():
                             break
                     
                     return all_results
@@ -68,7 +68,7 @@ class MySQLClient:
                                 all_results.extend(result)
                             
                             # Check if there are more result sets
-                            if not cursor.nextset():
+                            if not await cursor.nextset():
                                 break
                         
                         return all_results

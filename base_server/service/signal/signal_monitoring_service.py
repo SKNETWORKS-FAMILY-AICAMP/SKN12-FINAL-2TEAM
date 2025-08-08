@@ -269,7 +269,7 @@ class SignalMonitoringService:
         """개별 샤드에서 활성 심볼 조회 (병렬 처리용)"""
         symbols = set()
         try:
-            result = await db_service.execute_shard_procedure_by_shard_id(
+            result = await db_service.call_shard_procedure(
                 shard_id,
                 "fp_signal_symbols_get_active",  # 최적화된 프로시저
                 ()  # 빈 튜플
@@ -821,7 +821,7 @@ class SignalMonitoringService:
             for shard_id in active_shards:
                 try:
                     # 해당 종목을 구독하는 사용자 조회
-                    result = await db_service.execute_shard_procedure_by_shard_id(
+                    result = await db_service.call_shard_procedure(
                         shard_id,
                         "fp_signal_alarms_get_by_symbol",
                         (symbol,)
@@ -988,7 +988,7 @@ class SignalMonitoringService:
             # 해당 종목의 활성 알림만 조회 (활성 샤드에서만)
             for shard_id in active_shards:
                 try:
-                    result = await db_service.execute_shard_procedure_by_shard_id(
+                    result = await db_service.call_shard_procedure(
                         shard_id,
                         "fp_signal_alarms_get_by_symbol",  # 최적화된 프로시저
                         (symbol,)  # 심볼 파라미터
@@ -1196,7 +1196,7 @@ class SignalMonitoringService:
             for shard_id in active_shards:
                 try:
                     # 어제 발생한 미평가 시그널 조회
-                    result = await db_service.execute_shard_procedure_by_shard_id(
+                    result = await db_service.call_shard_procedure(
                         shard_id,
                         "fp_signal_get_pending_evaluation",
                         (yesterday,)

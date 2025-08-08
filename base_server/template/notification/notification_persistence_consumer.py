@@ -289,7 +289,7 @@ class NotificationPersistenceConsumer:
                     notification_id = str(uuid.uuid4())
                     
                     # 알림 저장 프로시저 호출
-                    result = await database_service.execute_shard_procedure_by_shard_id(
+                    result = await database_service.call_shard_procedure(
                         shard_id,
                         "fp_notification_save",
                         (

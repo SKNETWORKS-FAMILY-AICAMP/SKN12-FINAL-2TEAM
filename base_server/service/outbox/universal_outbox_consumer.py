@@ -174,7 +174,7 @@ class UniversalOutboxConsumer:
             for shard_id in active_shards:
                 try:
                     # 샤드별 pending 이벤트 조회 (SQL 프로시저 사용)
-                    result = await db_service.execute_shard_procedure_by_shard_id(
+                    result = await db_service.call_shard_procedure(
                         shard_id,
                         "fp_universal_outbox_get_pending",
                         (domain, cls.BATCH_SIZE)
@@ -246,7 +246,7 @@ class UniversalOutboxConsumer:
         """이벤트를 published 상태로 변경"""
         try:
             db_service = ServiceContainer.get_database_service()
-            await db_service.execute_shard_procedure_by_shard_id(
+            await db_service.call_shard_procedure(
                 shard_id,
                 "fp_universal_outbox_update_status",
                 (event_id, "published", None)
@@ -259,7 +259,7 @@ class UniversalOutboxConsumer:
         """이벤트를 failed 상태로 변경 (간단 버전)"""
         try:
             db_service = ServiceContainer.get_database_service()
-            await db_service.execute_shard_procedure_by_shard_id(
+            await db_service.call_shard_procedure(
                 shard_id,
                 "fp_universal_outbox_update_status",
                 (event_id, "failed", error_msg)
@@ -277,7 +277,7 @@ class UniversalOutboxConsumer:
             
             if retry_count < max_retries:
                 # 재시도 가능
-                await db_service.execute_shard_procedure_by_shard_id(
+                await db_service.call_shard_procedure(
                     shard_id,
                     "fp_universal_outbox_update_status",
                     (event_id, "pending", error_msg)  # pending으로 돌려서 재시도
@@ -285,7 +285,7 @@ class UniversalOutboxConsumer:
                 Logger.info(f"이벤트 재시도 예약: {event_id} ({retry_count + 1}/{max_retries})")
             else:
                 # 최대 재시도 초과 → dead_letter
-                await db_service.execute_shard_procedure_by_shard_id(
+                await db_service.call_shard_procedure(
                     shard_id,
                     "fp_universal_outbox_update_status",
                     (event_id, "dead_letter", error_msg)
@@ -383,7 +383,7 @@ class UniversalOutboxConsumer:
             total_deleted = 0
             for shard_id in active_shards:
                 try:
-                    result = await db_service.execute_shard_procedure_by_shard_id(
+                    result = await db_service.call_shard_procedure(
                         shard_id,
                         "fp_universal_outbox_cleanup_published",
                         (cls.CLEANUP_RETENTION_DAYS,)
@@ -411,7 +411,7 @@ class UniversalOutboxConsumer:
             total_deleted = 0
             for shard_id in active_shards:
                 try:
-                    result = await db_service.execute_shard_procedure_by_shard_id(
+                    result = await db_service.call_shard_procedure(
                         shard_id,
                         "fp_universal_outbox_cleanup_failed",
                         (30,)  # 30일 후 정리
@@ -439,7 +439,7 @@ class UniversalOutboxConsumer:
             total_deleted = 0
             for shard_id in active_shards:
                 try:
-                    result = await db_service.execute_shard_procedure_by_shard_id(
+                    result = await db_service.call_shard_procedure(
                         shard_id,
                         "fp_universal_outbox_cleanup_sequences",
                         (90,)  # 90일 후 정리
@@ -605,7 +605,7 @@ async def publish_outbox_event(
             shard_id = hash(aggregate_id) % 2 + 1  # 1 또는 2
         
         # SQL 프로시저로 이벤트 발행
-        result = await db_service.execute_shard_procedure_by_shard_id(
+        result = await db_service.call_shard_procedure(
             shard_id,
             "fp_universal_outbox_publish",
             (domain.value, partition_key, event_type, aggregate_id, json.dumps(event_data))
