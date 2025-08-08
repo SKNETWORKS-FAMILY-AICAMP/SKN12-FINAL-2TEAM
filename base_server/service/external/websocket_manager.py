@@ -2,7 +2,7 @@ import asyncio
 import json
 from typing import Dict, List, Set, Callable
 from service.core.logger import Logger
-from service.external.korea_investment_websocket import KoreaInvestmentWebSocket
+from service.external.korea_investment_websocket_iocp import KoreaInvestmentWebSocketIOCP as KoreaInvestmentWebSocket
 
 class WebSocketManager:
     """웹소켓 연결 관리자"""

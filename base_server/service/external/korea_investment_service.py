@@ -100,18 +100,25 @@ class KoreaInvestmentService:
             return False
     
     @classmethod
-    async def _authenticate(cls) -> bool:
-        """한국투자증권 API 인증 (Redis 지속성 포함)"""
+    async def _authenticate(cls, force_new_token: bool = False) -> bool:
+        """한국투자증권 API 인증 (Redis 지속성 포함)
+        
+        Args:
+            force_new_token: True일 경우 Redis 토큰 무시하고 새 토큰 강제 발급
+        """
         try:
-            # 1. Redis에서 기존 토큰 로드 시도
-            redis_token, redis_expires = await cls._load_token_from_redis()
-            
-            if redis_token and redis_expires:
-                if datetime.now() < redis_expires:
-                    Logger.info(f"Redis에서 유효한 토큰 복구 성공 (만료: {redis_expires})")
-                    return True
-                else:
-                    Logger.info("Redis 토큰 만료됨, 새로 발급 필요")
+            # 1. 강제 재인증이 아닐 때만 Redis에서 기존 토큰 확인
+            if not force_new_token:
+                redis_token, redis_expires = await cls._load_token_from_redis()
+                
+                if redis_token and redis_expires:
+                    if datetime.now() < redis_expires:
+                        Logger.info(f"Redis에서 유효한 토큰 복구 성공 (만료: {redis_expires})")
+                        return True
+                    else:
+                        Logger.info("Redis 토큰 만료됨, 새로 발급 필요")
+            else:
+                Logger.info("🔄 강제 재인증 - Redis 토큰 건너뛰고 새 토큰 발급")
             
             # 2. 새 토큰 발급
             url = f"{cls._base_url}/oauth2/tokenP"
@@ -127,21 +134,39 @@ class KoreaInvestmentService:
             Logger.info(f"한국투자증권 API 인증 시도: {cls._app_key[:10]}... (전체 길이: {len(cls._app_key)})")
             
             async with cls._session.post(url, headers=headers, json=data) as response:
+                Logger.info(f"📡 인증 API 응답 상태: {response.status}")
+                
                 if response.status == 200:
                     result = await response.json()
                     new_token = result.get('access_token')
+                    Logger.info(f"📊 발급받은 새 토큰: {new_token[:20] if new_token else 'None'}...")
+                    
+                    if not new_token:
+                        Logger.error("❌ 응답에 access_token이 없습니다")
+                        Logger.info(f"📊 전체 응답: {result}")
+                        return False
                     
                     # 토큰 만료 시간 설정 (23시간 후, 안전하게)
                     expires_at = datetime.now() + timedelta(hours=23)
+                    Logger.info(f"📊 토큰 만료 시간 설정: {expires_at}")
                     
                     # 3. Redis에 토큰 저장
-                    await cls._save_token_to_redis(new_token, expires_at)
+                    redis_save_success = await cls._save_token_to_redis(new_token, expires_at)
+                    Logger.info(f"📊 Redis 저장 결과: {redis_save_success}")
                     
-                    Logger.info("한국투자증권 API 인증 성공 및 Redis 저장 완료")
-                    return True
+                    if redis_save_success:
+                        Logger.info("✅ 한국투자증권 API 인증 성공 및 Redis 저장 완료")
+                        return True
+                    else:
+                        Logger.error("❌ Redis 토큰 저장 실패")
+                        return False
                 else:
                     error_text = await response.text()
-                    Logger.error(f"한국투자증권 API 인증 실패: {response.status} - {error_text}")
+                    Logger.error(f"❌ 한국투자증권 API 인증 실패: {response.status}")
+                    Logger.error(f"📊 에러 상세: {error_text}")
+                    Logger.info(f"📊 요청 URL: {url}")
+                    Logger.info(f"📊 요청 헤더: {headers}")
+                    Logger.info(f"📊 요청 데이터: {data}")
                     return False
                     
         except Exception as e:
@@ -243,20 +268,81 @@ class KoreaInvestmentService:
             return False
     
     @classmethod
-    async def _get_current_token(cls) -> Optional[str]:
-        """현재 유효한 토큰 반환 (Redis 우선, HTTP/WebSocket 범용)"""
+    async def _is_token_valid_by_api_test(cls, token: str) -> bool:
+        """실제 API 호출로 토큰 유효성 검증 (간단한 테스트)"""
         try:
-            # Redis에서 토큰 로드
+            # 가장 간단한 API로 토큰 유효성 테스트
+            url = f"{cls._base_url}/uapi/domestic-stock/v1/quotations/inquire-price"
+            headers = {
+                'Content-Type': 'application/json',
+                'authorization': f'Bearer {token}',
+                'appkey': cls._app_key,
+                'appsecret': cls._app_secret,
+                'tr_id': 'FHKST01010100'
+            }
+            params = {
+                'FID_COND_MRKT_DIV_CODE': 'J',
+                'FID_INPUT_ISCD': '005930'  # 삼성전자
+            }
+            
+            # 3초 타임아웃으로 빠른 검증
+            async with cls._session.get(url, headers=headers, params=params, timeout=aiohttp.ClientTimeout(total=3)) as response:
+                if response.status == 200:
+                    return True
+                elif response.status == 500:
+                    error_text = await response.text()
+                    if "기간이 만료된 token" in error_text or "token" in error_text.lower():
+                        Logger.warn("🔍 토큰 검증: 만료됨")
+                        return False
+                
+                # 기타 에러는 네트워크 문제일 수 있으므로 유효하다고 가정
+                Logger.warn(f"🔍 토큰 검증 불확실: {response.status}")
+                return True
+                
+        except asyncio.TimeoutError:
+            # 타임아웃은 네트워크 문제, 토큰은 유효하다고 가정
+            Logger.warn("🔍 토큰 검증 타임아웃 - 유효하다고 가정")
+            return True
+        except Exception as e:
+            # 기타 예외도 네트워크 문제로 간주
+            Logger.warn(f"🔍 토큰 검증 예외 - 유효하다고 가정: {e}")
+            return True
+
+    @classmethod
+    async def _get_current_token(cls) -> Optional[str]:
+        """현재 유효한 토큰 반환 (실제 검증 후 사용)"""
+        try:
+            # 1. Redis에서 기존 토큰 조회
             token, expires_at = await cls._load_token_from_redis()
             
-            if token and expires_at and datetime.now() < expires_at:
-                return token
-            else:
-                Logger.warn("유효한 토큰이 없음 - 재인증 필요")
-                return None
+            # 2. 토큰이 있으면 실제 API로 유효성 검증
+            if token and expires_at:
+                # 시간상 유효한지 먼저 확인
+                if datetime.now() < expires_at:
+                    Logger.info(f"📅 Redis 토큰 시간 검증 통과 (만료: {expires_at})")
+                    
+                    # 실제 API 호출로 검증
+                    if await cls._is_token_valid_by_api_test(token):
+                        Logger.info("✅ 토큰 실제 API 검증 통과")
+                        return token
+                    else:
+                        Logger.warn("⚠️ 토큰이 실제로는 만료됨")
+                else:
+                    Logger.warn(f"⚠️ Redis 토큰 시간 만료 (현재: {datetime.now()})")
+            
+            # 3. 토큰이 없거나 만료된 경우 새로 발급 (강제 재인증)
+            Logger.info("🔄 새 토큰 강제 발급 중...")
+            if await cls._authenticate(force_new_token=True):
+                new_token, new_expires = await cls._load_token_from_redis()
+                if new_token:
+                    Logger.info("✅ 새 토큰 강제 발급 성공")
+                    return new_token
+            
+            Logger.error("❌ 토큰 발급 실패")
+            return None
                 
         except Exception as e:
-            Logger.error(f"토큰 조회 실패: {e}")
+            Logger.error(f"❌ 토큰 조회 실패: {e}")
             return None
     
     @classmethod
@@ -269,16 +355,23 @@ class KoreaInvestmentService:
             if approval_key and expires_at and datetime.now() < expires_at:
                 return approval_key
             else:
-                Logger.warn("유효한 approval_key가 없음 - WebSocket 재인증 필요")
-                return None
+                Logger.warn("유효한 approval_key가 없음 - WebSocket 재인증 시도")
+                # 자동 재인증 시도
+                if await cls._authenticate_websocket():
+                    # 재인증 성공 시 새 approval_key 반환
+                    new_key, new_expires = await cls._load_approval_key_from_redis()
+                    return new_key
+                else:
+                    Logger.error("approval_key 재인증 실패")
+                    return None
                 
         except Exception as e:
             Logger.error(f"approval_key 조회 실패: {e}")
             return None
     
     @classmethod
-    async def get_stock_price(cls, symbol: str) -> Optional[Dict]:
-        """주식 현재가 조회"""
+    async def get_stock_price(cls, symbol: str, retry_count: int = 0) -> Optional[Dict]:
+        """주식 현재가 조회 (토큰 만료 시 자동 재시도)"""
         if not cls._initialized:
             Logger.error("KoreaInvestmentService가 초기화되지 않았습니다")
             return None
@@ -314,6 +407,33 @@ class KoreaInvestmentService:
                     return result.get('output', {})
                 else:
                     error_text = await response.text()
+                    
+                    # 토큰 만료 에러인지 확인
+                    if response.status == 500 and "기간이 만료된 token" in error_text:
+                        Logger.warn(f"⚠️ 토큰 만료 감지 - 재인증 시도 (retry: {retry_count})")
+                        Logger.info(f"📊 현재 사용된 토큰: {access_token[:20]}...")
+                        Logger.info(f"📊 현재 appkey: {cls._app_key[:10]}...")
+                        
+                        # 최대 1회 재시도
+                        if retry_count < 1:
+                            Logger.info("🔄 강제 재인증 시작...")
+                            # 강제 재인증 (Redis 토큰 무시)
+                            auth_success = await cls._authenticate(force_new_token=True)
+                            Logger.info(f"📊 재인증 결과: {auth_success}")
+                            
+                            if auth_success:
+                                # 새 토큰 확인
+                                new_token = await cls._get_current_token()
+                                Logger.info(f"📊 새 토큰: {new_token[:20] if new_token else 'None'}...")
+                                Logger.info("✅ 토큰 재인증 성공 - API 재시도")
+                                return await cls.get_stock_price(symbol, retry_count + 1)
+                            else:
+                                Logger.error("❌ 토큰 재인증 실패 - 상세 확인 필요")
+                                return None
+                        else:
+                            Logger.error("❌ 재시도 횟수 초과 - API 호출 포기")
+                            return None
+                    
                     Logger.error(f"주식 가격 조회 실패: {response.status} - {error_text}")
                     return None
                     
@@ -322,8 +442,8 @@ class KoreaInvestmentService:
             return None
     
     @classmethod
-    async def get_market_index(cls, index_code: str = "0001") -> Optional[Dict]:
-        """시장 지수 조회 (KOSPI: 0001, KOSDAQ: 1001)"""
+    async def get_market_index(cls, index_code: str = "0001", retry_count: int = 0) -> Optional[Dict]:
+        """시장 지수 조회 (KOSPI: 0001, KOSDAQ: 1001) - 토큰 만료 시 자동 재시도"""
         if not cls._initialized:
             Logger.error("KoreaInvestmentService가 초기화되지 않았습니다")
             return None
@@ -359,6 +479,25 @@ class KoreaInvestmentService:
                     return result.get('output', {})
                 else:
                     error_text = await response.text()
+                    
+                    # 토큰 만료 에러인지 확인
+                    if response.status == 500 and "기간이 만료된 token" in error_text:
+                        Logger.warn(f"⚠️ 토큰 만료 감지 - 재인증 시도 (retry: {retry_count})")
+                        
+                        # 최대 1회 재시도
+                        if retry_count < 1:
+                            # 강제 재인증 (Redis 토큰 무시)
+                            auth_success = await cls._authenticate(force_new_token=True)
+                            if auth_success:
+                                Logger.info("✅ 토큰 재인증 성공 - 지수 API 재시도")
+                                return await cls.get_market_index(index_code, retry_count + 1)
+                            else:
+                                Logger.error("❌ 토큰 재인증 실패")
+                                return None
+                        else:
+                            Logger.error("❌ 재시도 횟수 초과 - 지수 API 호출 포기")
+                            return None
+                    
                     Logger.error(f"시장 지수 조회 실패: {response.status} - {error_text}")
                     return None
                     
@@ -390,12 +529,13 @@ class KoreaInvestmentService:
         return results
     
     @classmethod
-    async def get_overseas_stock_price(cls, exchange: str, symbol: str) -> Optional[Dict]:
-        """해외주식 현재가 조회
+    async def get_overseas_stock_price(cls, exchange: str, symbol: str, retry_count: int = 0) -> Optional[Dict]:
+        """해외주식 현재가 조회 (토큰 만료 시 자동 재시도)
         
         Args:
             exchange: 거래소 코드 (NASD=나스닥, NYSE=뉴욕, AMEX=아멕스, TSE=도쿄, etc)
             symbol: 종목 심볼 (AAPL, TSLA, MSFT, etc)
+            retry_count: 재시도 카운트
         """
         if not cls._initialized:
             Logger.error("KoreaInvestmentService가 초기화되지 않았습니다")
@@ -432,6 +572,25 @@ class KoreaInvestmentService:
                     return result.get('output', {})
                 else:
                     error_text = await response.text()
+                    
+                    # 토큰 만료 에러인지 확인
+                    if response.status == 500 and "기간이 만료된 token" in error_text:
+                        Logger.warn(f"⚠️ 토큰 만료 감지 - 재인증 시도 (retry: {retry_count})")
+                        
+                        # 최대 1회 재시도
+                        if retry_count < 1:
+                            # 강제 재인증 (Redis 토큰 무시)
+                            auth_success = await cls._authenticate(force_new_token=True)
+                            if auth_success:
+                                Logger.info("✅ 토큰 재인증 성공 - 해외주식 API 재시도")
+                                return await cls.get_overseas_stock_price(exchange, symbol, retry_count + 1)
+                            else:
+                                Logger.error("❌ 토큰 재인증 실패")
+                                return None
+                        else:
+                            Logger.error("❌ 재시도 횟수 초과 - 해외주식 API 호출 포기")
+                            return None
+                    
                     Logger.error(f"해외주식 가격 조회 실패: {response.status} - {error_text}")
                     return None
                     
@@ -514,7 +673,7 @@ class KoreaInvestmentService:
     
     @classmethod
     async def health_check(cls) -> Dict[str, any]:
-        """Korea Investment API 연결 상태 확인 (삼성전자 주가 조회로 테스트)"""
+        """Korea Investment API 연결 상태 확인 (REST + WebSocket 통합 테스트)"""
         if not cls._initialized:
             return {
                 "healthy": False,
@@ -522,30 +681,139 @@ class KoreaInvestmentService:
                 "status": "not_initialized"
             }
         
+        results = {
+            "healthy": True,
+            "status": "all_connected",
+            "rest_api": {},
+            "websocket": {}
+        }
+        
+        # 1. IOCP WebSocket 테스트 먼저 실행 (appkey 충돌 방지)
         try:
-            # 삼성전자(005930) 주가 조회로 API 연결 테스트
+            from .korea_investment_websocket_iocp import KoreaInvestmentWebSocketIOCP
+            
+            Logger.info("🚀 IOCP WebSocket 테스트 시작")
+            
+            # IOCP WebSocket 인스턴스 생성
+            iocp_ws = KoreaInvestmentWebSocketIOCP()
+            
+            try:
+                # 연결 시도
+                connection_success = await iocp_ws.connect(cls._app_key, cls._app_secret)
+                
+                if connection_success:
+                    # 구독 테스트
+                    subscribe_success = await iocp_ws.subscribe_stock("005930")
+                    
+                    # 데이터 수신 대기 (2초)
+                    await asyncio.sleep(2)
+                    
+                    # 구독 취소 테스트 (완료까지 대기)
+                    unsubscribe_success = await iocp_ws.unsubscribe_stock("005930")
+                    
+                    # 연결 해제
+                    await iocp_ws.disconnect()
+                    
+                    # ⭐ 완전 종료 대기 (이벤트 기반) ⭐
+                    Logger.info("⏳ IOCP WebSocket 완전 종료 대기 중...")
+                    shutdown_success = await iocp_ws.wait_for_complete_shutdown(timeout=5.0)
+                    
+                    if shutdown_success:
+                        Logger.info("✅ IOCP WebSocket 완전 종료 확인")
+                    else:
+                        Logger.warn("⚠️ IOCP WebSocket 종료 타임아웃")
+                    
+                    websocket_test_success = connection_success and subscribe_success and unsubscribe_success
+                    
+                    results["websocket"] = {
+                        "healthy": websocket_test_success,
+                        "test_result": "IOCP WebSocket 연결/구독/구독취소 테스트 완료" if websocket_test_success else "IOCP WebSocket 테스트 실패",
+                        "connection": connection_success,
+                        "subscribe": subscribe_success,
+                        "unsubscribe": unsubscribe_success,
+                        "shutdown": shutdown_success
+                    }
+                    
+                    if websocket_test_success:
+                        Logger.info("✅ IOCP WebSocket 테스트 완료")
+                    else:
+                        Logger.error("❌ IOCP WebSocket 테스트 실패")
+                        results["healthy"] = False
+                else:
+                    results["websocket"] = {
+                        "healthy": False,
+                        "error": "IOCP WebSocket 연결 실패"
+                    }
+                    results["healthy"] = False
+                    Logger.error("❌ IOCP WebSocket 연결 실패")
+                    
+            except Exception as ws_e:
+                Logger.error(f"❌ IOCP WebSocket 테스트 내부 예외: {ws_e}")
+                results["websocket"] = {
+                    "healthy": False,
+                    "error": f"IOCP WebSocket 테스트 예외: {str(ws_e)}"
+                }
+                results["healthy"] = False
+            finally:
+                # 최종 정리 - 강제 해제 시도
+                try:
+                    await iocp_ws.disconnect()
+                    await iocp_ws.wait_for_complete_shutdown(timeout=2.0)
+                except Exception as cleanup_e:
+                    Logger.error(f"❌ IOCP WebSocket 정리 중 예외: {cleanup_e}")
+                    
+        except Exception as e:
+            results["websocket"] = {
+                "healthy": False,
+                "error": f"IOCP WebSocket 모듈 로드 실패: {str(e)}"
+            }
+            results["healthy"] = False
+            Logger.error(f"❌ IOCP WebSocket 테스트 예외: {e}")
+        
+        # WebSocket 테스트가 완전히 끝났으므로 REST API 테스트 시작
+        Logger.info("🔄 WebSocket 테스트 완료 → REST API 테스트 시작")
+        
+        # 2. REST API 테스트 실행 (WebSocket 테스트 완료 후)
+        try:
+            Logger.info("🚀 REST API 테스트 시작 (WebSocket 완료 후)")
             test_result = await cls.get_stock_price("005930")
             
             if test_result:
                 current_price = test_result.get('stck_prpr', '0')
-                return {
+                results["rest_api"] = {
                     "healthy": True,
-                    "status": "connected",
                     "test_api": "주식현재가조회",
                     "test_symbol": "005930(삼성전자)",
-                    "test_result": f"현재가: {current_price}원",
-                    "response_time": "success"
+                    "test_result": f"현재가: {current_price}원"
                 }
+                Logger.info(f"✅ Korea Investment REST API 테스트 완료: 현재가: {current_price}원")
             else:
-                return {
+                results["rest_api"] = {
                     "healthy": False,
-                    "error": "API 호출은 성공했지만 데이터가 없습니다",
-                    "status": "no_data"
+                    "error": "API 호출은 성공했지만 데이터가 없습니다"
                 }
+                results["healthy"] = False
                 
         except Exception as e:
-            return {
+            results["rest_api"] = {
                 "healthy": False,
-                "error": f"API 연결 테스트 실패: {str(e)}",
-                "status": "connection_failed"
-            } 
+                "error": f"REST API 연결 실패: {str(e)}"
+            }
+            results["healthy"] = False
+            Logger.error(f"❌ REST API 테스트 실패: {e}")
+        
+        # 전체 상태 결정
+        if results["rest_api"].get("healthy") and results["websocket"].get("healthy"):
+            results["status"] = "all_connected"
+            Logger.info("✅ Korea Investment 서비스 (REST + WebSocket) 초기화 완료")
+        elif results["rest_api"].get("healthy"):
+            results["status"] = "rest_only"
+            Logger.warn("⚠️ Korea Investment 서비스: REST만 사용 가능")
+        elif results["websocket"].get("healthy"):
+            results["status"] = "websocket_only"
+            Logger.warn("⚠️ Korea Investment 서비스: WebSocket만 사용 가능")
+        else:
+            results["status"] = "connection_failed"
+            Logger.error("❌ Korea Investment 서비스: 모든 연결 실패")
+            
+        return results 

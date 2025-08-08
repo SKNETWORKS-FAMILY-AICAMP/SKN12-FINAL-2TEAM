@@ -26,7 +26,7 @@ class ExternalService:
         if config.korea_investment:
             try:
                 from service.external.korea_investment_service import KoreaInvestmentService
-                from service.external.korea_investment_websocket import get_korea_investment_websocket
+                from service.external.korea_investment_websocket_iocp import get_korea_investment_websocket
                 from service.service_container import ServiceContainer
                 
                 ki_config = config.korea_investment
