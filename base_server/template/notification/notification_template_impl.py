@@ -4,7 +4,8 @@ from template.notification.common.notification_serialize import (
     NotificationMarkReadRequest, NotificationMarkReadResponse,
     NotificationMarkAllReadRequest, NotificationMarkAllReadResponse,
     NotificationDeleteRequest, NotificationDeleteResponse,
-    NotificationStatsRequest, NotificationStatsResponse
+    NotificationStatsRequest, NotificationStatsResponse,
+    NotificationCreateRequest, NotificationCreateResponse
 )
 from template.notification.common.notification_model import (
     InAppNotification, NotificationStats, NotificationType, NotificationPriority
@@ -360,6 +361,110 @@ class NotificationTemplateImpl(BaseTemplate):
             response.current_unread_count = 0
             response.errorCode = 1000
             Logger.error(f"알림 통계 조회 오류: {e}")
+        
+        return response
+    
+    # ========================================
+    # 운영자 알림 생성 (OPERATOR 권한 필요)
+    # ========================================
+    async def on_notification_create_req(self, client_session, request: NotificationCreateRequest):
+        """운영자 알림 생성 요청 (운영진용)"""
+        response = NotificationCreateResponse()
+        response.sequence = request.sequence
+        
+        try:
+            # 운영자 권한 확인은 TemplateService.run_operator에서 이미 처리됨
+            operator_account_key = getattr(client_session.session, 'account_db_key', 0)
+            
+            Logger.info(f"운영자 알림 생성: operator={operator_account_key}, target={request.target_type}, title={request.title}")
+            
+            database_service = ServiceContainer.get_database_service()
+            
+            # 대상 사용자 목록 결정
+            target_users = []
+            if request.target_type == "ALL":
+                # 전체 사용자 - 프로시저에서 처리
+                target_users = None
+            elif request.target_type == "SPECIFIC_USER":
+                target_users = request.target_users or []
+                if not target_users:
+                    response.notification_ids = []
+                    response.created_count = 0
+                    response.message = "특정 사용자 지정 시 target_users가 필요합니다"
+                    response.errorCode = 9001
+                    return response
+            elif request.target_type == "USER_GROUP":
+                # 사용자 그룹 (PREMIUM, FREE 등) - 프로시저에서 처리
+                if not request.user_group:
+                    response.notification_ids = []
+                    response.created_count = 0
+                    response.message = "사용자 그룹 지정 시 user_group이 필요합니다"
+                    response.errorCode = 9002
+                    return response
+            
+            # JSON 데이터 직렬화
+            data_json = json.dumps(request.data) if request.data else None
+            
+            # 알림 생성 프로시저 호출
+            db_result = await database_service.call_procedure(
+                "fp_operator_notification_create",
+                (
+                    request.target_type,
+                    json.dumps(target_users) if target_users else None,
+                    request.user_group,
+                    request.type_id,
+                    request.title,
+                    request.message,
+                    data_json,
+                    request.priority,
+                    request.expires_at,
+                    operator_account_key  # 생성자 기록용
+                )
+            )
+            
+            if not db_result:
+                response.notification_ids = []
+                response.created_count = 0
+                response.message = "알림 생성 실패"
+                response.errorCode = 9003
+                return response
+            
+            # 결과 처리
+            result_row = db_result[0] if db_result else {}
+            db_result_status = result_row.get('result', 'FAILED')
+            
+            if db_result_status == 'SUCCESS':
+                created_count = int(result_row.get('created_count', 0))
+                notification_ids_str = result_row.get('notification_ids', '')
+                
+                # 생성된 알림 ID 목록 파싱
+                notification_ids = []
+                if notification_ids_str:
+                    try:
+                        notification_ids = json.loads(notification_ids_str)
+                    except json.JSONDecodeError:
+                        # JSON 파싱 실패 시 문자열 분리
+                        notification_ids = [id.strip() for id in notification_ids_str.split(',') if id.strip()]
+                
+                response.notification_ids = notification_ids
+                response.created_count = created_count
+                response.message = f"{created_count}개 알림이 생성되었습니다"
+                response.errorCode = 0
+                
+                Logger.info(f"운영자 알림 생성 성공: {created_count}개 생성")
+                
+            else:
+                response.notification_ids = []
+                response.created_count = 0
+                response.message = result_row.get('message', '알림 생성 실패')
+                response.errorCode = 9004
+            
+        except Exception as e:
+            response.notification_ids = []
+            response.created_count = 0
+            response.message = "알림 생성 중 오류 발생"
+            response.errorCode = 1000
+            Logger.error(f"운영자 알림 생성 오류: {e}")
         
         return response
     

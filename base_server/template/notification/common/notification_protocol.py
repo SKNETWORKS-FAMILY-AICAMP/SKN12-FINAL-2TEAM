@@ -1,6 +1,6 @@
 from .notification_serialize import (
     NotificationListRequest, NotificationMarkReadRequest, NotificationMarkAllReadRequest,
-    NotificationDeleteRequest, NotificationStatsRequest
+    NotificationDeleteRequest, NotificationStatsRequest, NotificationCreateRequest
 )
 
 class NotificationProtocol:
@@ -12,6 +12,7 @@ class NotificationProtocol:
         self.on_notification_mark_all_read_req_callback = None
         self.on_notification_delete_req_callback = None
         self.on_notification_stats_req_callback = None
+        self.on_notification_create_req_callback = None  # 운영자용 알림 생성
 
     async def notification_list_req_controller(self, session, msg: bytes, length: int):
         """인앱 알림 목록 조회"""
@@ -47,3 +48,10 @@ class NotificationProtocol:
         if self.on_notification_stats_req_callback:
             return await self.on_notification_stats_req_callback(session, request)
         raise NotImplementedError('on_notification_stats_req_callback is not set')
+
+    async def notification_create_req_controller(self, session, msg: bytes, length: int):
+        """운영자 알림 생성 (OPERATOR 권한 필요)"""
+        request = NotificationCreateRequest.model_validate_json(msg)
+        if self.on_notification_create_req_callback:
+            return await self.on_notification_create_req_callback(session, request)
+        raise NotImplementedError('on_notification_create_req_callback is not set')

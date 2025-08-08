@@ -637,18 +637,458 @@ CREATE TABLE IF NOT EXISTS `table_inapp_notification_stats` (
 -- Shard 2 프로시저 복사 (간소화 - 실제로는 모든 프로시저 복사 필요)
 -- =====================================
 
--- TODO: 실제 운영에서는 모든 프로시저를 Shard 2에도 동일하게 생성 필요:
--- - fp_inapp_notification_create              (알림 생성)
--- - fp_inapp_notifications_get_unread         (읽지않은 알림 조회)
--- - fp_inapp_notifications_get_read_and_delete (읽은 알림 조회 + 자동 삭제)
--- - fp_inapp_notifications_get_all            (전체 알림 목록 조회)
--- - fp_inapp_notification_mark_read           (읽음 처리)
--- - fp_inapp_notifications_mark_all_read      (일괄 읽음 처리)
--- - fp_inapp_notification_soft_delete         (소프트 삭제)
--- - fp_inapp_notification_stats_get           (통계 조회)
--- - fp_inapp_notifications_cleanup_expired    (만료 정리)
+-- 모든 프로시저를 Shard 2에도 동일하게 생성:
 
--- 대표 프로시저 하나만 예시로 복사 (알림 생성)
+-- 📋 읽지 않은 알림 목록 조회 (삭제 처리 없음)
+DROP PROCEDURE IF EXISTS `fp_inapp_notifications_get_unread`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_inapp_notifications_get_unread`(
+    IN p_account_db_key BIGINT UNSIGNED,
+    IN p_type_id VARCHAR(64),  -- NULL: 전체 타입
+    IN p_limit INT,
+    IN p_offset INT
+)
+BEGIN
+    DECLARE ProcParam VARCHAR(4000);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET ProcParam = CONCAT(p_account_db_key, ',', IFNULL(p_type_id, 'NULL'));
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_inapp_notifications_get_unread', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        RESIGNAL;
+    END;
+    
+    -- 읽지 않은 알림만 조회 (삭제 처리 없음)
+    SELECT 
+        idx,
+        notification_id,
+        type_id,
+        title,
+        message,
+        data,
+        priority,
+        is_read,
+        read_at,
+        expires_at,
+        created_at,
+        updated_at
+    FROM table_inapp_notifications
+    WHERE account_db_key = p_account_db_key
+        AND is_deleted = 0
+        AND is_read = 0  -- 읽지 않은 것만
+        AND (p_type_id IS NULL OR type_id = p_type_id)
+        AND (expires_at IS NULL OR expires_at > NOW(6))
+    ORDER BY 
+        priority ASC,  -- 우선순위 높은 것부터
+        created_at DESC
+    LIMIT p_limit OFFSET p_offset;
+    
+END ;;
+DELIMITER ;
+
+-- 🎮 읽은 알림 목록 조회 + 자동 삭제 (게임 패턴)
+DROP PROCEDURE IF EXISTS `fp_inapp_notifications_get_read_and_delete`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_inapp_notifications_get_read_and_delete`(
+    IN p_account_db_key BIGINT UNSIGNED,
+    IN p_type_id VARCHAR(64),  -- NULL: 전체 타입
+    IN p_limit INT,
+    IN p_offset INT
+)
+BEGIN
+    DECLARE v_deleted_count INT DEFAULT 0;
+    DECLARE ProcParam VARCHAR(4000);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET ProcParam = CONCAT(p_account_db_key, ',', IFNULL(p_type_id, 'NULL'));
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        ROLLBACK;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_inapp_notifications_get_read_and_delete', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        RESIGNAL;
+    END;
+    
+    START TRANSACTION;
+    
+    -- 임시 테이블 생성하여 조회할 읽은 알림 저장
+    CREATE TEMPORARY TABLE temp_read_notifications AS
+    SELECT 
+        idx,
+        notification_id,
+        type_id,
+        title,
+        message,
+        data,
+        priority,
+        is_read,
+        read_at,
+        expires_at,
+        created_at,
+        updated_at
+    FROM table_inapp_notifications
+    WHERE account_db_key = p_account_db_key
+        AND is_deleted = 0
+        AND is_read = 1  -- 읽은 것만
+        AND (p_type_id IS NULL OR type_id = p_type_id)
+        AND (expires_at IS NULL OR expires_at > NOW(6))
+    ORDER BY 
+        read_at DESC,  -- 읽은 시간 순
+        created_at DESC
+    LIMIT p_limit OFFSET p_offset;
+    
+    -- 조회된 읽은 알림들을 소프트 삭제 (게임 패턴)
+    UPDATE table_inapp_notifications n
+    INNER JOIN temp_read_notifications t ON n.notification_id = t.notification_id
+    SET n.is_deleted = 1,
+        n.updated_at = NOW(6);
+    
+    SET v_deleted_count = ROW_COUNT();
+    
+    -- 통계 업데이트 (자동 삭제 카운트)
+    IF v_deleted_count > 0 THEN
+        UPDATE table_inapp_notification_stats
+        SET read_count = GREATEST(read_count - v_deleted_count, 0),
+            total_count = GREATEST(total_count - v_deleted_count, 0),
+            auto_deleted_count = auto_deleted_count + v_deleted_count,
+            updated_at = NOW()
+        WHERE account_db_key = p_account_db_key 
+            AND date = CURDATE();
+    END IF;
+    
+    -- 결과 반환 (삭제 전 데이터)
+    SELECT * FROM temp_read_notifications;
+    
+    -- 임시 테이블 삭제
+    DROP TEMPORARY TABLE temp_read_notifications;
+    
+    COMMIT;
+    
+END ;;
+DELIMITER ;
+
+-- 📋 전체 알림 목록 조회 (읽음/안읽음 모두, 삭제 처리 없음)
+DROP PROCEDURE IF EXISTS `fp_inapp_notifications_get_all`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_inapp_notifications_get_all`(
+    IN p_account_db_key BIGINT UNSIGNED,
+    IN p_type_id VARCHAR(64),  -- NULL: 전체 타입
+    IN p_limit INT,
+    IN p_offset INT
+)
+BEGIN
+    DECLARE ProcParam VARCHAR(4000);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET ProcParam = CONCAT(p_account_db_key, ',', IFNULL(p_type_id, 'NULL'));
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_inapp_notifications_get_all', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        RESIGNAL;
+    END;
+    
+    -- 전체 알림 목록 조회 (읽음/안읽음 모두, 삭제 처리 없음)
+    SELECT 
+        idx,
+        notification_id,
+        type_id,
+        title,
+        message,
+        data,
+        priority,
+        is_read,
+        read_at,
+        expires_at,
+        created_at,
+        updated_at
+    FROM table_inapp_notifications
+    WHERE account_db_key = p_account_db_key
+        AND is_deleted = 0
+        AND (p_type_id IS NULL OR type_id = p_type_id)
+        AND (expires_at IS NULL OR expires_at > NOW(6))
+    ORDER BY 
+        is_read ASC,      -- 읽지 않은 것부터
+        priority ASC,     -- 우선순위 높은 것부터
+        created_at DESC
+    LIMIT p_limit OFFSET p_offset;
+    
+END ;;
+DELIMITER ;
+
+-- 인앱 알림 읽음 처리 (게임 방식 마킹)
+DROP PROCEDURE IF EXISTS `fp_inapp_notification_mark_read`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_inapp_notification_mark_read`(
+    IN p_notification_id VARCHAR(128),
+    IN p_account_db_key BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_notification_exists INT DEFAULT 0;
+    DECLARE v_already_read INT DEFAULT 0;
+    DECLARE ProcParam VARCHAR(4000);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET ProcParam = CONCAT(p_notification_id, ',', p_account_db_key);
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        ROLLBACK;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_inapp_notification_mark_read', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        RESIGNAL;
+    END;
+    
+    START TRANSACTION;
+    
+    -- 알림 존재 및 읽음 상태 확인
+    SELECT 
+        COUNT(*) as exists_count,
+        SUM(is_read) as read_count
+    INTO v_notification_exists, v_already_read
+    FROM table_inapp_notifications
+    WHERE notification_id = p_notification_id 
+        AND account_db_key = p_account_db_key 
+        AND is_deleted = 0;
+    
+    IF v_notification_exists = 0 THEN
+        ROLLBACK;
+        SELECT 'FAILED' as result, 'Notification not found' as message;
+    ELSEIF v_already_read > 0 THEN
+        ROLLBACK;
+        SELECT 'ALREADY_READ' as result, 'Notification already read' as message;
+    ELSE
+        -- 읽음 처리 (게임 방식: 마킹 + 시간 기록)
+        UPDATE table_inapp_notifications
+        SET is_read = 1, 
+            read_at = NOW(6), 
+            updated_at = NOW(6)
+        WHERE notification_id = p_notification_id 
+            AND account_db_key = p_account_db_key 
+            AND is_deleted = 0;
+        
+        -- 통계 업데이트 (읽음으로 이동)
+        UPDATE table_inapp_notification_stats
+        SET read_count = read_count + 1,
+            unread_count = GREATEST(unread_count - 1, 0),
+            updated_at = NOW()
+        WHERE account_db_key = p_account_db_key 
+            AND date = CURDATE();
+        
+        COMMIT;
+        SELECT 'SUCCESS' as result, 'Notification marked as read' as message;
+    END IF;
+    
+END ;;
+DELIMITER ;
+
+-- 인앱 알림 일괄 읽음 처리
+DROP PROCEDURE IF EXISTS `fp_inapp_notifications_mark_all_read`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_inapp_notifications_mark_all_read`(
+    IN p_account_db_key BIGINT UNSIGNED,
+    IN p_type_id VARCHAR(64)  -- NULL: 전체, 특정 타입만
+)
+BEGIN
+    DECLARE v_updated_count INT DEFAULT 0;
+    DECLARE ProcParam VARCHAR(4000);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET ProcParam = CONCAT(p_account_db_key, ',', IFNULL(p_type_id, 'NULL'));
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        ROLLBACK;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_inapp_notifications_mark_all_read', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        RESIGNAL;
+    END;
+    
+    START TRANSACTION;
+    
+    -- 읽지 않은 알림 모두 읽음 처리
+    UPDATE table_inapp_notifications
+    SET is_read = 1, 
+        read_at = NOW(6), 
+        updated_at = NOW(6)
+    WHERE account_db_key = p_account_db_key
+        AND is_read = 0
+        AND is_deleted = 0
+        AND (p_type_id IS NULL OR type_id = p_type_id)
+        AND (expires_at IS NULL OR expires_at > NOW(6));
+    
+    SET v_updated_count = ROW_COUNT();
+    
+    -- 통계 업데이트 (배치 읽음 처리)
+    IF v_updated_count > 0 THEN
+        UPDATE table_inapp_notification_stats
+        SET read_count = read_count + v_updated_count,
+            unread_count = GREATEST(unread_count - v_updated_count, 0),
+            updated_at = NOW()
+        WHERE account_db_key = p_account_db_key 
+            AND date = CURDATE();
+    END IF;
+    
+    COMMIT;
+    SELECT 'SUCCESS' as result, 
+           CONCAT(v_updated_count, ' notifications marked as read') as message, 
+           v_updated_count as updated_count;
+    
+END ;;
+DELIMITER ;
+
+-- 인앱 알림 소프트 삭제 (기존 패턴과 동일)
+DROP PROCEDURE IF EXISTS `fp_inapp_notification_soft_delete`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_inapp_notification_soft_delete`(
+    IN p_notification_id VARCHAR(128),
+    IN p_account_db_key BIGINT UNSIGNED
+)
+BEGIN
+    DECLARE v_notification_exists INT DEFAULT 0;
+    DECLARE v_is_read INT DEFAULT 0;
+    DECLARE ProcParam VARCHAR(4000);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET ProcParam = CONCAT(p_notification_id, ',', p_account_db_key);
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        ROLLBACK;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_inapp_notification_soft_delete', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        RESIGNAL;
+    END;
+    
+    START TRANSACTION;
+    
+    -- 알림 존재 확인
+    SELECT COUNT(*), SUM(is_read)
+    INTO v_notification_exists, v_is_read
+    FROM table_inapp_notifications
+    WHERE notification_id = p_notification_id 
+        AND account_db_key = p_account_db_key 
+        AND is_deleted = 0;
+    
+    IF v_notification_exists = 0 THEN
+        ROLLBACK;
+        SELECT 'FAILED' as result, 'Notification not found' as message;
+    ELSE
+        -- 소프트 삭제 (기존 패턴: is_deleted = 1)
+        UPDATE table_inapp_notifications
+        SET is_deleted = 1, 
+            updated_at = NOW(6)
+        WHERE notification_id = p_notification_id 
+            AND account_db_key = p_account_db_key;
+        
+        -- 통계 업데이트 (삭제된 것 반영)
+        IF v_is_read = 0 THEN
+            -- 읽지 않은 것이었다면 unread_count 감소
+            UPDATE table_inapp_notification_stats
+            SET total_count = GREATEST(total_count - 1, 0),
+                unread_count = GREATEST(unread_count - 1, 0),
+                updated_at = NOW()
+            WHERE account_db_key = p_account_db_key 
+                AND date = CURDATE();
+        ELSE
+            -- 읽은 것이었다면 read_count 감소
+            UPDATE table_inapp_notification_stats
+            SET total_count = GREATEST(total_count - 1, 0),
+                read_count = GREATEST(read_count - 1, 0),
+                updated_at = NOW()
+            WHERE account_db_key = p_account_db_key 
+                AND date = CURDATE();
+        END IF;
+        
+        COMMIT;
+        SELECT 'SUCCESS' as result, 'Notification soft deleted successfully' as message;
+    END IF;
+    
+END ;;
+DELIMITER ;
+
+-- 통계 조회 (시그널 통계 패턴과 동일)
+DROP PROCEDURE IF EXISTS `fp_inapp_notification_stats_get`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_inapp_notification_stats_get`(
+    IN p_account_db_key BIGINT UNSIGNED,
+    IN p_days INT  -- 최근 N일
+)
+BEGIN
+    DECLARE ProcParam VARCHAR(4000);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET ProcParam = CONCAT(p_account_db_key, ',', p_days);
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_inapp_notification_stats_get', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam);
+        RESIGNAL;
+    END;
+    
+    -- 일별 통계 조회
+    SELECT 
+        date,
+        total_count,
+        read_count,
+        unread_count,
+        priority_1_count,
+        priority_2_count,
+        priority_3_count,
+        auto_deleted_count,
+        created_at,
+        updated_at
+    FROM table_inapp_notification_stats
+    WHERE account_db_key = p_account_db_key
+        AND date >= DATE_SUB(CURDATE(), INTERVAL p_days DAY)
+    ORDER BY date DESC;
+    
+    -- 현재 읽지 않은 알림 수 (실시간)
+    SELECT COUNT(*) as current_unread_count
+    FROM table_inapp_notifications
+    WHERE account_db_key = p_account_db_key
+        AND is_read = 0
+        AND is_deleted = 0
+        AND (expires_at IS NULL OR expires_at > NOW(6));
+    
+END ;;
+DELIMITER ;
+
+-- 만료된 알림 정리 (배치용) - 시그널 성과 업데이트 패턴과 동일
+DROP PROCEDURE IF EXISTS `fp_inapp_notifications_cleanup_expired`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_inapp_notifications_cleanup_expired`()
+BEGIN
+    DECLARE v_deleted_count INT DEFAULT 0;
+    DECLARE ProcParam VARCHAR(4000);
+    
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        GET DIAGNOSTICS CONDITION 1 @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        ROLLBACK;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param)
+            VALUES ('fp_inapp_notifications_cleanup_expired', @ErrorState, @ErrorNo, @ErrorMessage, '');
+        RESIGNAL;
+    END;
+    
+    START TRANSACTION;
+    
+    -- 만료된 알림 소프트 삭제
+    UPDATE table_inapp_notifications
+    SET is_deleted = 1, 
+        updated_at = NOW(6)
+    WHERE expires_at IS NOT NULL 
+        AND expires_at <= NOW(6)
+        AND is_deleted = 0;
+    
+    SET v_deleted_count = ROW_COUNT();
+    
+    COMMIT;
+    SELECT 'SUCCESS' as result, 
+           CONCAT(v_deleted_count, ' expired notifications cleaned up') as message, 
+           v_deleted_count as deleted_count;
+    
+END ;;
+DELIMITER ;
 DROP PROCEDURE IF EXISTS `fp_inapp_notification_create`;
 DELIMITER ;;
 CREATE PROCEDURE `fp_inapp_notification_create`(

@@ -39,8 +39,19 @@ class MySQLClient:
             async with self.pool.acquire() as conn:
                 async with conn.cursor(aiomysql.DictCursor) as cursor:
                     await cursor.callproc(procedure_name, params)
-                    results = await cursor.fetchall()
-                    return results if results else []
+                    
+                    # 모든 result set을 하나로 합쳐서 반환
+                    all_results = []
+                    while True:
+                        result = await cursor.fetchall()
+                        if result:
+                            all_results.extend(result)
+                        
+                        # Check if there are more result sets
+                        if not cursor.nextset():
+                            break
+                    
+                    return all_results
         except Exception as e:
             # 연결 문제일 경우 재연결 시도
             if self._is_connection_error(e):
@@ -48,8 +59,19 @@ class MySQLClient:
                 async with self.pool.acquire() as conn:
                     async with conn.cursor(aiomysql.DictCursor) as cursor:
                         await cursor.callproc(procedure_name, params)
-                        results = await cursor.fetchall()
-                        return results if results else []
+                        
+                        # 모든 result set을 하나로 합쳐서 반환
+                        all_results = []
+                        while True:
+                            result = await cursor.fetchall()
+                            if result:
+                                all_results.extend(result)
+                            
+                            # Check if there are more result sets
+                            if not cursor.nextset():
+                                break
+                        
+                        return all_results
             else:
                 raise
     

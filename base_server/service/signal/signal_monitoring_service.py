@@ -238,21 +238,17 @@ class SignalMonitoringService:
             
             Logger.debug(f"프로시저 결과: {len(result)}개 행, 첫 번째 행: {result[0]}")
             
-            # 첫 번째 행은 상태 확인
+            # 첫 번째 행은 상태 확인 (ErrorCode, ErrorMessage)
             if len(result) >= 1:
                 proc_result = result[0]
                 if proc_result.get('ErrorCode', 1) != 0:
                     Logger.error(f"활성 샤드 조회 프로시저 오류: {proc_result.get('ErrorMessage', '')}")
                     return []
             
-            # 두 번째 행부터가 샤드 데이터 (프로시저가 2개 결과셋을 반환)
-            if len(result) < 2:
-                Logger.warn("활성 샤드 데이터가 없습니다")
-                return []
-            
+            # 두 번째 행부터가 샤드 데이터 (shard_id, shard_name, host, port, database_name, status, max_connections)
             active_shard_ids = []
-            # result[1]부터 샤드 데이터
-            for shard_data in result[1:]:
+            for i in range(1, len(result)):
+                shard_data = result[i]
                 shard_id = shard_data.get('shard_id')
                 status = shard_data.get('status', '')
                 if shard_id and status == 'active':

@@ -3,7 +3,7 @@ from template.base.template_context import TemplateContext, TemplateType
 from template.base.template_service import TemplateService
 from template.notification.common.notification_serialize import (
     NotificationListRequest, NotificationMarkReadRequest, NotificationMarkAllReadRequest,
-    NotificationDeleteRequest, NotificationStatsRequest
+    NotificationDeleteRequest, NotificationStatsRequest, NotificationCreateRequest
 )
 from template.notification.common.notification_protocol import NotificationProtocol
 
@@ -19,6 +19,7 @@ def setup_notification_protocol_callbacks():
     notification_protocol.on_notification_mark_all_read_req_callback = getattr(notification_template, "on_notification_mark_all_read_req", None)
     notification_protocol.on_notification_delete_req_callback = getattr(notification_template, "on_notification_delete_req", None)
     notification_protocol.on_notification_stats_req_callback = getattr(notification_template, "on_notification_stats_req", None)
+    notification_protocol.on_notification_create_req_callback = getattr(notification_template, "on_notification_create_req", None)
 
 @router.post("/list")
 async def notification_list(request: NotificationListRequest, req: Request):
@@ -98,4 +99,20 @@ async def notification_stats(request: NotificationStatsRequest, req: Request):
         ip,
         request.model_dump_json(),
         notification_protocol.notification_stats_req_controller
+    )
+
+@router.post("/create")
+async def notification_create(request: NotificationCreateRequest, req: Request):
+    """운영자 알림 생성 (OPERATOR 권한 필요)"""
+    ip = req.headers.get("X-Forwarded-For")
+    if not ip:
+        ip = req.client.host
+    else:
+        ip = ip.split(", ")[0]
+    return await TemplateService.run_operator(
+        req.method,
+        req.url.path,
+        ip,
+        request.model_dump_json(),
+        notification_protocol.notification_create_req_controller
     )
