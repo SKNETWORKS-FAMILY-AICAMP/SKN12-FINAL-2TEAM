@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Set, Tuple
 from datetime import datetime, timedelta
 from service.core.logger import Logger
 from service.service_container import ServiceContainer
-from service.external.korea_investment_websocket import KoreaInvestmentWebSocket
+from service.external.korea_investment_websocket_iocp import KoreaInvestmentWebSocketIOCP
 from service.external.yahoo_finance_client import YahooFinanceClient
 from service.external.external_service import ExternalService
 from service.cache.cache_service import CacheService
@@ -22,7 +22,7 @@ class SignalMonitoringService:
     
     _initialized = False
     _monitoring_symbols: Set[str] = set()  # 모니터링 중인 종목
-    _korea_websocket: Optional[KoreaInvestmentWebSocket] = None
+    _korea_websocket: Optional[KoreaInvestmentWebSocketIOCP] = None
     _scheduler_job_ids: Set[str] = set()  # 스케줄러 작업 ID들
     
     # 캐시 키 패턴
@@ -39,8 +39,8 @@ class SignalMonitoringService:
             return
         
         try:
-            # 한국투자증권 WebSocket 초기화 (ExternalService에서 이미 KoreaInvestmentService 초기화됨)
-            cls._korea_websocket = KoreaInvestmentWebSocket()
+            # 한국투자증권 IOCP WebSocket 초기화
+            cls._korea_websocket = KoreaInvestmentWebSocketIOCP()
             
             # ServiceContainer에서 이미 초기화된 KoreaInvestmentService 확인
             try:
@@ -206,7 +206,7 @@ class SignalMonitoringService:
         try:
             # 미국 주식만 처리
             if cls._is_us_stock(symbol):
-                if cls._korea_websocket and cls._korea_websocket.is_connected:
+                if cls._korea_websocket and cls._korea_websocket.is_connected():
                     # 거래소 결정 (기본 NASDAQ)
                     exchange = "NASD"
                     nyse_stocks = ['KO', 'BA', 'DIS', 'IBM', 'GE', 'F', 'GM', 'WMT', 'JPM', 'BAC']

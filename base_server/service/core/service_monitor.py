@@ -240,13 +240,13 @@ class ServiceMonitor:
                 self._record_success(service_name, 0, ServiceStatus.DEGRADED)
                 return
             
-            # WebSocket 연결 상태도 체크
-            from service.external.korea_investment_websocket import get_korea_investment_websocket
+            # IOCP WebSocket 연결 상태도 체크
+            from service.external.korea_investment_websocket_iocp import get_korea_investment_websocket
             websocket = await get_korea_investment_websocket()
             
             response_time = (time.time() - start_time) * 1000
             
-            if websocket.is_connected:
+            if websocket.is_connected():
                 self._record_success(service_name, response_time)
             else:
                 self._record_success(service_name, response_time, ServiceStatus.DEGRADED)
