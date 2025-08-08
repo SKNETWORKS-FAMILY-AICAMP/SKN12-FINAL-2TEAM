@@ -84,6 +84,12 @@ class ServiceContainer:
     def get_lock_service(cls):
         from service.lock.lock_service import LockService
         return LockService
+    
+    @classmethod
+    def get_external_service(cls):
+        """ExternalService 인스턴스 반환"""
+        from service.external.external_service import ExternalService
+        return ExternalService
 
     # 서비스 초기화 플래그 설정/확인 메서드
     @classmethod

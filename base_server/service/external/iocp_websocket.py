@@ -438,6 +438,16 @@ class IOCPWebSocket:
             data = event.data["message"]
             Logger.info(f"📨 데이터 수신: {self.connection_id}")
             
+            # 🔍 실제 수신 데이터 내용 로깅 (디버깅용)
+            if isinstance(data, dict):
+                # JSON 데이터인 경우 구조 확인
+                data_keys = list(data.keys()) if data else []
+                Logger.info(f"🔍 수신 데이터 구조: {data_keys}")
+                Logger.info(f"🔍 수신 데이터 내용: {data}")
+            else:
+                # 문자열 데이터인 경우
+                Logger.info(f"🔍 수신 RAW 데이터: {data}")
+            
             # 메시지 인터셉터 호출
             for interceptor in self._message_interceptors:
                 try:

@@ -39,21 +39,36 @@ class SignalMonitoringService:
             return
         
         try:
-            # 한국투자증권 IOCP WebSocket 초기화
-            cls._korea_websocket = KoreaInvestmentWebSocketIOCP()
+            # ServiceContainer에서 검증된 한투증권 서비스 인스턴스 획득
+            cls._korea_websocket = None
             
-            # ServiceContainer에서 이미 초기화된 KoreaInvestmentService 확인
             try:
                 from service.service_container import ServiceContainer
                 
-                # ExternalService에서 이미 ServiceContainer에 등록했는지 확인
+                # ExternalService에서 이미 초기화되고 검증된 인스턴스 사용
                 if ServiceContainer.is_korea_investment_service_initialized():
                     Logger.info("✅ KoreaInvestmentService 이미 초기화됨 (ExternalService)")
+                    
+                    # 검증된 WebSocket 인스턴스 획득
+                    cls._korea_websocket = ServiceContainer.get_korea_investment_websocket()
+                    if cls._korea_websocket:
+                        Logger.info("🔗 ServiceContainer에서 검증된 WebSocket 인스턴스 획득")
+                        
+                        # 연결 상태 확인
+                        if cls._korea_websocket.is_connected():
+                            Logger.info("✅ WebSocket 이미 연결됨 - 즉시 사용 가능")
+                        else:
+                            Logger.info("🔌 WebSocket 연결되지 않음 - 구독 시 자동 연결 시도")
+                    else:
+                        Logger.error("❌ ServiceContainer에서 WebSocket 인스턴스 획득 실패")
+                        
                 else:
-                    Logger.warn("⚠️ KoreaInvestmentService 초기화되지 않음 - WebSocket 기능 제한")
+                    Logger.error("❌ KoreaInvestmentService 초기화되지 않음")
+                    Logger.error("🚨 ExternalService 초기화가 선행되어야 합니다")
                     
             except Exception as service_e:
-                Logger.warn(f"⚠️ ServiceContainer 확인 실패: {service_e} - WebSocket 기능 제한")
+                Logger.error(f"❌ ServiceContainer 접근 실패: {service_e}")
+                Logger.error("🚨 한투증권 WebSocket 기능을 사용할 수 없습니다")
             
             # SchedulerService는 이미 상단에서 import됨
             
@@ -69,6 +84,71 @@ class SignalMonitoringService:
             )
             await SchedulerService.add_job(sync_job)
             cls._scheduler_job_ids.add(sync_job.job_id)
+            
+            # 🩺 안전한 WebSocket 상태 확인 (기존 연결 보존)
+            Logger.info("🩺 WebSocket 상태 확인 시작 (연결 보존 모드)")
+            try:
+                from service.service_container import ServiceContainer
+                
+                # 1. REST API만 테스트 (안전)
+                korea_service = ServiceContainer.get_korea_investment_service()
+                if korea_service:
+                    Logger.info("🌐 REST API 상태 확인 중...")
+                    try:
+                        # 삼성전자 현재가 조회로 REST API 테스트
+                        test_result = await korea_service.get_stock_price("005930")
+                        if test_result:
+                            current_price = test_result.get('stck_prpr', '0')
+                            Logger.info(f"✅ REST API 정상: 삼성전자 현재가 {current_price}원")
+                        else:
+                            Logger.warn("⚠️ REST API 응답 없음")
+                    except Exception as rest_e:
+                        Logger.error(f"❌ REST API 테스트 실패: {rest_e}")
+                
+                # 2. 기존 WebSocket 연결 상태만 확인 (해제하지 않음)
+                if cls._korea_websocket:
+                    is_connected = cls._korea_websocket.is_connected()
+                    Logger.info(f"📡 기존 WebSocket 연결 상태: {'✅ 연결됨' if is_connected else '❌ 끊어짐'}")
+                    
+                    if is_connected:
+                        Logger.info("✅ WebSocket 연결 정상 - 기존 구독 유지하며 AAPL 추가 구독")
+                    else:
+                        Logger.warn("⚠️ WebSocket 연결 끊어짐 - 재연결 후 AAPL 구독 시도")
+                else:
+                    Logger.warn("⚠️ WebSocket 인스턴스 없음")
+                    
+                Logger.info("📊 ===== 안전한 상태 확인 완료 =====")
+                Logger.info("🔒 기존 WebSocket 연결 및 구독 상태 보존됨")
+                Logger.info("======================================")
+                
+            except Exception as health_e:
+                Logger.error(f"❌ WebSocket 상태 확인 실패: {health_e}")
+                import traceback
+                Logger.error(f"Traceback: {traceback.format_exc()}")
+            
+            # 테스트용 AAPL 자동 구독 
+            Logger.info("🍎 테스트용 AAPL 자동 구독 시작")
+            await cls.subscribe_symbol("AAPL")
+            Logger.info("🍎 AAPL 구독 완료 - 실시간 데이터 수신 시작")
+            
+            # WebSocket 연결 상태 주기적 체크 (1분마다)
+            async def websocket_health_monitor():
+                while cls._initialized:
+                    try:
+                        if cls._korea_websocket:
+                            is_connected = cls._korea_websocket.is_connected()
+                            monitoring_count = len(cls._monitoring_symbols)
+                            Logger.info(f"📡 WebSocket 상태체크: 연결={'✅' if is_connected else '❌'}, 구독종목={monitoring_count}개 {list(cls._monitoring_symbols)}")
+                        else:
+                            Logger.warn("⚠️ WebSocket 인스턴스 없음")
+                    except Exception as monitor_e:
+                        Logger.error(f"❌ WebSocket 상태체크 에러: {monitor_e}")
+                    
+                    # 60초 대기
+                    await asyncio.sleep(60)
+            
+            # 백그라운드 태스크로 실행
+            asyncio.create_task(websocket_health_monitor())
             
             # 매일 자정에 성과 업데이트
             performance_job = ScheduleJob(
@@ -152,27 +232,40 @@ class SignalMonitoringService:
                 ()
             )
             
-            if not result or len(result) < 2:
+            if not result:
                 Logger.warn("활성 샤드 조회 실패, 빈 결과")
                 return []
             
-            # 첫 번째는 상태, 두 번째부터는 샤드 데이터
-            proc_result = result[0]
-            if proc_result.get('ErrorCode', 1) != 0:
-                Logger.error(f"활성 샤드 조회 프로시저 오류: {proc_result.get('ErrorMessage', '')}")
+            Logger.debug(f"프로시저 결과: {len(result)}개 행, 첫 번째 행: {result[0]}")
+            
+            # 첫 번째 행은 상태 확인
+            if len(result) >= 1:
+                proc_result = result[0]
+                if proc_result.get('ErrorCode', 1) != 0:
+                    Logger.error(f"활성 샤드 조회 프로시저 오류: {proc_result.get('ErrorMessage', '')}")
+                    return []
+            
+            # 두 번째 행부터가 샤드 데이터 (프로시저가 2개 결과셋을 반환)
+            if len(result) < 2:
+                Logger.warn("활성 샤드 데이터가 없습니다")
                 return []
             
             active_shard_ids = []
+            # result[1]부터 샤드 데이터
             for shard_data in result[1:]:
                 shard_id = shard_data.get('shard_id')
                 status = shard_data.get('status', '')
                 if shard_id and status == 'active':
                     active_shard_ids.append(shard_id)
+                    Logger.debug(f"활성 샤드 발견: {shard_id} ({status})")
             
+            Logger.info(f"활성 샤드 조회 성공: {active_shard_ids}")
             return active_shard_ids
             
         except Exception as e:
             Logger.error(f"활성 샤드 조회 실패: {e}")
+            import traceback
+            Logger.error(f"Traceback: {traceback.format_exc()}")
             return []
     
     @classmethod
@@ -199,42 +292,68 @@ class SignalMonitoringService:
     
     @classmethod
     async def subscribe_symbol(cls, symbol: str):
-        """종목 실시간 구독 시작"""
+        """종목 실시간 구독 시작 - 신뢰성 있는 연결 보장"""
         if symbol in cls._monitoring_symbols:
+            Logger.info(f"🔄 이미 구독 중인 종목: {symbol}")
             return
         
         try:
             # 미국 주식만 처리
-            if cls._is_us_stock(symbol):
-                if cls._korea_websocket and cls._korea_websocket.is_connected():
-                    # 거래소 결정 (기본 NASDAQ)
-                    exchange = "NASD"
-                    nyse_stocks = ['KO', 'BA', 'DIS', 'IBM', 'GE', 'F', 'GM', 'WMT', 'JPM', 'BAC']
-                    if symbol in nyse_stocks:
-                        exchange = "NYSE"
-                    
-                    # 미국주식 실시간 구독
-                    await cls._korea_websocket.subscribe_overseas_stock_price(
-                        exchange,
-                        [symbol],
-                        lambda data: asyncio.create_task(cls._handle_us_stock_data(symbol, data))
-                    )
-                    Logger.info(f"✅ 미국주식 구독: {exchange}^{symbol}")
-                else:
-                    Logger.warn(f"WebSocket 연결 없음, 구독 건너뜀: {symbol}")
-                    return
-            else:
-                Logger.info(f"한국주식은 미지원: {symbol}")
+            if not cls._is_us_stock(symbol):
+                Logger.info(f"⚠️ 한국주식은 현재 미지원: {symbol}")
                 return
             
-            # 5일치 데이터 캐싱
-            await cls._cache_historical_data(symbol)
+            # WebSocket 인스턴스 상태 검증
+            if not cls._korea_websocket:
+                Logger.error(f"❌ WebSocket 인스턴스 없음, 구독 불가: {symbol}")
+                return
+                
+            # 연결 상태 확인 및 자동 재연결 시도
+            connection_ready = await cls._ensure_websocket_connection()
+            if not connection_ready:
+                Logger.error(f"❌ WebSocket 연결 실패, 구독 불가: {symbol}")
+                return
             
-            cls._monitoring_symbols.add(symbol)
-            Logger.info(f"✅ 종목 구독 시작: {symbol}")
+            # 거래소 결정 (기본 NASDAQ)
+            exchange = cls._determine_exchange(symbol)
+            Logger.info(f"🏢 {symbol} → 거래소: {exchange}")
+            
+            # 콜백 함수 정의 (동기 함수로 처리 - IOCP 호환)
+            def data_callback(data):
+                try:
+                    # 비동기 처리를 위해 task 생성
+                    asyncio.create_task(cls._handle_us_stock_data(symbol, data))
+                except Exception as callback_e:
+                    Logger.error(f"❌ {symbol} 데이터 처리 콜백 에러: {callback_e}")
+            
+            # 미국주식 실시간 구독 시도 (재시도 로직 포함)
+            subscribe_success = await cls._robust_subscribe_overseas_stock(
+                exchange, symbol, data_callback
+            )
+            
+            if subscribe_success:
+                # 5일치 과거 데이터 캐싱 (병렬 처리)
+                cache_task = asyncio.create_task(cls._cache_historical_data(symbol))
+                
+                # 모니터링 심볼에 추가
+                cls._monitoring_symbols.add(symbol)
+                Logger.info(f"✅ {symbol} 실시간 구독 성공 ({exchange})")
+                
+                # 백그라운드에서 캐싱 완료 대기
+                try:
+                    await asyncio.wait_for(cache_task, timeout=30.0)
+                    Logger.info(f"📊 {symbol} 과거 데이터 캐싱 완료")
+                except asyncio.TimeoutError:
+                    Logger.warn(f"⚠️ {symbol} 과거 데이터 캐싱 타임아웃")
+                except Exception as cache_e:
+                    Logger.warn(f"⚠️ {symbol} 과거 데이터 캐싱 실패: {cache_e}")
+            else:
+                Logger.error(f"❌ {symbol} 실시간 구독 실패")
             
         except Exception as e:
-            Logger.error(f"종목 구독 실패 ({symbol}): {e}")
+            Logger.error(f"❌ 종목 구독 예외 ({symbol}): {e}")
+            import traceback
+            Logger.error(f"Traceback: {traceback.format_exc()}")
     
     @classmethod
     async def unsubscribe_symbol(cls, symbol: str):
@@ -259,9 +378,135 @@ class SignalMonitoringService:
         return symbol.isalpha() and 1 <= len(symbol) <= 5
     
     @classmethod
+    def _determine_exchange(cls, symbol: str) -> str:
+        """심볼 기반 거래소 결정"""
+        # NYSE 상장 주요 종목들
+        nyse_stocks = {
+            'KO', 'BA', 'DIS', 'IBM', 'GE', 'F', 'GM', 'WMT', 'JPM', 'BAC',
+            'XOM', 'CVX', 'PFE', 'JNJ', 'PG', 'MRK', 'VZ', 'T', 'HD', 'MCD'
+        }
+        
+        if symbol.upper() in nyse_stocks:
+            return "NYSE"
+        else:
+            return "NASD"  # 기본값: NASDAQ
+    
+    @classmethod
+    async def _ensure_websocket_connection(cls) -> bool:
+        """WebSocket 연결 상태 확인 및 자동 재연결"""
+        try:
+            if not cls._korea_websocket:
+                Logger.error("❌ WebSocket 인스턴스가 없습니다")
+                return False
+            
+            # 이미 연결되어 있으면 성공
+            if cls._korea_websocket.is_connected():
+                Logger.debug("✅ WebSocket 이미 연결됨")
+                return True
+            
+            Logger.info("🔌 WebSocket 연결 시도 중...")
+            
+            # ServiceContainer에서 인증 정보 가져오기
+            from service.service_container import ServiceContainer
+            korea_service = ServiceContainer.get_korea_investment_service()
+            
+            if not korea_service:
+                Logger.error("❌ KoreaInvestmentService 인스턴스 없음")
+                return False
+                
+            # app_key, app_secret 획득
+            if not hasattr(korea_service, '_app_key') or not hasattr(korea_service, '_app_secret'):
+                Logger.error("❌ 한투증권 인증 정보가 없습니다")
+                return False
+                
+            app_key = korea_service._app_key
+            app_secret = korea_service._app_secret
+            
+            # approval_key 획득
+            approval_key = await korea_service.get_approval_key_for_websocket()
+            if not approval_key:
+                Logger.warn("⚠️ approval_key 획득 실패 - 연결 시도는 계속")
+                
+            # WebSocket 연결 시도 (최대 3회)
+            for attempt in range(3):
+                try:
+                    Logger.info(f"🔌 WebSocket 연결 시도 {attempt + 1}/3")
+                    connection_success = await cls._korea_websocket.connect(
+                        app_key, app_secret, approval_key
+                    )
+                    
+                    if connection_success:
+                        Logger.info("✅ WebSocket 연결 성공")
+                        return True
+                    else:
+                        Logger.warn(f"❌ WebSocket 연결 실패 (시도 {attempt + 1}/3)")
+                        
+                except Exception as connect_e:
+                    Logger.error(f"❌ WebSocket 연결 예외 (시도 {attempt + 1}/3): {connect_e}")
+                
+                # 재시도 전 잠시 대기
+                if attempt < 2:
+                    await asyncio.sleep(2.0 * (attempt + 1))
+            
+            Logger.error("❌ WebSocket 연결 모든 시도 실패")
+            return False
+            
+        except Exception as e:
+            Logger.error(f"❌ WebSocket 연결 확인 중 예외: {e}")
+            return False
+    
+    @classmethod
+    async def _robust_subscribe_overseas_stock(cls, exchange: str, symbol: str, callback) -> bool:
+        """신뢰성 있는 해외주식 구독 (재시도 로직 포함)"""
+        try:
+            max_attempts = 3
+            
+            for attempt in range(max_attempts):
+                try:
+                    Logger.info(f"📤 해외주식 구독 시도 {attempt + 1}/{max_attempts}: {exchange}^{symbol}")
+                    
+                    # 구독 시도
+                    success = await cls._korea_websocket.subscribe_overseas_stock_price(
+                        exchange, [symbol], callback
+                    )
+                    
+                    if success:
+                        Logger.info(f"✅ 해외주식 구독 성공: {exchange}^{symbol}")
+                        
+                        # 구독 확인을 위해 잠시 대기
+                        await asyncio.sleep(1.0)
+                        return True
+                    else:
+                        Logger.warn(f"❌ 해외주식 구독 실패 (시도 {attempt + 1}/{max_attempts})")
+                        
+                except Exception as subscribe_e:
+                    Logger.error(f"❌ 해외주식 구독 예외 (시도 {attempt + 1}/{max_attempts}): {subscribe_e}")
+                
+                # 재시도 전 연결 상태 다시 확인
+                if attempt < max_attempts - 1:
+                    Logger.info("🔄 연결 상태 재확인 후 재시도...")
+                    connection_ready = await cls._ensure_websocket_connection()
+                    if not connection_ready:
+                        Logger.error("❌ 연결 복구 실패 - 구독 중단")
+                        break
+                        
+                    await asyncio.sleep(1.0)
+                    
+            Logger.error(f"❌ 해외주식 구독 모든 시도 실패: {exchange}^{symbol}")
+            return False
+            
+        except Exception as e:
+            Logger.error(f"❌ 신뢰성 해외주식 구독 예외: {e}")
+            return False
+    
+    @classmethod
     async def _handle_us_stock_data(cls, symbol: str, data: Dict):
         """미국 주식 실시간 데이터 처리 (한국투자증권 WebSocket)"""
         try:
+            # 원본 데이터 로깅 (디버깅용)
+            Logger.info(f"🍎 {symbol} 원본 데이터 수신:")
+            Logger.info(f"   📄 Raw Data: {data}")
+            
             processed_data = {
                 'symbol': symbol,
                 'current_price': float(data.get('current_price', 0)),
@@ -272,11 +517,26 @@ class SignalMonitoringService:
                 'timestamp': datetime.now().isoformat()
             }
             
-            Logger.info(f"미국주식 실시간 데이터 수신: {symbol} @ ${processed_data['current_price']}")
-            await cls._process_price_data(symbol, processed_data)
+            # 가공된 데이터 로깅
+            Logger.info(f"🍎 {symbol} 가공된 데이터:")
+            Logger.info(f"   💰 현재가: ${processed_data['current_price']}")
+            Logger.info(f"   📈 고가: ${processed_data['high_price']}")
+            Logger.info(f"   📉 저가: ${processed_data['low_price']}")
+            Logger.info(f"   🚀 시가: ${processed_data['open_price']}")
+            Logger.info(f"   📊 거래량: {processed_data['volume']:,}")
+            Logger.info(f"   ⏰ 시간: {processed_data['timestamp']}")
+            
+            # 데이터 유효성 검사
+            if processed_data['current_price'] > 0:
+                Logger.info(f"✅ {symbol} 유효한 데이터 - 가격 처리 진행")
+                await cls._process_price_data(symbol, processed_data)
+            else:
+                Logger.warn(f"⚠️ {symbol} 유효하지 않은 가격 데이터: {processed_data['current_price']}")
             
         except Exception as e:
-            Logger.error(f"미국 주식 데이터 처리 에러 ({symbol}): {e}")
+            Logger.error(f"❌ 미국 주식 데이터 처리 에러 ({symbol}): {e}")
+            import traceback
+            Logger.error(f"Traceback: {traceback.format_exc()}")
     
     @classmethod
     async def _process_price_data(cls, symbol: str, data: Dict):
@@ -302,7 +562,8 @@ class SignalMonitoringService:
                 'timestamp': data.get('timestamp')
             }
             
-            await cache_service.set(cache_key, json.dumps(price_data), cls.CACHE_TTL)
+            async with cache_service.get_client() as client:
+                await client.set_string(cache_key, json.dumps(price_data), expire=cls.CACHE_TTL)
             
             # 5일치 캐시 업데이트
             await cls._update_5days_cache(symbol, price_data)
@@ -321,7 +582,8 @@ class SignalMonitoringService:
             
             # 캐시 확인
             cache_key = cls.CACHE_KEY_5DAYS.format(symbol=symbol)
-            cached = await cache_service.get(cache_key)
+            async with cache_service.get_client() as client:
+                cached = await client.get_string(cache_key)
             if cached:
                 Logger.info(f"5일치 데이터 캐시 존재: {symbol}")
                 return
@@ -395,7 +657,8 @@ class SignalMonitoringService:
                 return
             
             if days_data:
-                await cache_service.set(cache_key, json.dumps(days_data), cls.CACHE_TTL)
+                async with cache_service.get_client() as client:
+                    await client.set_string(cache_key, json.dumps(days_data), expire=cls.CACHE_TTL)
                 Logger.info(f"5일치 데이터 캐싱 완료: {symbol}")
                 
         except Exception as e:
@@ -620,7 +883,9 @@ class SignalMonitoringService:
             cache_service = ServiceContainer.get_cache_service()
             cache_key = cls.CACHE_KEY_5DAYS.format(symbol=symbol)
             
-            cached = await cache_service.get(cache_key)
+            async with cache_service.get_client() as client:
+                cached = await client.get_string(cache_key)
+                
             if cached:
                 days_data = json.loads(cached)
             else:
@@ -642,7 +907,8 @@ class SignalMonitoringService:
             # 최근 5일만 유지
             days_data = sorted(days_data, key=lambda x: x['date'], reverse=True)[:5]
             
-            await cache_service.set(cache_key, json.dumps(days_data), cls.CACHE_TTL)
+            async with cache_service.get_client() as client:
+                await client.set_string(cache_key, json.dumps(days_data), expire=cls.CACHE_TTL)
             
         except Exception as e:
             Logger.error(f"5일치 캐시 업데이트 실패 ({symbol}): {e}")
@@ -655,7 +921,8 @@ class SignalMonitoringService:
             
             # 5일치 데이터 가져오기
             cache_key = cls.CACHE_KEY_5DAYS.format(symbol=symbol)
-            cached = await cache_service.get(cache_key)
+            async with cache_service.get_client() as client:
+                cached = await client.get_string(cache_key)
             
             if not cached:
                 return
@@ -686,7 +953,8 @@ class SignalMonitoringService:
             }
             
             bollinger_key = cls.CACHE_KEY_BOLLINGER.format(symbol=symbol)
-            await cache_service.set(bollinger_key, json.dumps(bollinger_data), 3600)  # 1시간
+            async with cache_service.get_client() as client:
+                await client.set_string(bollinger_key, json.dumps(bollinger_data), expire=3600)  # 1시간
             
             # 시그널 판단
             signal_type = None
@@ -1020,7 +1288,8 @@ class SignalMonitoringService:
             cache_service = ServiceContainer.get_cache_service()
             bollinger_key = cls.CACHE_KEY_BOLLINGER.format(symbol=symbol)
             
-            cached = await cache_service.get(bollinger_key)
+            async with cache_service.get_client() as client:
+                cached = await client.get_string(bollinger_key)
             if cached:
                 return json.loads(cached)
             
@@ -1037,7 +1306,8 @@ class SignalMonitoringService:
             cache_service = ServiceContainer.get_cache_service()
             cache_key = cls.CACHE_KEY_5DAYS.format(symbol=symbol)
             
-            cached = await cache_service.get(cache_key)
+            async with cache_service.get_client() as client:
+                cached = await client.get_string(cache_key)
             if cached:
                 return json.loads(cached)
             
