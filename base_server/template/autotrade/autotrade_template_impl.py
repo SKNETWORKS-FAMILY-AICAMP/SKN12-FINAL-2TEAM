@@ -186,6 +186,20 @@ class AutoTradeTemplateImpl(BaseTemplate):
             response.errorCode = error_code
             if error_code == 0:
                 response.message = "알림이 성공적으로 등록되었습니다"
+                response.alarm_id = alarm_id  # 생성된 alarm_id를 응답에 포함
+                
+                # alarm_info 객체 생성하여 응답에 포함
+                response.alarm_info = SignalAlarmInfo(
+                    alarm_id=alarm_id,
+                    symbol=str(request.symbol),
+                    company_name=stock_name,
+                    current_price=float(current_price),
+                    is_active=True,  # 새로 생성된 알림은 기본적으로 활성화
+                    signal_count=0,  # 새로 생성된 알림은 시그널 카운트 0
+                    win_rate=0.0,
+                    profit_rate=0.0
+                )
+                
                 Logger.info(f"Signal alarm created: user={account_db_key}, symbol={request.symbol}, alarm_id={alarm_id}")
             else:
                 response.message = error_message
@@ -278,6 +292,7 @@ class AutoTradeTemplateImpl(BaseTemplate):
         """시그널 알림 ON/OFF 토글"""
         response = SignalAlarmToggleResponse()
         response.sequence = request.sequence
+        response.alarm_id = request.alarm_id  # 요청받은 alarm_id를 응답에 설정
         
         try:
             # 세션 정보 조회
@@ -306,10 +321,12 @@ class AutoTradeTemplateImpl(BaseTemplate):
             proc_result = result[0]
             error_code = proc_result.get('ErrorCode', 1)
             error_message = proc_result.get('ErrorMessage', '')
+            new_status = proc_result.get('new_status', 0)  # 프로시저에서 반환된 new_status
             
             response.errorCode = error_code
+            response.is_active = bool(new_status)  # 응답 모델의 is_active 필드에 설정
+            
             if error_code == 0:
-                new_status = proc_result.get('new_status', True)
                 status_text = "활성화" if new_status else "비활성화"
                 response.message = f"알림이 {status_text}되었습니다"
                 Logger.info(f"Signal alarm toggled: user={account_db_key}, alarm_id={request.alarm_id}, active={new_status}")
@@ -328,6 +345,7 @@ class AutoTradeTemplateImpl(BaseTemplate):
         """시그널 알림 삭제"""
         response = SignalAlarmDeleteResponse()
         response.sequence = request.sequence
+        response.alarm_id = request.alarm_id  # 요청받은 alarm_id를 응답에 설정
         
         try:
             # 세션 정보 조회
@@ -376,7 +394,7 @@ class AutoTradeTemplateImpl(BaseTemplate):
         """시그널 히스토리 조회"""
         response = SignalHistoryResponse()
         response.sequence = request.sequence
-        response.history = []
+        response.signals = []  # history가 아니라 signals 필드 사용
         
         try:
             # 세션 정보 조회
@@ -424,10 +442,11 @@ class AutoTradeTemplateImpl(BaseTemplate):
                         profit_rate=history_data.get('profit_rate'),
                         is_win=history_data.get('is_win')
                     )
-                    response.history.append(history_item)
+                    response.signals.append(history_item)
                 
-                response.message = f"{len(response.history)}개의 히스토리를 조회했습니다"
-                Logger.info(f"Signal history retrieved: user={account_db_key}, alarm_id={request.alarm_id}, count={len(response.history)}")
+                response.total_count = len(response.signals)  # 총 개수 설정
+                response.message = f"{len(response.signals)}개의 히스토리를 조회했습니다"
+                Logger.info(f"Signal history retrieved: user={account_db_key}, alarm_id={request.alarm_id}, count={len(response.signals)}")
             else:
                 response.message = error_message
                 Logger.warn(f"Signal history failed: {error_message}")

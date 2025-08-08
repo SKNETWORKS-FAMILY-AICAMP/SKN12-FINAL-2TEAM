@@ -27,8 +27,11 @@
 -- --------- SHARD 1 ---------
 USE finance_shard_1;
 
--- 테이블 생성 (외래키 없는 버전)
+-- 🔥 개발환경 - 외래키 체크 비활성화하고 테이블 재생성
+SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS `table_signal_history`;
 DROP TABLE IF EXISTS `table_signal_alarms`;
+SET FOREIGN_KEY_CHECKS = 1;
 CREATE TABLE `table_signal_alarms` (
     `alarm_id` VARCHAR(128) PRIMARY KEY COMMENT '알림 고유 ID (UUID)',
     `account_db_key` BIGINT UNSIGNED NOT NULL COMMENT '사용자 계정 키',
@@ -79,8 +82,11 @@ COMMENT='시그널 발생 히스토리 (금융권 표준 적용)';
 -- --------- SHARD 2 ---------
 USE finance_shard_2;
 
--- 테이블 생성 (외래키 없는 버전)
+-- 🔥 개발환경 - 외래키 체크 비활성화하고 테이블 재생성
+SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS `table_signal_history`;
 DROP TABLE IF EXISTS `table_signal_alarms`;
+SET FOREIGN_KEY_CHECKS = 1;
 CREATE TABLE `table_signal_alarms` (
     `alarm_id` VARCHAR(128) PRIMARY KEY COMMENT '알림 고유 ID (UUID)',
     `account_db_key` BIGINT UNSIGNED NOT NULL COMMENT '사용자 계정 키',
@@ -345,12 +351,27 @@ BEGIN
     
     START TRANSACTION;
     
-    -- 알림 존재 및 현재 상태 확인 (소유권 검증 포함)
-    SELECT COUNT(*), COALESCE(MAX(is_active), 0) INTO v_alarm_exists, v_current_status
-    FROM table_signal_alarms 
-    WHERE CONCAT('', alarm_id) = CONCAT('', p_alarm_id) 
-      AND account_db_key = p_account_db_key  -- 본인 소유 알림만
-      AND is_deleted = 0;                    -- 삭제되지 않은 것만
+    -- ===============================================
+    -- MySQL 8.x VARCHAR Binding Bug Complete Workaround
+    -- Dynamic SQL for p_alarm_id VARCHAR parameter
+    -- ===============================================
+    
+    -- 동적 SQL로 알림 존재 및 현재 상태 확인 (소유권 검증 포함)
+    SET @dynamic_sql = CONCAT(
+        'SELECT COUNT(*), COALESCE(MAX(is_active), 0) INTO @v_alarm_exists, @v_current_status ',
+        'FROM table_signal_alarms ',
+        'WHERE alarm_id = ''', REPLACE(p_alarm_id, '''', ''''''), ''' ',
+        'AND account_db_key = ', p_account_db_key, ' ',
+        'AND is_deleted = 0'
+    );
+    
+    PREPARE stmt FROM @dynamic_sql;
+    EXECUTE stmt;
+    DEALLOCATE PREPARE stmt;
+    
+    -- 세션 변수에서 결과 가져오기
+    SET v_alarm_exists = @v_alarm_exists;
+    SET v_current_status = @v_current_status;
     
     IF v_alarm_exists = 0 THEN
         ROLLBACK;
@@ -359,11 +380,18 @@ BEGIN
         -- 상태 토글: 현재 상태의 반대로 설정
         SET v_new_status = NOT v_current_status;
         
-        UPDATE table_signal_alarms 
-        SET is_active = v_new_status,    -- 새로운 활성화 상태
-            updated_at = NOW(6)          -- 수정 시간 업데이트
-        WHERE CONCAT('', alarm_id) = CONCAT('', p_alarm_id) 
-          AND account_db_key = p_account_db_key;
+        -- 동적 SQL로 UPDATE 실행 (MySQL 8.x VARCHAR 버그 우회)
+        SET @update_sql = CONCAT(
+            'UPDATE table_signal_alarms ',
+            'SET is_active = ', v_new_status, ', ',
+            'updated_at = NOW(6) ',
+            'WHERE alarm_id = ''', REPLACE(p_alarm_id, '''', ''''''), ''' ',
+            'AND account_db_key = ', p_account_db_key
+        );
+        
+        PREPARE stmt FROM @update_sql;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
         
         COMMIT;
         SELECT 0 as ErrorCode, 
@@ -1085,24 +1113,43 @@ BEGIN
         ROLLBACK;
         INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
             VALUES ('fp_signal_alarm_toggle', @ErrorState, @ErrorNo, @ErrorMessage, ProcParam, NOW());
-        SELECT 1 as ErrorCode, COALESCE(@ErrorMessage, 'UNKNOWN ERROR') as ErrorMessage;
+        SELECT 1 as ErrorCode, COALESCE(@ErrorMessage, 'UNKNOWN ERROR') as ErrorMessage, 0 as new_status;
     END;
     
     START TRANSACTION;
     
-    SELECT is_active INTO v_current_status
-    FROM table_signal_alarms 
-    WHERE CONCAT('', alarm_id) = CONCAT('', p_alarm_id) AND account_db_key = p_account_db_key AND is_deleted = 0;
+    -- 동적 SQL로 현재 상태 조회 (MySQL 8.x VARCHAR 버그 우회)
+    SET @select_sql = CONCAT(
+        'SELECT is_active INTO @v_current_status ',
+        'FROM table_signal_alarms ',
+        'WHERE alarm_id = ''', REPLACE(p_alarm_id, '''', ''''''), ''' ',
+        'AND account_db_key = ', p_account_db_key, ' ',
+        'AND is_deleted = 0'
+    );
+    
+    PREPARE stmt FROM @select_sql;
+    EXECUTE stmt;
+    DEALLOCATE PREPARE stmt;
+    
+    SET v_current_status = @v_current_status;
     
     IF v_current_status IS NULL THEN
         ROLLBACK;
-        SELECT 1002 as ErrorCode, '알림을 찾을 수 없습니다' as ErrorMessage;
+        SELECT 1002 as ErrorCode, '알림을 찾을 수 없습니다' as ErrorMessage, 0 as new_status;
     ELSE
         SET v_new_status = NOT v_current_status;
         
-        UPDATE table_signal_alarms 
-        SET is_active = v_new_status, updated_at = NOW(6)
-        WHERE CONCAT('', alarm_id) = CONCAT('', p_alarm_id) AND account_db_key = p_account_db_key;
+        -- 동적 SQL로 UPDATE (MySQL 8.x VARCHAR 버그 우회)
+        SET @update_sql = CONCAT(
+            'UPDATE table_signal_alarms ',
+            'SET is_active = ', v_new_status, ', updated_at = NOW(6) ',
+            'WHERE alarm_id = ''', REPLACE(p_alarm_id, '''', ''''''), ''' ',
+            'AND account_db_key = ', p_account_db_key
+        );
+        
+        PREPARE stmt FROM @update_sql;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
         
         COMMIT;
         SELECT 0 as ErrorCode, 
@@ -1137,17 +1184,36 @@ BEGIN
     
     START TRANSACTION;
     
-    SELECT COUNT(*) INTO v_alarm_exists
-    FROM table_signal_alarms 
-    WHERE CONCAT('', alarm_id) = CONCAT('', p_alarm_id) AND account_db_key = p_account_db_key AND is_deleted = 0;
+    -- 동적 SQL로 알림 존재 확인 (MySQL 8.x VARCHAR 버그 우회)
+    SET @count_sql = CONCAT(
+        'SELECT COUNT(*) INTO @v_alarm_exists ',
+        'FROM table_signal_alarms ',
+        'WHERE alarm_id = ''', REPLACE(p_alarm_id, '''', ''''''), ''' ',
+        'AND account_db_key = ', p_account_db_key, ' ',
+        'AND is_deleted = 0'
+    );
+    
+    PREPARE stmt FROM @count_sql;
+    EXECUTE stmt;
+    DEALLOCATE PREPARE stmt;
+    
+    SET v_alarm_exists = @v_alarm_exists;
     
     IF v_alarm_exists = 0 THEN
         ROLLBACK;
         SELECT 1002 as ErrorCode, '알림을 찾을 수 없습니다' as ErrorMessage;
     ELSE
-        UPDATE table_signal_alarms 
-        SET is_deleted = 1, deleted_at = NOW(6), updated_at = NOW(6)
-        WHERE CONCAT('', alarm_id) = CONCAT('', p_alarm_id) AND account_db_key = p_account_db_key;
+        -- 동적 SQL로 소프트 삭제 (MySQL 8.x VARCHAR 버그 우회)
+        SET @delete_sql = CONCAT(
+            'UPDATE table_signal_alarms ',
+            'SET is_deleted = 1, is_active = 0, updated_at = NOW(6) ',
+            'WHERE alarm_id = ''', REPLACE(p_alarm_id, '''', ''''''), ''' ',
+            'AND account_db_key = ', p_account_db_key
+        );
+        
+        PREPARE stmt FROM @delete_sql;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
         
         COMMIT;
         SELECT 0 as ErrorCode, '알림이 삭제되었습니다' as ErrorMessage;
@@ -1253,12 +1319,12 @@ BEGIN
             signal_id, alarm_id, account_db_key, symbol, signal_type, signal_price,
             volume, triggered_at, created_at, updated_at,
             price_after_1d, profit_rate, is_win, evaluated_at,
-            is_deleted, deleted_at
+            is_deleted
         ) VALUES (
             p_signal_id, p_alarm_id, v_account_db_key, v_symbol, p_signal_type, p_signal_price,
             0, NOW(6), NOW(6), NOW(6),
             NULL, NULL, NULL, NULL,
-            0, NULL
+            0
         );
         
         COMMIT;
