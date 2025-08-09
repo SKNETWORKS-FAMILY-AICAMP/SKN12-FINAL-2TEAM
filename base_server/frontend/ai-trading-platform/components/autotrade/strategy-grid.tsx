@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { BarChart2, Zap, Trash2, Pause, Play, Plus } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AddStrategyModal } from "./add-strategy-modal";
+import { listSignalAlarms, deleteSignalAlarm, toggleSignalAlarm, createSignalAlarm, type SignalAlarmInfo } from "@/lib/api/autotrade";
 
 interface Strategy {
-  id: number;
+  id: string; // alarm_id
   name: string;
   subtitle: string;
   philosophy: string;
@@ -25,23 +26,65 @@ interface Strategy {
 export function StrategyGrid() {
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const addNewStrategy = (strategy: Strategy) => {
-    setStrategies(prev => [...prev, strategy]);
+  const loadStrategies = async () => {
+    setIsLoading(true)
+    try {
+      const res = await listSignalAlarms()
+      if (res?.errorCode === 0 && Array.isArray(res.alarms)) {
+        const mapped: Strategy[] = res.alarms.map((a: SignalAlarmInfo) => ({
+          id: a.alarm_id,
+          name: `${a.company_name} 투자 전략`,
+          subtitle: `${a.symbol} - ${a.exchange}`,
+          philosophy: a.note || `${a.company_name} 기반 자동매매 전략`,
+          profit: `${(a.profit_rate ?? 0).toFixed(1)}%`,
+          profitColor: (a.profit_rate ?? 0) >= 0 ? "text-green-400" : "text-red-400",
+          winRate: `${(a.win_rate ?? 0).toFixed(0)}%`,
+          trades: a.signal_count ?? 0,
+          recent: a.created_at || "",
+          statusColor: a.is_active ? "bg-green-500" : "bg-gray-500",
+          isActive: !!a.is_active,
+          stockInfo: {
+            symbol: a.symbol,
+            name: a.company_name,
+            currentPrice: a.current_price,
+            exchange: a.exchange,
+            currency: a.currency,
+          }
+        }))
+        setStrategies(mapped)
+      } else {
+        setStrategies([])
+      }
+    } catch (e) {
+      setStrategies([])
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  React.useEffect(() => {
+    loadStrategies()
+  }, [])
+
+  const addNewStrategy = async (strategy: Strategy) => {
+    // When modal returns selection, actually create on server then reload
+    const symbol = strategy?.stockInfo?.symbol
+    const note = strategy?.philosophy
+    if (!symbol) return
+    await createSignalAlarm({ symbol, note })
+    await loadStrategies()
   };
 
-  const toggleStrategyStatus = (id: number) => {
-    setStrategies(prev => 
-      prev.map(strategy => 
-        strategy.id === id 
-          ? { ...strategy, isActive: !strategy.isActive }
-          : strategy
-      )
-    );
+  const toggleStrategyStatus = async (id: string) => {
+    await toggleSignalAlarm(id)
+    await loadStrategies()
   };
 
-  const deleteStrategy = (id: number) => {
-    setStrategies(prev => prev.filter(strategy => strategy.id !== id));
+  const deleteStrategy = async (id: string) => {
+    await deleteSignalAlarm(id)
+    await loadStrategies()
   };
 
   return (
@@ -68,8 +111,14 @@ export function StrategyGrid() {
         </div>
       </div>
 
-      {/* Empty State */}
-      {strategies.length === 0 && (
+      {/* Empty/Loading State */}
+      {isLoading && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-10">
+          <p className="text-muted-foreground">불러오는 중...</p>
+        </motion.div>
+      )}
+
+      {!isLoading && strategies.length === 0 && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

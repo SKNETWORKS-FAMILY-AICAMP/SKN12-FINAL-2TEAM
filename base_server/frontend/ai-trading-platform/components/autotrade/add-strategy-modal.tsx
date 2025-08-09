@@ -96,9 +96,10 @@ export function AddStrategyModal({ isOpen, onClose, onAddStrategy }: AddStrategy
         // 실제 API 호출
         const response = await searchStocks(query) as any;
         
-        if (response?.errorCode === 0 && response?.securities) {
+        const list = Array.isArray(response?.results) ? response.results : []
+        if (response?.errorCode === 0 && list.length > 0) {
           // 백엔드 API 응답 구조에 맞춰 데이터 변환 (네이버 스타일, 달러 단위)
-          const stocks = response.securities
+          const stocks = list
             .filter((security: any) => security && security.symbol && security.symbol.trim()) // null/undefined symbol 필터링
             .map((security: any) => ({
               symbol: security.symbol,
@@ -198,15 +199,14 @@ export function AddStrategyModal({ isOpen, onClose, onAddStrategy }: AddStrategy
       if (detailResponse && 
           detailResponse.errorCode === 0 && 
           detailResponse.price_data && 
-          typeof detailResponse.price_data === 'object' &&
-          detailResponse.price_data[symbol]) {
+          typeof detailResponse.price_data === 'object' ) {
         // API에서 받은 상세 정보 사용
-        const priceData = detailResponse.price_data[symbol];
+        const priceData = detailResponse.price_data[symbol] || detailResponse.price_data.default || detailResponse.price_data
         stockInfo = {
           ...stock,
-          currentPrice: priceData.close_price || priceData.current_price || stock.currentPrice,
-          outlook: 70, // 기본값
-          confidence: 80, // 기본값
+          currentPrice: (priceData && (priceData.close_price || priceData.current_price)) || stock.currentPrice,
+          outlook: 70,
+          confidence: 80,
         };
       } else {
         // 폴백 데이터 사용

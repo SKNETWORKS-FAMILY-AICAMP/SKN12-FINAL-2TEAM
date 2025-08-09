@@ -11,11 +11,20 @@ class ApiClient {
     if (!baseURL) {
       throw new Error("NEXT_PUBLIC_API_URL 환경변수가 설정되어 있지 않습니다. .env.local 파일에 NEXT_PUBLIC_API_URL을 지정하세요.");
     }
+    // Normalize baseURL: if pointing to backend root without /api, append /api
+    let normalizedBaseURL = baseURL.trim()
+    if (normalizedBaseURL.endsWith('/')) {
+      normalizedBaseURL = normalizedBaseURL.slice(0, -1)
+    }
+    const isHttp = /^https?:\/\//.test(normalizedBaseURL)
+    if (isHttp && !normalizedBaseURL.endsWith('/api')) {
+      normalizedBaseURL = `${normalizedBaseURL}/api`
+    }
     const timeout = process.env.NEXT_PUBLIC_API_TIMEOUT
       ? parseInt(process.env.NEXT_PUBLIC_API_TIMEOUT, 10)
       : 10000;
     this.client = axios.create({
-      baseURL,
+      baseURL: normalizedBaseURL,
       timeout,
       headers: {
         "Content-Type": "application/json",
@@ -59,7 +68,19 @@ class ApiClient {
 
     // Response interceptor
     this.client.interceptors.response.use(
-      (response) => response,
+      (response) => {
+        try {
+          if (typeof response.data === "string") {
+            const trimmed = response.data.trim()
+            if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
+              response.data = JSON.parse(trimmed)
+            }
+          }
+        } catch (_e) {
+          // ignore parse errors; leave as string
+        }
+        return response
+      },
       async (error) => {
         if (error.code === 'ECONNABORTED') {
           // 이미 로그인된 상태라면
