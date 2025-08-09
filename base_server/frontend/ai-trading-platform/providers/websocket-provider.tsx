@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { createContext, useContext, useEffect, useState } from "react"
+import { createContext, useContext, useEffect, useMemo, useRef, useState, useCallback } from "react"
 
 interface WebSocketContextType {
   isConnected: boolean
@@ -14,72 +14,65 @@ const WebSocketContext = createContext<WebSocketContextType | undefined>(undefin
 
 export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   const [isConnected, setIsConnected] = useState(false)
-  const [ws, setWs] = useState<WebSocket | null>(null)
-  const [subscribers, setSubscribers] = useState<Map<string, (data: any) => void>>(new Map())
+  const wsRef = useRef<WebSocket | null>(null)
+  const subscribersRef = useRef<Map<string, (data: any) => void>>(new Map())
 
+  // Connect once on mount
   useEffect(() => {
-    // Simulate WebSocket connection
-    const connectWebSocket = () => {
-      try {
-        // In a real app, you would connect to your WebSocket server
-        // const websocket = new WebSocket(process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000/ws')
+    try {
+      // In a real app, connect to your WebSocket server
+      // wsRef.current = new WebSocket(process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000/ws')
+      setIsConnected(true)
 
-        // For demo purposes, we'll simulate a connection
-        setIsConnected(true)
-
-        // Simulate receiving market data
-        const interval = setInterval(() => {
-          const mockData = {
-            type: "market_update",
-            data: {
-              symbol: "KOSPI",
-              price: 2485 + Math.random() * 10 - 5,
-              change: Math.random() * 2 - 1,
-              timestamp: Date.now(),
-            },
-          }
-
-          subscribers.forEach((callback, channel) => {
-            if (channel === "market_data") {
-              callback(mockData)
-            }
-          })
-        }, 2000)
-
-        return () => {
-          clearInterval(interval)
-          setIsConnected(false)
+      // Demo: simulate market data push
+      const interval = setInterval(() => {
+        const mockData = {
+          type: "market_update",
+          data: {
+            symbol: "KOSPI",
+            price: 2485 + Math.random() * 10 - 5,
+            change: Math.random() * 2 - 1,
+            timestamp: Date.now(),
+          },
         }
-      } catch (error) {
-        console.error("WebSocket connection failed:", error)
+        subscribersRef.current.forEach((callback, channel) => {
+          if (channel === "market_data") {
+            callback(mockData)
+          }
+        })
+      }, 2000)
+
+      return () => {
+        clearInterval(interval)
+        try { wsRef.current?.close() } catch {}
+        wsRef.current = null
         setIsConnected(false)
       }
+    } catch (error) {
+      console.error("WebSocket connection failed:", error)
+      setIsConnected(false)
     }
+  }, [])
 
-    const cleanup = connectWebSocket()
-    return cleanup
-  }, [subscribers])
-
-  const sendMessage = (message: any) => {
+  const sendMessage = useCallback((message: any) => {
+    const ws = wsRef.current
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(message))
     }
-  }
+  }, [])
 
-  const subscribe = (channel: string, callback: (data: any) => void) => {
-    setSubscribers((prev) => new Map(prev.set(channel, callback)))
-  }
+  const subscribe = useCallback((channel: string, callback: (data: any) => void) => {
+    subscribersRef.current.set(channel, callback)
+  }, [])
 
-  const unsubscribe = (channel: string) => {
-    setSubscribers((prev) => {
-      const newMap = new Map(prev)
-      newMap.delete(channel)
-      return newMap
-    })
-  }
+  const unsubscribe = useCallback((channel: string) => {
+    subscribersRef.current.delete(channel)
+  }, [])
+
+  const value = useMemo(() => ({ isConnected, sendMessage, subscribe, unsubscribe }), [isConnected, sendMessage, subscribe, unsubscribe])
 
   return (
-    <WebSocketContext.Provider value={{ isConnected, sendMessage, subscribe, unsubscribe }}>
+    <WebSocketContext.Provider value={value}>
       {children}
     </WebSocketContext.Provider>
   )
