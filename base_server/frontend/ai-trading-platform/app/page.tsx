@@ -408,7 +408,7 @@ export default function HomePage() {
                         <h4 className="text-xl font-bold text-white mb-3 group-hover:text-green-200 transition-colors">Phone Support</h4>
                         <p className="text-green-200 text-base mb-2 font-medium">Direct Line</p>
                         <a href="tel:+82-2-1234-5678" className="text-green-100 text-base hover:text-green-200 transition-colors font-medium hover:underline">
-                          +82-10-4910-0845
+                          +82-10-3720-8454
                         </a>
                       </div>
                     </div>
