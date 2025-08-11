@@ -6,7 +6,7 @@ export async function fetchChatRooms(page = 1, limit = 20) {
   // chat_serialize.py의 ChatRoomListRequest와 일치
   const payload = { page, limit };
   console.log("[FRONT] 채팅방 목록 요청 payload:", payload);
-  const res = await apiClient.post("/chat/rooms", payload);
+  const res = await apiClient.post("/api/chat/rooms", payload);
   console.log("[FRONT] 채팅방 목록 응답:", res);
   return res;
 }
@@ -15,7 +15,7 @@ export async function fetchChatRooms(page = 1, limit = 20) {
 export async function createChatRoom(title: string, ai_persona: string = "GPT4O") {
   const payload = { title, ai_persona };
   console.log("[FRONT] 채팅방 생성 요청 payload:", payload);
-  const res = await apiClient.post("/chat/room/create", payload);
+  const res = await apiClient.post("/api/chat/room/create", payload);
   console.log("[FRONT] 채팅방 생성 응답:", res);
   return res;
 }
@@ -37,7 +37,7 @@ export async function sendMessage(roomId: string, message: string, messageType: 
   console.log("[FRONT] 메시지 전송 요청 payload:", payload);
   console.log("[FRONT] localStorage accessToken:", typeof window !== "undefined" ? localStorage.getItem("accessToken") : "N/A");
   
-  const res = await apiClient.post("/chat/message/send", payload);
+  const res = await apiClient.post("/api/chat/message/send", payload);
   console.log("[FRONT] 메시지 전송 응답:", res);
   return res;
 }
@@ -46,14 +46,14 @@ export async function sendMessage(roomId: string, message: string, messageType: 
 export async function fetchMessages(roomId: string, page = 1, limit = 50) {
   const payload = { room_id: roomId, page, limit };
   console.log("[FRONT] 메시지 목록 요청 payload:", payload);
-  const res = await apiClient.post("/chat/messages", payload);
+  const res = await apiClient.post("/api/chat/messages", payload);
   console.log("[FRONT] 메시지 목록 응답:", res);
   return res;
 }
 
 // 채팅방 제목 업데이트
 export async function updateChatRoomTitle(roomId: string, title: string) {
-  return await apiClient.post("/chat/room/update", {
+  return await apiClient.post("/api/chat/room/update", {
     room_id: roomId,
     title
   });
@@ -61,7 +61,7 @@ export async function updateChatRoomTitle(roomId: string, title: string) {
 
 // 채팅방 삭제
 export async function deleteChatRoom(roomId: string) {
-  return await apiClient.post("/chat/room/delete", {
+  return await apiClient.post("/api/chat/room/delete", {
     room_id: roomId
   });
 } 
