@@ -25,7 +25,6 @@ export default function HomePage() {
         <div className="container">
           <div className="header-content">
             <div className="logo">
-              <div className="logo-icon">📊</div>
               <span>AI Trader Pro</span>
             </div>
             <nav className="nav">
