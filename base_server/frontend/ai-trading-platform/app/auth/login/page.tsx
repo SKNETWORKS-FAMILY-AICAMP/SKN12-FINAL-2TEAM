@@ -219,26 +219,7 @@ export default function LoginPage() {
             <Link href="/auth/register" style={{ color: "#67e8f9", fontWeight: 500 }}>회원가입</Link>
           </div>
         </form>
-        {/* Demo Credentials */}
-        <div
-          style={{
-            marginTop: 32,
-            padding: 18,
-            background: "linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%),linear-gradient(45deg, rgba(102,126,234,0.05) 0%, transparent 50%)",
-            borderRadius: 12,
-            border: "1px solid rgba(255,255,255,0.06)",
-            backdropFilter: "blur(15px)",
-            color: "#a5b4fc",
-            fontSize: 14,
-            marginBottom: 0,
-          }}
-        >
-          <div style={{ fontWeight: 600, color: "#a5b4fc", marginBottom: 6 }}>데모 계정</div>
-          <div style={{ fontSize: 13, color: "#c7d2fe" }}>
-            <div>이메일: demo@example.com</div>
-            <div>비밀번호: demo123</div>
-          </div>
-        </div>
+        {/* Demo credentials section removed */}
       </div>
     </div>
   )
