@@ -10,7 +10,7 @@ import axios from "axios"
 
 export default function LoginPage() {
   const [accountId, setAccountId] = useState("")
-  const [password, setPassword] = useState("demo123")
+  const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [isLoading, setIsLoading] = useState(false)
 
@@ -144,6 +144,8 @@ export default function LoginPage() {
               onChange={e => setAccountId(e.target.value)}
               required
               placeholder="아이디"
+              name="username"
+              autoComplete="username"
               style={{
                 width: "100%",
                 padding: "14px 16px",
@@ -167,6 +169,8 @@ export default function LoginPage() {
               onChange={e => setPassword(e.target.value)}
               required
               placeholder="비밀번호"
+              name="password"
+              autoComplete="current-password"
               style={{
                 width: "100%",
                 padding: "14px 16px",
