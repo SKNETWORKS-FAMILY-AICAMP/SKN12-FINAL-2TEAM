@@ -17,7 +17,8 @@ class ApiClient {
       normalizedBaseURL = normalizedBaseURL.slice(0, -1)
     }
     const isHttp = /^https?:\/\//.test(normalizedBaseURL)
-    if (isHttp && !normalizedBaseURL.endsWith('/api')) {
+    // /api가 이미 포함되어 있으면 추가하지 않음
+    if (isHttp && !normalizedBaseURL.endsWith('/api') && !normalizedBaseURL.includes('/api/')) {
       normalizedBaseURL = `${normalizedBaseURL}/api`
     }
     const timeout = process.env.NEXT_PUBLIC_API_TIMEOUT
