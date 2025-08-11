@@ -14,7 +14,7 @@ class ApiClient {
       : 10000;
 
     this.client = axios.create({
-      baseURL,
+      baseURL: baseURL || "/api", // Next.js 프록시를 통해 요청 전달
       timeout,
       headers: {
         "Content-Type": "application/json",
@@ -32,6 +32,27 @@ class ApiClient {
         let token = "";
         if (typeof window !== "undefined") {
           token = localStorage.getItem("accessToken") || "";
+        }
+
+        // 토큰이 없거나 빈 문자열인 경우 즉시 로그인 페이지로 리다이렉트
+        if (!token || token.trim() === "") {
+          console.log("[INTERCEPTOR] 토큰이 없거나 비어있음: 로그인 페이지로 리다이렉트");
+          
+          // localStorage에서 모든 인증 정보 제거
+          localStorage.removeItem("accessToken");
+          localStorage.removeItem("auth-session");
+          localStorage.removeItem("refreshToken");
+          localStorage.removeItem("userId");
+          
+          // 로그인 페이지에서는 리다이렉트하지 않음 (무한 루프 방지)
+          if (!window.location.pathname.includes("/auth/login")) {
+            window.location.href = "/auth/login";
+          }
+          
+          // 요청을 중단하고 에러 반환
+          const error = new Error("토큰이 없어서 요청을 중단합니다");
+          (error as any).isTokenMissing = true;
+          throw error;
         }
 
         if (token) {
@@ -78,6 +99,12 @@ class ApiClient {
         console.log("[ERROR_INTERCEPTOR] 에러 발생:", error);
         console.log("[ERROR_INTERCEPTOR] error.response?.data:", error.response?.data);
         
+        // 토큰 누락 에러 처리
+        if ((error as any).isTokenMissing) {
+          console.log("[INTERCEPTOR] 토큰 누락 에러: 이미 리다이렉트 처리됨");
+          return Promise.reject(error);
+        }
+        
         if (error.code === 'ECONNABORTED') {
           // 이미 로그인된 상태라면
           if (typeof window !== 'undefined') {
@@ -106,25 +133,50 @@ class ApiClient {
           
           // 로그인 페이지에서는 리다이렉트하지 않음 (무한 루프 방지)
           if (typeof window !== "undefined" && !window.location.pathname.includes("/auth/login")) {
+            console.log("[INTERCEPTOR] 로그인 페이지로 리다이렉트");
             window.location.href = "/auth/login";
           }
           return Promise.reject(error);
         }
 
-        if (error.response?.status === 401 && !originalRequest._retry) {
-          originalRequest._retry = true
-
-          try {
-            await store.dispatch(refreshTokenAsync())
-            return this.client(originalRequest)
-          } catch (refreshError) {
-            // 로그인 페이지에서는 리다이렉트하지 않음 (무한 루프 방지)
-            if (typeof window !== "undefined" && !window.location.pathname.includes("/auth/login")) {
-              window.location.href = "/auth/login"
+        // 404, 405 등의 HTTP 상태 코드로 인한 에러 처리
+        if (error.response?.status === 404 || error.response?.status === 405) {
+          console.log(`[INTERCEPTOR] HTTP ${error.response.status} 에러 감지: ${error.response.statusText}`);
+          
+          // 인증 관련 에러일 가능성이 높으므로 세션 상태 확인
+          if (typeof window !== "undefined") {
+            const token = localStorage.getItem("accessToken");
+            if (!token) {
+              console.log("[INTERCEPTOR] 토큰이 없음: 로그인 페이지로 리다이렉트");
+              if (!window.location.pathname.includes("/auth/login")) {
+                window.location.href = "/auth/login";
+              }
+              return Promise.reject(error);
             }
-            return Promise.reject(refreshError)
           }
         }
+
+        // 401 Unauthorized 에러 처리 (토큰 만료 등)
+        if (error.response?.status === 401) {
+          console.log("[INTERCEPTOR] 401 Unauthorized 에러 감지: 세션 만료 가능성");
+          
+          // localStorage에서 모든 인증 정보 제거
+          if (typeof window !== "undefined") {
+            localStorage.removeItem("accessToken");
+            localStorage.removeItem("auth-session");
+            localStorage.removeItem("refreshToken");
+            localStorage.removeItem("userId");
+          }
+          
+          // 로그인 페이지에서는 리다이렉트하지 않음 (무한 루프 방지)
+          if (typeof window !== "undefined" && !window.location.pathname.includes("/auth/login")) {
+            console.log("[INTERCEPTOR] 401 에러로 인한 로그인 페이지 리다이렉트");
+            window.location.href = "/auth/login";
+          }
+          return Promise.reject(error);
+        }
+
+
 
         return Promise.reject(error)
       },

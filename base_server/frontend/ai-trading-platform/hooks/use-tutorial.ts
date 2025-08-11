@@ -75,8 +75,21 @@ export function useTutorial() {
     try {
       setIsLoading(true);
       const accessToken = localStorage.getItem('accessToken');
-      if (!accessToken) {
-        console.warn('❌ accessToken이 없어서 튜토리얼 진행 상태를 조회할 수 없습니다.');
+      
+      // accessToken이 없거나 빈 문자열인 경우 즉시 로그인 페이지로 리다이렉트
+      if (!accessToken || accessToken.trim() === '') {
+        console.log('❌ accessToken이 없거나 비어있음: 로그인 페이지로 리다이렉트');
+        
+        // localStorage에서 모든 인증 정보 제거
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("auth-session");
+        localStorage.removeItem("refreshToken");
+        localStorage.removeItem("userId");
+        
+        // 로그인 페이지로 리다이렉트
+        if (!window.location.pathname.includes("/auth/login")) {
+          window.location.href = "/auth/login";
+        }
         return;
       }
 
@@ -130,6 +143,21 @@ export function useTutorial() {
 
           console.log('✅ Updated progress from backend:', newProgress);
           setProgress(newProgress);
+        } else if (data.errorCode === 10000) {
+          // 세션 만료 처리
+          console.log('❌ 세션 만료: 로그인 페이지로 리다이렉트');
+          
+          // localStorage에서 모든 인증 정보 제거
+          localStorage.removeItem("accessToken");
+          localStorage.removeItem("auth-session");
+          localStorage.removeItem("refreshToken");
+          localStorage.removeItem("userId");
+          
+          // 로그인 페이지로 리다이렉트
+          if (!window.location.pathname.includes("/auth/login")) {
+            window.location.href = "/auth/login";
+          }
+          return;
         } else {
           console.log('⚠️ 백엔드에서 진행 상태를 가져올 수 없습니다. 기본값 사용');
           console.log('Debug - data:', data);
@@ -150,9 +178,22 @@ export function useTutorial() {
   const completeStep = useCallback(async (tutorialType: string, stepNumber: number) => {
     try {
       const accessToken = localStorage.getItem('accessToken');
-      if (!accessToken) {
-        console.warn('accessToken이 없어서 백엔드에 저장할 수 없습니다.');
-        return true; // 프론트엔드에서는 완료로 처리
+      
+      // accessToken이 없거나 빈 문자열인 경우 즉시 로그인 페이지로 리다이렉트
+      if (!accessToken || accessToken.trim() === '') {
+        console.log('❌ accessToken이 없거나 비어있음: 로그인 페이지로 리다이렉트');
+        
+        // localStorage에서 모든 인증 정보 제거
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("auth-session");
+        localStorage.removeItem("refreshToken");
+        localStorage.removeItem("userId");
+        
+        // 로그인 페이지로 리다이렉트
+        if (!window.location.pathname.includes("/auth/login")) {
+          window.location.href = "/auth/login";
+        }
+        return false;
       }
 
       console.log('💾 Saving to backend:', tutorialType, stepNumber);
@@ -191,6 +232,21 @@ export function useTutorial() {
         if (data.errorCode === 0) {
           console.log('✅ Tutorial step saved to backend successfully');
           return true;
+        } else if (data.errorCode === 10000) {
+          // 세션 만료 처리
+          console.log('❌ 세션 만료: 로그인 페이지로 리다이렉트');
+          
+          // localStorage에서 모든 인증 정보 제거
+          localStorage.removeItem("accessToken");
+          localStorage.removeItem("auth-session");
+          localStorage.removeItem("refreshToken");
+          localStorage.removeItem("userId");
+          
+          // 로그인 페이지로 리다이렉트
+          if (!window.location.pathname.includes("/auth/login")) {
+            window.location.href = "/auth/login";
+          }
+          return false;
         } else {
           console.warn('⚠️ 백엔드 저장 실패했지만 프론트엔드에서는 완료로 처리합니다.');
           return true;

@@ -64,11 +64,6 @@ const nextConfig = {
         source: '/api/:path*',
         destination: 'http://127.0.0.1:8000/api/:path*',
       },
-      // notification 엔드포인트도 포함
-      {
-        source: '/notification/:path*',
-        destination: 'http://127.0.0.1:8000/notification/:path*',
-      },
     ];
   },
   // scroll-behavior 경고 해결
