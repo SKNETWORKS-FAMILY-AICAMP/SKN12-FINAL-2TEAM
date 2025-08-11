@@ -92,37 +92,37 @@ export function useChat() {
   useEffect(() => {
     loadRooms();
     
-    // 페르소나 목록 초기화
+    // 페르소나 목록 초기화 (로컬 SVG 이미지 사용)
     setPersonas([
       { 
         persona_id: "GPT4O", 
         name: "GPT-4o", 
         description: "범용 AI 어시스턴트",
-        avatar_url: "https://via.placeholder.com/48x48/3B82F6/FFFFFF?text=GPT"
+        avatar_url: "/images/ai-avatar-gpt.svg"
       },
       { 
         persona_id: "market_analysis", 
         name: "시장 분석가", 
         description: "주식 시장 분석 및 예측",
-        avatar_url: "https://via.placeholder.com/48x48/10B981/FFFFFF?text=📊"
+        avatar_url: "/images/ai-avatar-analyst.svg"
       },
       { 
         persona_id: "stock_screener", 
         name: "종목 스크리너", 
         description: "투자 가치가 높은 종목 발굴",
-        avatar_url: "https://via.placeholder.com/48x48/F59E0B/FFFFFF?text=🔍"
+        avatar_url: "/images/ai-avatar-screener.svg"
       },
       { 
         persona_id: "portfolio_optimizer", 
         name: "포트폴리오 최적화", 
         description: "투자 포트폴리오 최적화",
-        avatar_url: "https://via.placeholder.com/48x48/8B5CF6/FFFFFF?text=⚖️"
+        avatar_url: "/images/ai-avatar-portfolio.svg"
       },
       { 
         persona_id: "trading_signals", 
         name: "트레이딩 시그널", 
         description: "매수/매도 타이밍 신호",
-        avatar_url: "https://via.placeholder.com/48x48/EF4444/FFFFFF?text=📈"
+        avatar_url: "/images/ai-avatar-signals.svg"
       }
     ]);
   }, [loadRooms]);

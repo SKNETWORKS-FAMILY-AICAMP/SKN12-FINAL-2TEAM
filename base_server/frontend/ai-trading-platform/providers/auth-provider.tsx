@@ -22,6 +22,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Check for existing session on mount
     const checkAuth = async () => {
       try {
+        // 토큰 유효성 검사 및 자동 리다이렉트
+        if (!authManager.checkTokenValidity()) {
+          // 토큰이 유효하지 않으면 이미 리다이렉트됨
+          setIsLoading(false);
+          return;
+        }
+
         const existingSession = authManager.getSession()
         if (existingSession) {
           setUser(existingSession.user)

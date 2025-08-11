@@ -93,6 +93,34 @@ export class AuthManager {
     const session = this.getSession()
     return session?.token || null
   }
+
+  // 토큰 유효성 검사 및 자동 리다이렉트
+  validateTokenAndRedirect(): boolean {
+    if (typeof window === "undefined") return false;
+    
+    const accessToken = localStorage.getItem("accessToken");
+    if (!accessToken) {
+      console.log("[AUTH] 액세스 토큰이 없습니다. 로그인 페이지로 리다이렉트");
+      this.clearSession();
+      window.location.href = "/auth/login";
+      return false;
+    }
+
+    const session = this.getSession();
+    if (!session || session.expiresAt < Date.now()) {
+      console.log("[AUTH] 세션이 만료되었습니다. 로그인 페이지로 리다이렉트");
+      this.clearSession();
+      window.location.href = "/auth/login";
+      return false;
+    }
+
+    return true;
+  }
+
+  // 현재 페이지에서 토큰 유효성 검사
+  checkTokenValidity(): boolean {
+    return this.validateTokenAndRedirect();
+  }
 }
 
 export const authManager = AuthManager.getInstance() 

@@ -11,16 +11,13 @@ class ApiClient {
     if (!baseURL) {
       throw new Error("NEXT_PUBLIC_API_URL 환경변수가 설정되어 있지 않습니다. .env.local 파일에 NEXT_PUBLIC_API_URL을 지정하세요.");
     }
-    // Normalize baseURL: if pointing to backend root without /api, append /api
+    // Next.js rewrite가 /api/*를 처리하므로 baseURL은 백엔드 루트로 설정
     let normalizedBaseURL = baseURL.trim()
     if (normalizedBaseURL.endsWith('/')) {
       normalizedBaseURL = normalizedBaseURL.slice(0, -1)
     }
-    const isHttp = /^https?:\/\//.test(normalizedBaseURL)
-    // /api가 이미 포함되어 있으면 추가하지 않음
-    if (isHttp && !normalizedBaseURL.includes('/api')) {
-      normalizedBaseURL = `${normalizedBaseURL}/api`
-    }
+    // Next.js rewrite가 /api/*를 http://127.0.0.1:8000/api/*로 전달하므로
+    // baseURL은 백엔드 루트(http://127.0.0.1:8000)로 유지
     const timeout = process.env.NEXT_PUBLIC_API_TIMEOUT
       ? parseInt(process.env.NEXT_PUBLIC_API_TIMEOUT, 10)
       : 10000;
@@ -98,6 +95,23 @@ class ApiClient {
           }
         }
         const originalRequest = error.config
+
+        // 에러 코드 10000 처리 (세션 만료/인증 실패)
+        if (error.response?.data?.errorCode === 10000) {
+          console.log("[INTERCEPTOR] 에러 코드 10000 감지: 세션 만료/인증 실패");
+          
+          // localStorage에서 모든 인증 정보 제거
+          if (typeof window !== "undefined") {
+            localStorage.removeItem("accessToken");
+            localStorage.removeItem("auth-session");
+            localStorage.removeItem("refreshToken");
+            localStorage.removeItem("userId");
+          }
+          
+          // 로그인 페이지로 리다이렉트
+          window.location.href = "/auth/login";
+          return Promise.reject(error);
+        }
 
         if (error.response?.status === 401 && !originalRequest._retry) {
           originalRequest._retry = true

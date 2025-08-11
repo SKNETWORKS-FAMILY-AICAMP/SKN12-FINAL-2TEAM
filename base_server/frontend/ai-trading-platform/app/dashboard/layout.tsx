@@ -34,13 +34,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   };
 
   useEffect(() => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
-    if (!token) {
-      router.push("/auth/login");
-    } else {
-      setChecked(true);
-    }
-  }, [router]);
+    // 인증 상태는 useAuth 훅에서 자동으로 처리됨
+    setChecked(true);
+  }, []);
 
   if (!checked) return null;
 
