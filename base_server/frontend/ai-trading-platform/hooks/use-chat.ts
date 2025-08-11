@@ -145,8 +145,8 @@ export function useChat() {
     const persona = personaOverride || selected_persona || "GPT4O";
     setIsLoading(true);
     
-    // 고유한 ID 생성 (타임스탬프 + 랜덤 값)
-    const uniqueId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // 고유한 ID 생성 (타임스탬프 + 랜덤 값 + 인덱스)
+    const uniqueId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}_${messages.length}`;
     
     setMessages(prev => [
       ...prev,
@@ -176,7 +176,7 @@ export function useChat() {
       }
       const messageObj = parsed.message;
       if (messageObj && messageObj.content) {
-        const aiMessageId = messageObj.message_id || `ai_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const aiMessageId = messageObj.message_id || `ai_${Date.now()}_${Math.random().toString(36).substr(2, 9)}_${messages.length}`;
         
         // 타이핑 효과를 위한 AI 메시지 추가
         const typingMessage: LocalMessage = {
