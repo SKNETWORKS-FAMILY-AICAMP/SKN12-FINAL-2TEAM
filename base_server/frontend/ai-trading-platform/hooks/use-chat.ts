@@ -9,6 +9,7 @@ interface LocalMessage {
   content: string;
   role: string;
   isTyping?: boolean;
+  timestamp?: number; // 추가: 메시지 생성 시간
 }
 
 export function useChat() {
@@ -20,6 +21,12 @@ export function useChat() {
   const [selected_persona, setSelected_persona] = useState<string>("GPT4O");
   const [personas, setPersonas] = useState<any[]>([]);
   const [typingMessageId, setTypingMessageId] = useState<string | null>(null);
+  const [messageCounter, setMessageCounter] = useState(0); // 메시지 개수 추적
+
+  // 고유 ID 생성 함수
+  const generateUniqueId = useCallback((prefix: string) => {
+    return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }, []);
 
   // 채팅방 목록 불러오기 (사용자 액션 기반)
   const loadRooms = useCallback(async () => {
@@ -67,26 +74,40 @@ export function useChat() {
         limit: 50
       }) as any
       
+      // 백엔드 응답 구조 디버깅
+      console.log("[useChat] 메시지 목록 응답:", response);
+      console.log("[useChat] 메시지 목록 구조:", {
+        errorCode: response.errorCode,
+        messages: response.messages,
+        messagesCount: response.messages ? response.messages.length : 0
+      });
+      
       if (response.errorCode === 0) {
-        setMessages(response.messages || [])
+        // 백엔드 응답을 UI 메시지로 정규화 (백엔드 ID 우선 사용)
+        const normalizedMessages = (response.messages || []).map((m: any) => ({
+          id: m.message_id, // 백엔드에서 생성한 고유 ID 우선 사용
+          role: m.sender_type === 'USER' ? 'user' : 'assistant',
+          content: m.content,
+          timestamp: m.timestamp || m.created_at || Date.now()
+        }));
+        
+        console.log("[useChat] 정규화된 메시지:", normalizedMessages);
+        setMessages(normalizedMessages)
       } else {
         const errorMessage = getErrorMessage(response.errorCode)
         setError(errorMessage)
       }
-    } catch (e: any) {
-      const errorInfo = handleApiError(e)
-      
-      if (errorInfo.isSessionExpired) {
-        setError("세션이 만료되어 로그인 페이지로 이동합니다.")
-        return
+    } catch (error: any) {
+      if (error.code === 'ECONNABORTED') {
+        setError('요청 시간이 초과되었습니다. 다시 시도해주세요.');
+      } else {
+        setError('메시지 목록을 불러오는데 실패했습니다.');
       }
-      
-      setError(errorInfo.message)
-      console.error("메시지 목록 불러오기 실패:", e)
+      console.error("[useChat] loadMessages 에러:", error);
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, []);
 
   // 에러 초기화
   const clearError = useCallback(() => {
@@ -142,74 +163,81 @@ export function useChat() {
   // 메시지 전송 (사용자 액션 기반)
   const sendMessage = useCallback(async (content: string, personaOverride?: string) => {
     const roomIdToUse = currentRoomId || "test_room";
-    const persona = personaOverride || selected_persona || "GPT4O";
+    const persona = personaOverride || selected_persona || "GPT4O"; // 선택된 페르소나
     setIsLoading(true);
     
-    // 고유한 ID 생성 (타임스탬프 + 랜덤 값 + 인덱스)
-    const uniqueId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}_${messages.length}`;
+    // 임시 사용자 메시지 ID 생성 (백엔드 응답으로 교체될 예정)
+    const tempUserId = generateUniqueId('temp_user');
     
+    // 임시 사용자 메시지 추가 (백엔드 응답으로 교체될 예정)
     setMessages(prev => [
       ...prev,
-      { id: uniqueId, content, role: "user" }
+      { id: tempUserId, content, role: "user", timestamp: Date.now() }
     ]);
-    try {
+    
+    try { // 메시지 전송
       let res = await apiClient.post(`/api/chat/message/send`, { room_id: roomIdToUse, content, ai_persona: persona });
       let parsed: any = res;
       if (parsed && parsed.data && typeof parsed.data === "object") {
         parsed = parsed.data;
-      } else if (parsed && parsed.data && typeof parsed.data === "string") {
-        try {
-          parsed = JSON.parse(parsed.data);
-        } catch (err) {
-          console.error("응답 data 파싱 실패:", err);
-          setError("메시지 전송 실패");
-          return;
-        }
-      } else if (typeof parsed === "string") {
-        try {
-          parsed = JSON.parse(parsed);
-        } catch (err) {
-          console.error("응답 전체 파싱 실패:", err);
-          setError("메시지 전송 실패");
-          return;
-        }
       }
-      const messageObj = parsed.message;
-      if (messageObj && messageObj.content) {
-        const aiMessageId = messageObj.message_id || `ai_${Date.now()}_${Math.random().toString(36).substr(2, 9)}_${messages.length}`;
+      
+      // 백엔드 응답 구조 디버깅
+      console.log("[useChat] 백엔드 응답 전체:", parsed);
+      console.log("[useChat] 백엔드 응답 구조:", {
+        errorCode: parsed.errorCode,
+        message: parsed.message,
+        messageKeys: parsed.message ? Object.keys(parsed.message) : []
+      });
+      
+      if (parsed.errorCode === 0) {
+        // 백엔드 응답에서 AI 메시지 정보 추출
+        const messageObj = parsed.message; // AI 메시지 정보
         
-        // 타이핑 효과를 위한 AI 메시지 추가
-        const typingMessage: LocalMessage = {
-          id: aiMessageId,
-          content: messageObj.content,
-          role: "assistant",
-          isTyping: true
-        };
-        
-        setTypingMessageId(aiMessageId);
-        setMessages(prev => [...prev, typingMessage]);
-        
-        // 타이핑 완료 후 실제 메시지로 변경
-        setTimeout(() => {
-          const finalMessage: LocalMessage = {
-            id: aiMessageId,
-            content: messageObj.content,
-            role: "assistant"
-          };
-          
+        if (messageObj && messageObj.content) {
+          // 1. 임시 사용자 메시지를 고유 ID로 교체 (백엔드에서 user_message_id를 별도로 보내지 않음)
+          const userMessageId = generateUniqueId('user');
           setMessages(prev => prev.map(msg => 
-            msg.id === aiMessageId ? finalMessage : msg
+            msg.id === tempUserId 
+              ? { ...msg, id: userMessageId, timestamp: Date.now() }
+              : msg
           ));
           
-          setTypingMessageId(null);
-        }, (messageObj.content.split(/\n\s*\n/).filter((p: string) => p.trim().length > 0).length * 400) + 300); // 문단 수에 비례한 지연
+          // 2. AI 메시지 추가 (백엔드에서 생성한 message_id 사용)
+          const aiMessageId = messageObj.message_id;
+          const aiMessage: LocalMessage = {
+            id: aiMessageId,
+            content: messageObj.content,
+            role: "assistant",
+            timestamp: messageObj.timestamp || messageObj.created_at || Date.now()
+          };
+          
+          console.log("[useChat] AI 메시지 추가:", aiMessage);
+          setMessages(prev => [...prev, aiMessage]);
+          
+          // 3. 메시지 카운터 증가
+          setMessageCounter(prev => prev + 2); // 사용자 + AI 메시지
+        }
+      } else {
+        // 에러 발생 시 임시 메시지 제거
+        setMessages(prev => prev.filter(msg => msg.id !== tempUserId));
+        const errorMessage = getErrorMessage(parsed.errorCode);
+        setError(errorMessage);
       }
-    } catch (e) {
-      setError("메시지 전송 실패");
+    } catch (error: any) {
+      // 에러 발생 시 임시 메시지 제거
+      setMessages(prev => prev.filter(msg => msg.id !== tempUserId));
+      
+      if (error.code === 'ECONNABORTED') {
+        setError('요청 시간이 초과되었습니다. 다시 시도해주세요.');
+      } else {
+        setError('메시지 전송에 실패했습니다.');
+      }
+      console.error("[useChat] sendMessage 에러:", error);
     } finally {
       setIsLoading(false);
     }
-  }, [currentRoomId, selected_persona]);
+  }, [currentRoomId, selected_persona, generateUniqueId]);
 
   // 채팅방 생성 (사용자 액션 기반)
   const createRoom = useCallback(async (ai_persona: string, title: string) => {

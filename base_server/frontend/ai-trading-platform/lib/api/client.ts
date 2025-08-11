@@ -28,6 +28,13 @@ class ApiClient {
     // Request interceptor
     this.client.interceptors.request.use(
       (config) => {
+        // 타임아웃 값 로깅 및 최소 30초 보장
+        console.log(`[TIMEOUT] ${config.url} - 현재 타임아웃: ${config.timeout}ms`);
+        if (!config.timeout || config.timeout < 30000) {
+          config.timeout = 30000;
+          console.log(`[TIMEOUT] ${config.url} - 타임아웃을 30초로 설정`);
+        }
+        
         // accessToken을 localStorage에서 읽음 (클라이언트 환경에서만)
         let token = "";
         if (typeof window !== "undefined") {
