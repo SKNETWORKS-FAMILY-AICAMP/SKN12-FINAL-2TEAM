@@ -97,9 +97,13 @@ export function useChat() {
     const roomIdToUse = currentRoomId || "test_room";
     const persona = personaOverride || selectedPersona || "GPT4O";
     setIsLoading(true);
+    
+    // 고유한 ID 생성 (타임스탬프 + 랜덤 값)
+    const uniqueId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
     setMessages(prev => [
       ...prev,
-      { id: Date.now().toString(), content, role: "user" }
+      { id: uniqueId, content, role: "user" }
     ]);
     try {
       let res = await apiSendChatMessage(roomIdToUse, content);
@@ -125,7 +129,7 @@ export function useChat() {
       }
       const messageObj = parsed.message;
       if (messageObj && messageObj.content) {
-        const aiMessageId = messageObj.message_id || `ai_${Date.now()}`;
+        const aiMessageId = messageObj.message_id || `ai_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         
         // 타이핑 효과를 위한 AI 메시지 추가
         const typingMessage: LocalMessage = {
