@@ -358,23 +358,28 @@ class PyTorchStockLSTM:
         print("🎉 Training completed!")
         return self.history
     
-    def predict(self, X: np.ndarray) -> np.ndarray:
-        """예측 수행"""
+    def predict(self, X: np.ndarray, batch_size: int = 256) -> np.ndarray:
+        """예측 수행 (메모리 안전: 배치 단위)"""
         if self.model is None:
             raise ValueError("Model not trained. Train the model first.")
-        
+
         self.model.eval()
-        
-        X_tensor = torch.FloatTensor(X).to(self.device)
-        
+
+        dataset = TensorDataset(torch.FloatTensor(X))
+        loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+
+        preds: list[np.ndarray] = []
         with torch.no_grad():
-            predictions = self.model(X_tensor)
-        
-        # CPU로 이동하고 numpy로 변환
-        return predictions.cpu().numpy()
+            for (batch_X,) in loader:
+                batch_X = batch_X.to(self.device)
+                batch_pred = self.model(batch_X)
+                preds.append(batch_pred.detach().cpu().numpy())
+
+        return np.concatenate(preds, axis=0)
     
-    def evaluate(self, X_test: np.ndarray, y_test: np.ndarray, 
-                 previous_prices: Optional[np.ndarray] = None) -> Dict[str, float]:
+    def evaluate(self, X_test: np.ndarray, y_test: np.ndarray,
+                 previous_prices: Optional[np.ndarray] = None,
+                 eval_batch_size: int = 256) -> Dict[str, float]:
         """
         🚀 고급 평가지표를 사용한 모델 평가
         
@@ -388,7 +393,8 @@ class PyTorchStockLSTM:
         """
         self.logger.info("🔍 Starting comprehensive model evaluation...")
         
-        predictions = self.predict(X_test)
+        # 메모리 초과 방지를 위해 배치 단위 예측 수행
+        predictions = self.predict(X_test, batch_size=eval_batch_size)
         
         # 1. 기본 메트릭 (하위 호환성)
         normalized_mse = mean_squared_error(y_test.reshape(-1), predictions.reshape(-1))
