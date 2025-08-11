@@ -1,36 +1,24 @@
-import { apiClient } from './client';
+import { apiClient } from "./client";
 
-export const profileService = {
-  async getProfile() {
-    return apiClient.post('/api/profile/get', {
-      sequence: 0
-    });
-  },
-  async setupProfile(data: any) {
-    // 온보딩용 API - /api/account/profile/setup
-    return apiClient.post('/api/account/profile/setup', {
-      ...data,
-      sequence: 0
-    });
-  },
-  async updateProfile(data: any) {
-    return apiClient.post('/api/profile/update-all', {
-      ...data,
-      sequence: 0
-    });
-  },
-  async updateNotificationSettings(data: any) {
-    return apiClient.post('/api/profile/update-notification', {
-      ...data,
-      sequence: 0
-    });
-  },
-  async changePassword(currentPassword: string, newPassword: string, otpCode?: string) {
-    return apiClient.post('/api/profile/change-password', {
-      current_password: currentPassword,
-      new_password: newPassword,
-      otp_code: otpCode || "",
-      sequence: 0
-    });
-  },
-};
+export async function getProfile() {
+  return apiClient.post('/profile/get', {
+    // 필요한 데이터
+  });
+}
+
+// 온보딩용 API - /account/profile/setup
+export async function setupProfile(profileData: any) {
+  return apiClient.post('/account/profile/setup', profileData);
+}
+
+export async function updateAllProfile(profileData: any) {
+  return apiClient.post('/profile/update-all', profileData);
+}
+
+export async function updateNotificationSettings(settings: any) {
+  return apiClient.post('/profile/update-notification', settings);
+}
+
+export async function changePassword(passwordData: any) {
+  return apiClient.post('/profile/change-password', passwordData);
+}

@@ -4,8 +4,8 @@ import { useState, useCallback, useEffect } from "react";
 import {
   fetchChatRooms,
   createChatRoom as apiCreateChatRoom,
-  sendChatMessage as apiSendChatMessage,
-  fetchChatMessages,
+  sendMessage as apiSendChatMessage,
+  fetchMessages,
   deleteChatRoom as apiDeleteChatRoom,
   updateChatRoomTitle as apiUpdateChatRoomTitle
 } from "@/lib/api/chat";
@@ -51,7 +51,7 @@ export function useChat() {
   // 메시지 목록 불러오기
   const loadMessages = useCallback(async (roomId: string) => {
     try {
-      const res = await fetchChatMessages(roomId);
+      const res = await fetchMessages(roomId);
       const data = typeof res === "string" ? JSON.parse(res) : res;
       console.log("[FRONT] 메시지 목록 응답:", data);
       // sender_type을 role로 변환
@@ -75,7 +75,7 @@ export function useChat() {
   // 채팅방 생성
   const createRoom = useCallback(async (aiPersona: string, title = "") => {
     try {
-      const res = await apiCreateChatRoom(aiPersona, title);
+      const res = await apiCreateChatRoom(title, aiPersona);
       const data = typeof res === "string" ? JSON.parse(res) : res;
       console.log("[FRONT] 채팅방 생성 응답:", data);
       // errorCode가 0이면 optimistic update
@@ -102,7 +102,7 @@ export function useChat() {
       { id: Date.now().toString(), content, role: "user" }
     ]);
     try {
-      let res = await apiSendChatMessage(roomIdToUse, content, persona);
+      let res = await apiSendChatMessage(roomIdToUse, content);
       let parsed: any = res;
       if (parsed && parsed.data && typeof parsed.data === "object") {
         parsed = parsed.data;

@@ -18,7 +18,7 @@ class ApiClient {
     }
     const isHttp = /^https?:\/\//.test(normalizedBaseURL)
     // /api가 이미 포함되어 있으면 추가하지 않음
-    if (isHttp && !normalizedBaseURL.endsWith('/api') && !normalizedBaseURL.includes('/api/')) {
+    if (isHttp && !normalizedBaseURL.includes('/api')) {
       normalizedBaseURL = `${normalizedBaseURL}/api`
     }
     const timeout = process.env.NEXT_PUBLIC_API_TIMEOUT
@@ -55,11 +55,13 @@ class ApiClient {
           typeof config.data === "object" &&
           config.data !== null
         ) {
+          console.log("[INTERCEPTOR] Original data:", config.data);
           config.data = {
             ...config.data,
             accessToken: token,
             sequence: Date.now(),
           };
+          console.log("[INTERCEPTOR] Modified data:", config.data);
         }
 
         return config;

@@ -45,6 +45,11 @@ async def chat_room_create(request: ChatRoomCreateRequest, req: Request):
 @router.post("/message/send")
 async def chat_message_send(request: ChatMessageSendRequest, req: Request):
     ip = req.headers.get("X-Forwarded-For", req.client.host if req.client else "unknown").split(",")[0]
+    
+    # 요청 데이터 로깅 추가
+    print(f"[DEBUG] Chat message send request data: {request.model_dump()}")
+    print(f"[DEBUG] Request headers: {dict(req.headers)}")
+    
     return await TemplateService.run_user(
         req.method, req.url.path, ip,
         request.model_dump_json(),

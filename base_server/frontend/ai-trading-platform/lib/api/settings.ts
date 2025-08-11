@@ -1,117 +1,85 @@
-import { apiClient } from './client';
+import { apiClient } from "./client";
 
-export interface UserSettings {
-  // 프로필 설정
-  investment_experience: string;
-  risk_tolerance: string;
-  investment_goal: string;
-  monthly_budget: number;
-  
-  // 알림 설정
-  price_alerts: boolean;
-  news_alerts: boolean;
-  portfolio_alerts: boolean;
-  trade_alerts: boolean;
-  email_notifications_enabled: boolean;
-  sms_notifications_enabled: boolean;
-  push_notifications_enabled: boolean;
-  
-  // 보안 설정
-  otp_enabled: boolean;
-  biometric_enabled: boolean;
-  session_timeout: number;
-  login_alerts: boolean;
-  
-  // 화면 설정
-  theme: string;
-  language: string;
-  currency: string;
-  chart_style: string;
-  
-  // 거래 설정
-  auto_trading_enabled: boolean;
-  max_position_size: number;
-  stop_loss_default: number;
-  take_profit_default: number;
+export interface Settings {
+  // 설정 인터페이스 정의
+  [key: string]: any;
 }
 
 export interface NotificationSettings {
-  price_change_threshold: number;
-  news_keywords: string[];
-  portfolio_rebalance_alerts: boolean;
-  daily_summary: boolean;
-  weekly_report: boolean;
+  email_notifications: boolean;
+  push_notifications: boolean;
+  sms_notifications: boolean;
+  trading_alerts: boolean;
+  market_updates: boolean;
+  portfolio_summary: boolean;
 }
 
 export interface SecuritySettings {
-  password_change_required: boolean;
-  last_password_change: string;
-  failed_login_attempts: number;
-  device_trust_enabled: boolean;
+  two_factor_auth: boolean;
+  login_alerts: boolean;
+  session_timeout: number;
   ip_whitelist: string[];
 }
 
-export const settingsService = {
-  // 설정 조회
-  async getSettings(section: string = "ALL") {
-    return apiClient.post('/api/settings/get', {
-      section,
-      sequence: 0
-    });
-  },
+export interface TradingSettings {
+  auto_trading: boolean;
+  risk_tolerance: string;
+  max_position_size: number;
+  stop_loss_percentage: number;
+  take_profit_percentage: number;
+}
 
-  // 설정 업데이트
-  async updateSettings(section: string, settings: any) {
-    return apiClient.post('/api/settings/update', {
-      section,
-      settings,
-      sequence: 0
-    });
-  },
+export interface PrivacySettings {
+  data_sharing: boolean;
+  analytics_tracking: boolean;
+  marketing_emails: boolean;
+  third_party_access: boolean;
+}
 
-  // 설정 초기화
-  async resetSettings(section: string, confirm: boolean = false) {
-    return apiClient.post('/api/settings/reset', {
-      section,
-      confirm,
-      sequence: 0
-    });
-  },
+export async function getSettings(): Promise<Settings> {
+  return apiClient.post('/settings/get', {
+    // 필요한 데이터
+  });
+}
 
-  // OTP 활성화/비활성화
-  async toggleOTP(enable: boolean, currentPassword: string, otpCode?: string) {
-    return apiClient.post('/api/settings/otp/toggle', {
-      enable,
-      current_password: currentPassword,
-      otp_code: otpCode || "",
-      sequence: 0
-    });
-  },
+export async function updateSettings(settings: Partial<Settings>): Promise<Settings> {
+  return apiClient.post('/settings/update', {
+    ...settings
+  });
+}
 
-  // 비밀번호 변경
-  async changePassword(currentPassword: string, newPassword: string, otpCode?: string) {
-    return apiClient.post('/api/settings/password/change', {
-      current_password: currentPassword,
-      new_password: newPassword,
-      otp_code: otpCode || "",
-      sequence: 0
-    });
-  },
+export async function resetSettings(): Promise<void> {
+  return apiClient.post('/settings/reset', {
+    // 리셋 확인 데이터
+  });
+}
 
-  // 현재 비밀번호 확인
-  async verifyPassword(currentPassword: string) {
-    return apiClient.post('/api/settings/password/verify', {
-      current_password: currentPassword,
-      sequence: 0
-    });
-  },
+export async function toggleOTP(): Promise<{ two_factor_auth: boolean }> {
+  return apiClient.post('/settings/otp/toggle', {
+    // OTP 토글 데이터
+  });
+}
 
-  // 데이터 내보내기
-  async exportData(dataTypes: string[] = ["PORTFOLIO", "TRANSACTIONS", "SETTINGS"], format: string = "JSON") {
-    return apiClient.post('/api/settings/export-data', {
-      data_types: dataTypes,
-      format,
-      sequence: 0
-    });
-  }
-}; 
+export async function changePassword(
+  currentPassword: string, 
+  newPassword: string, 
+  otpCode?: string
+): Promise<{ success: boolean }> {
+  return apiClient.post('/settings/password/change', {
+    current_password: currentPassword,
+    new_password: newPassword,
+    otp_code: otpCode || ""
+  });
+}
+
+export async function verifyPassword(password: string): Promise<{ valid: boolean }> {
+  return apiClient.post('/settings/password/verify', {
+    password
+  });
+}
+
+export async function exportData(): Promise<{ download_url: string }> {
+  return apiClient.post('/settings/export-data', {
+    // 내보내기 옵션
+  });
+} 
