@@ -48,8 +48,7 @@ CREATE TABLE IF NOT EXISTS `table_chat_messages` (
   INDEX `idx_account_db_key` (`account_db_key`),
   INDEX `idx_message_type` (`message_type`),
   INDEX `idx_parent_message_id` (`parent_message_id`),
-  INDEX `idx_is_deleted` (`is_deleted`),
-  FOREIGN KEY (`room_id`) REFERENCES `table_chat_rooms`(`room_id`) ON DELETE CASCADE
+  INDEX `idx_is_deleted` (`is_deleted`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='채팅 메시지 테이블 (Shard 1)';
 
 -- 채팅 통계 테이블 (사용자별 일일 통계)
