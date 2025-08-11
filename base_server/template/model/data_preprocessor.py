@@ -12,7 +12,11 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # 🚀 고급 피처 엔지니어링 import
-from .advanced_features import AdvancedFeatureEngineering
+# Support both package and script execution contexts
+try:
+    from .advanced_features import AdvancedFeatureEngineering  # type: ignore
+except ImportError:  # executed when run as a script from this folder
+    from advanced_features import AdvancedFeatureEngineering  # type: ignore
 
 class StockDataPreprocessor:
     def __init__(self, use_log_transform: bool = True):

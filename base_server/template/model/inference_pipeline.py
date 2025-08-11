@@ -16,10 +16,17 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
 # 프로젝트 모듈 import
-from .data_collector import StockDataCollector
-from .data_preprocessor import StockDataPreprocessor
-from .pytorch_lstm_model import PyTorchStockLSTM
-from .config import get_model_paths
+# Support both package and script execution contexts
+try:
+    from .data_collector import StockDataCollector
+    from .data_preprocessor import StockDataPreprocessor
+    from .pytorch_lstm_model import PyTorchStockLSTM
+    from .config import get_model_paths
+except ImportError:  # executed when run as a script from this folder
+    from data_collector import StockDataCollector
+    from data_preprocessor import StockDataPreprocessor
+    from pytorch_lstm_model import PyTorchStockLSTM
+    from config import get_model_paths
 
 @dataclass
 class PredictionOutput:

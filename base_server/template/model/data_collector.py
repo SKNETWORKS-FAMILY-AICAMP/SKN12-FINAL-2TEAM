@@ -14,6 +14,9 @@ import requests
 import random
 import json
 
+# yfinance를 사용하는 경로(get_recent_data)에서 전역 임포트 필요
+import yfinance as yf
+
 class StockDataCollector:
     def __init__(self):
         self.logger = logging.getLogger(__name__)
