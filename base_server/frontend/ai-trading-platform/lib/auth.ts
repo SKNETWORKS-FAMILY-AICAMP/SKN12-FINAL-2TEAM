@@ -117,9 +117,30 @@ export class AuthManager {
     return true;
   }
 
-  // 현재 페이지에서 토큰 유효성 검사
+  // 현재 페이지에서 토큰 유효성 검사 (리다이렉트 없음)
   checkTokenValidity(): boolean {
-    return this.validateTokenAndRedirect();
+    if (typeof window === "undefined") return false;
+    
+    const accessToken = localStorage.getItem("accessToken");
+    if (!accessToken) {
+      console.log("[AUTH] 액세스 토큰이 없습니다.");
+      return false;
+    }
+
+    const session = this.getSession();
+    if (!session || session.expiresAt < Date.now()) {
+      console.log("[AUTH] 세션이 만료되었습니다.");
+      return false;
+    }
+
+    return true;
+  }
+
+  // 강제로 리다이렉트가 필요한 경우 사용
+  forceRedirectToLogin(): void {
+    if (typeof window === "undefined") return;
+    this.clearSession();
+    window.location.href = "/auth/login";
   }
 }
 

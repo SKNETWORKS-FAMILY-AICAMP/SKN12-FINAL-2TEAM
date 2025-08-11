@@ -29,8 +29,7 @@ export default function LoginPage() {
         password: password,
       };
 
-      const apiBase = process.env.NEXT_PUBLIC_API_URL;
-      if (!apiBase) throw new Error("NEXT_PUBLIC_API_URL 환경변수가 필요합니다");
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
       const timeout = process.env.NEXT_PUBLIC_API_TIMEOUT
         ? parseInt(process.env.NEXT_PUBLIC_API_TIMEOUT, 10)
         : 10000;

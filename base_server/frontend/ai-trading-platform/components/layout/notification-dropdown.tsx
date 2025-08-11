@@ -14,7 +14,13 @@ import { Badge } from "@/components/ui/badge"
 import { useNotifications } from "@/hooks/use-notifications"
 
 export function NotificationDropdown() {
-  const { items, unread, loading, markRead, markAllRead, remove, refresh } = useNotifications()
+  const { notifications, unreadCount, isLoading, markAsRead, markAllAsRead, deleteNotification, loadNotifications } = useNotifications()
+  
+  // notifications가 undefined일 수 있으므로 안전하게 처리
+  const items = notifications || []
+  const unread = unreadCount || 0
+  const loading = isLoading || false
+  
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -34,8 +40,8 @@ export function NotificationDropdown() {
         <div className="px-3 py-2 flex justify-between items-center">
           <DropdownMenuLabel className="text-slate-100">알림</DropdownMenuLabel>
           <div className="flex gap-3 items-center">
-            <button className="text-xs text-blue-400 hover:underline" onClick={() => markAllRead()}>모두 읽음</button>
-            <button className="text-xs text-slate-300 hover:underline" onClick={() => refresh()}>새로고침</button>
+            <button className="text-xs text-blue-400 hover:underline" onClick={() => markAllAsRead()}>모두 읽음</button>
+            <button className="text-xs text-slate-300 hover:underline" onClick={() => loadNotifications()}>새로고침</button>
           </div>
         </div>
         <DropdownMenuSeparator className="bg-slate-800" />
@@ -45,14 +51,14 @@ export function NotificationDropdown() {
             <div className="p-3 text-sm text-slate-400">새로운 알림이 없습니다.</div>
           )}
           {!loading && items.map((n) => (
-            <DropdownMenuItem key={n.notification_id} className="flex flex-col items-start gap-1 py-2 hover:bg-slate-800/60">
+            <DropdownMenuItem key={n.id} className="flex flex-col items-start gap-1 py-2 hover:bg-slate-800/60">
               <div className="w-full flex justify-between items-center">
                 <p className="text-sm font-medium text-slate-100 truncate">{n.title}</p>
                 <div className="flex gap-2">
-                  {!n.is_read && (
-                    <button className="text-xs text-blue-400 hover:underline" onClick={(e) => { e.stopPropagation(); markRead(n.notification_id) }}>읽음</button>
+                  {!n.isRead && (
+                    <button className="text-xs text-blue-400 hover:underline" onClick={(e) => { e.stopPropagation(); markAsRead(n.id) }}>읽음</button>
                   )}
-                  <button className="text-xs text-slate-300 hover:underline" onClick={(e) => { e.stopPropagation(); remove(n.notification_id) }}>삭제</button>
+                  <button className="text-xs text-slate-300 hover:underline" onClick={(e) => { e.stopPropagation(); deleteNotification(n.id) }}>삭제</button>
                 </div>
               </div>
               <p className="text-xs text-slate-300/80 line-clamp-2">{n.message}</p>

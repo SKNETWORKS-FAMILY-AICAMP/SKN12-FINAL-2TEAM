@@ -1,14 +1,8 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react";
-import {
-  fetchChatRooms,
-  createChatRoom as apiCreateChatRoom,
-  sendMessage as apiSendChatMessage,
-  fetchMessages,
-  deleteChatRoom as apiDeleteChatRoom,
-  updateChatRoomTitle as apiUpdateChatRoomTitle
-} from "@/lib/api/chat";
+import { useState, useCallback, useEffect, useRef } from "react"
+import { apiClient } from "@/lib/api/client"
+import { handleApiError, getErrorMessage } from "@/lib/error-handler"
 
 interface LocalMessage {
   id: string;
@@ -29,59 +23,69 @@ export function useChat() {
 
   // 채팅방 목록 불러오기 (사용자 액션 기반)
   const loadRooms = useCallback(async () => {
-    setIsLoading(true);
+    setIsLoading(true)
+    setError(null)
+    
     try {
-      const res = await fetchChatRooms();
-      const data = res as any;
-      console.log("[useChat] fetchChatRooms 응답:", data);
+      const response = await apiClient.post("/api/chat/rooms", {
+        page: 1,
+        limit: 20
+      }) as any
       
-      // 응답 구조 디버깅
-      console.log("[useChat] 응답 전체 구조:", data);
-      console.log("[useChat] data.rooms:", data.rooms);
-      console.log("[useChat] data.data?.rooms:", data.data?.rooms);
+      if (response.errorCode === 0) {
+        setRooms(response.rooms || [])
+      } else {
+        const errorMessage = getErrorMessage(response.errorCode)
+        setError(errorMessage)
+      }
+    } catch (e: any) {
+      // 공통 에러 처리 사용
+      const errorInfo = handleApiError(e)
       
-      // 백엔드 응답 구조에 맞게 수정
-      const fetchedRooms = data.rooms || data.data?.rooms || [];
-      console.log("[useChat] 가져온 채팅방들:", fetchedRooms);
-      setRooms(fetchedRooms);
-      console.log("[useChat] rooms 상태 업데이트됨:", fetchedRooms);
-    } catch (e) {
-      setError("채팅방 목록 불러오기 실패");
-      console.error("채팅방 목록 불러오기 실패:", e);
+      if (errorInfo.isSessionExpired) {
+        // 세션 만료 시 에러 상태만 설정 (리다이렉트는 자동 처리됨)
+        setError("세션이 만료되어 로그인 페이지로 이동합니다.")
+        return
+      }
+      
+      setError(errorInfo.message)
+      console.error("채팅방 목록 불러오기 실패:", e)
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  }, []);
+  }, [])
 
   // 메시지 목록 불러오기 (사용자 액션 기반)
   const loadMessages = useCallback(async (roomId: string) => {
-    setIsLoading(true);
+    setIsLoading(true)
+    setError(null)
+    
     try {
-      const res = await fetchMessages(roomId);
-      const data = res as any;
+      const response = await apiClient.post(`/api/chat/rooms/${roomId}/messages`, {
+        page: 1,
+        limit: 50
+      }) as any
       
-      // 응답 구조 디버깅
-      console.log("[useChat] fetchMessages 응답:", data);
-      console.log("[useChat] 응답 전체 구조:", data);
-      console.log("[useChat] data.messages:", data.messages);
-      console.log("[useChat] data.data?.messages:", data.data?.messages);
+      if (response.errorCode === 0) {
+        setMessages(response.messages || [])
+      } else {
+        const errorMessage = getErrorMessage(response.errorCode)
+        setError(errorMessage)
+      }
+    } catch (e: any) {
+      const errorInfo = handleApiError(e)
       
-      // 백엔드 응답 구조에 맞게 수정
-      const fetchedMessages = data.messages || data.data?.messages || [];
-      const mappedMessages: LocalMessage[] = fetchedMessages.map((msg: any) => ({
-        id: msg.message_id,
-        content: msg.content,
-        role: msg.role,
-      }));
-      console.log("[useChat] 가져온 메시지들:", mappedMessages);
-      setMessages(mappedMessages);
-    } catch (e) {
-      setError("메시지 목록 불러오기 실패");
-      console.error("메시지 목록 불러오기 실패:", e);
+      if (errorInfo.isSessionExpired) {
+        setError("세션이 만료되어 로그인 페이지로 이동합니다.")
+        return
+      }
+      
+      setError(errorInfo.message)
+      console.error("메시지 목록 불러오기 실패:", e)
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  }, []);
+  }, [])
 
   // 에러 초기화
   const clearError = useCallback(() => {
@@ -148,7 +152,7 @@ export function useChat() {
       { id: uniqueId, content, role: "user" }
     ]);
     try {
-      let res = await apiSendChatMessage(roomIdToUse, content);
+      let res = await apiClient.post(`/api/chat/rooms/${roomIdToUse}/messages`, { content, persona });
       let parsed: any = res;
       if (parsed && parsed.data && typeof parsed.data === "object") {
         parsed = parsed.data;
@@ -210,7 +214,7 @@ export function useChat() {
   const createRoom = useCallback(async (aiPersona: string, title: string) => {
     console.log("[useChat] createRoom 호출됨:", { aiPersona, title });
     try {
-      const res = await apiCreateChatRoom(title, aiPersona);
+      const res = await apiClient.post("/api/chat/room/create", { title, aiPersona });
       console.log("[useChat] apiCreateChatRoom 응답:", res);
       const data = res as any;
       
@@ -244,7 +248,9 @@ export function useChat() {
   // 채팅방 삭제 (사용자 액션 기반)
   const deleteRoom = useCallback(async (roomId: string) => {
     try {
-      await apiDeleteChatRoom(roomId);
+      await apiClient.post(`/api/chat/rooms/${roomId}/delete`, {
+        room_id: roomId
+      });
       setRooms(prev => prev.filter(room => room.room_id !== roomId));
       if (currentRoomId === roomId) setCurrentRoomId(null);
       // 삭제 후 즉시 목록 새로고침
@@ -257,7 +263,7 @@ export function useChat() {
   // 채팅방 이름 변경 (사용자 액션 기반)
   const handleRenameRoom = useCallback(async (roomId: string, newTitle: string) => {
     try {
-      await apiUpdateChatRoomTitle(roomId, newTitle);
+      await apiClient.put(`/api/chat/rooms/${roomId}`, { title: newTitle });
       setRooms(prev => prev.map(room => 
         room.room_id === roomId ? { ...room, title: newTitle } : room
       ));

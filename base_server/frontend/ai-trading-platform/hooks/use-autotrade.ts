@@ -1,58 +1,41 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback } from "react"
 import { apiClient } from "@/lib/api/client"
 import { handleApiError, getErrorMessage } from "@/lib/error-handler"
 
-export interface Notification {
+export interface AutoTradeStrategy {
   id: string
-  type: "info" | "success" | "warning" | "error" | "trade" | "system"
-  title: string
-  message: string
-  isRead: boolean
+  name: string
+  description: string
+  isActive: boolean
+  parameters: Record<string, any>
   createdAt: string
-  metadata?: Record<string, any>
+  updatedAt: string
 }
 
-export interface NotificationError {
+export interface AutoTradeError {
   code: number
   message: string
   details?: string
 }
 
-export function useNotifications() {
-  const [notifications, setNotifications] = useState<Notification[]>([])
-  const [unreadCount, setUnreadCount] = useState(0)
+export function useAutoTrade() {
+  const [strategies, setStrategies] = useState<AutoTradeStrategy[]>([])
+  const [currentStrategy, setCurrentStrategy] = useState<AutoTradeStrategy | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<NotificationError | null>(null)
+  const [error, setError] = useState<AutoTradeError | null>(null)
 
-  // 알림 목록 불러오기
-  const loadNotifications = useCallback(async () => {
+  // 전략 목록 불러오기
+  const loadStrategies = useCallback(async () => {
     setIsLoading(true)
     setError(null)
     
     try {
-      const response = await apiClient.post("/api/notification/list", {
-        read_filter: "all",
-        page: 1,
-        limit: 50
-      }) as any
+      const response = await apiClient.get("/api/autotrade/strategies") as any
       
       if (response.errorCode === 0) {
-        const notifs = response.notifications || []
-        // 백엔드 응답 구조에 맞게 데이터 변환
-        const transformedNotifs = notifs.map((notif: any) => ({
-          id: notif.notification_id,
-          type: mapNotificationType(notif.type_id),
-          title: notif.title,
-          message: notif.message,
-          isRead: notif.is_read,
-          createdAt: notif.created_at,
-          metadata: notif.data
-        }))
-        
-        setNotifications(transformedNotifs)
-        setUnreadCount(transformedNotifs.filter((n: Notification) => !n.isRead).length)
+        setStrategies(response.strategies || [])
       } else {
         const errorMessage = getErrorMessage(response.errorCode)
         setError({
@@ -80,44 +63,68 @@ export function useNotifications() {
         message: errorInfo.message,
         details: e.message || "네트워크 오류"
       })
-      console.error("알림 목록 불러오기 실패:", e)
+      console.error("전략 목록 불러오기 실패:", e)
     } finally {
       setIsLoading(false)
     }
   }, [])
 
-  // 백엔드 알림 타입을 프론트엔드 타입으로 매핑
-  const mapNotificationType = (typeId: string): "info" | "success" | "warning" | "error" | "trade" | "system" => {
-    switch (typeId) {
-      case "SIGNAL_ALERT":
-        return "trade"
-      case "TRADE_COMPLETE":
-        return "success"
-      case "PRICE_ALERT":
-        return "warning"
-      case "SYSTEM_NOTICE":
-        return "system"
-      case "ACCOUNT_SECURITY":
-        return "error"
-      default:
-        return "info"
-    }
-  }
-
-  // 알림 읽음 처리
-  const markAsRead = useCallback(async (notificationId: string) => {
+  // 전략 생성
+  const createStrategy = useCallback(async (strategyData: Partial<AutoTradeStrategy>) => {
+    setIsLoading(true)
+    setError(null)
+    
     try {
-      const response = await apiClient.post("/api/notification/mark-read", {
-        notification_id: notificationId
-      }) as any
+      const response = await apiClient.post("/api/autotrade/strategies", strategyData) as any
       
       if (response.errorCode === 0) {
-        setNotifications(prev => prev.map(notif => 
-          notif.id === notificationId 
-            ? { ...notif, isRead: true }
-            : notif
+        const newStrategy = response.strategy
+        setStrategies(prev => [newStrategy, ...prev])
+        setCurrentStrategy(newStrategy)
+        return { success: true, strategy: newStrategy }
+      } else {
+        const errorMessage = getErrorMessage(response.errorCode)
+        setError({
+          code: response.errorCode,
+          message: errorMessage,
+          details: response.message
+        })
+        return { success: false, error: errorMessage }
+      }
+    } catch (e: any) {
+      const errorInfo = handleApiError(e)
+      
+      if (errorInfo.isSessionExpired) {
+        setError({
+          code: 10000,
+          message: errorInfo.message,
+          details: "세션이 만료되어 로그인 페이지로 이동합니다."
+        })
+        return { success: false, error: "세션이 만료되었습니다" }
+      }
+      
+      setError({
+        code: errorInfo.errorCode || -1,
+        message: errorInfo.message,
+        details: e.message || "네트워크 오류"
+      })
+      return { success: false, error: errorInfo.message }
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  // 전략 활성화/비활성화
+  const toggleStrategy = useCallback(async (strategyId: string, isActive: boolean) => {
+    try {
+      const response = await apiClient.put(`/api/autotrade/strategies/${strategyId}/toggle`, { isActive }) as any
+      
+      if (response.errorCode === 0) {
+        setStrategies(prev => prev.map(strategy => 
+          strategy.id === strategyId 
+            ? { ...strategy, isActive, updatedAt: new Date().toISOString() }
+            : strategy
         ))
-        setUnreadCount(prev => Math.max(0, prev - 1))
         return { success: true }
       } else {
         const errorMessage = getErrorMessage(response.errorCode)
@@ -149,15 +156,16 @@ export function useNotifications() {
     }
   }, [])
 
-  // 모든 알림 읽음 처리
-  const markAllAsRead = useCallback(async () => {
+  // 백테스트 실행
+  const runBacktest = useCallback(async (strategyId: string, parameters: Record<string, any>) => {
+    setIsLoading(true)
+    setError(null)
+    
     try {
-      const response = await apiClient.post("/api/notification/mark-all-read", {}) as any
+      const response = await apiClient.post(`/api/autotrade/strategies/${strategyId}/backtest`, parameters) as any
       
       if (response.errorCode === 0) {
-        setNotifications(prev => prev.map(notif => ({ ...notif, isRead: true })))
-        setUnreadCount(0)
-        return { success: true }
+        return { success: true, results: response.results }
       } else {
         const errorMessage = getErrorMessage(response.errorCode)
         setError({
@@ -185,21 +193,20 @@ export function useNotifications() {
         details: e.message || "네트워크 오류"
       })
       return { success: false, error: errorInfo.message }
+    } finally {
+      setIsLoading(false)
     }
   }, [])
 
-  // 알림 삭제
-  const deleteNotification = useCallback(async (notificationId: string) => {
+  // 전략 삭제
+  const deleteStrategy = useCallback(async (strategyId: string) => {
     try {
-      const response = await apiClient.post("/api/notification/delete", {
-        notification_id: notificationId
-      }) as any
+      const response = await apiClient.delete(`/api/autotrade/strategies/${strategyId}`) as any
       
       if (response.errorCode === 0) {
-        const deletedNotif = notifications.find(n => n.id === notificationId)
-        setNotifications(prev => prev.filter(notif => notif.id !== notificationId))
-        if (deletedNotif && !deletedNotif.isRead) {
-          setUnreadCount(prev => Math.max(0, prev - 1))
+        setStrategies(prev => prev.filter(strategy => strategy.id !== strategyId))
+        if (currentStrategy?.id === strategyId) {
+          setCurrentStrategy(null)
         }
         return { success: true }
       } else {
@@ -230,65 +237,24 @@ export function useNotifications() {
       })
       return { success: false, error: errorInfo.message }
     }
-  }, [notifications])
-
-  // 알림 설정 업데이트
-  const updateNotificationSettings = useCallback(async (settings: Record<string, any>) => {
-    try {
-      const response = await apiClient.post("/api/profile/update-notification", settings) as any
-      
-      if (response.errorCode === 0) {
-        return { success: true, settings: response.settings }
-      } else {
-        const errorMessage = getErrorMessage(response.errorCode)
-        setError({
-          code: response.errorCode,
-          message: errorMessage,
-          details: response.message
-        })
-        return { success: false, error: errorMessage }
-      }
-    } catch (e: any) {
-      const errorInfo = handleApiError(e)
-      
-      if (errorInfo.isSessionExpired) {
-        setError({
-          code: 10000,
-          message: errorInfo.message,
-          details: "세션이 만료되어 로그인 페이지로 이동합니다."
-        })
-        return { success: false, error: "세션이 만료되었습니다" }
-      }
-      
-      setError({
-        code: errorInfo.errorCode || -1,
-        message: errorInfo.message,
-        details: e.message || "네트워크 오류"
-      })
-      return { success: false, error: errorInfo.message }
-    }
-  }, [])
+  }, [currentStrategy])
 
   // 에러 초기화
   const clearError = useCallback(() => {
     setError(null)
   }, [])
 
-  // 컴포넌트 마운트 시 알림 로드
-  useEffect(() => {
-    loadNotifications()
-  }, [loadNotifications])
-
   return {
-    notifications,
-    unreadCount,
+    strategies,
+    currentStrategy,
     isLoading,
     error,
-    loadNotifications,
-    markAsRead,
-    markAllAsRead,
-    deleteNotification,
-    updateNotificationSettings,
-    clearError
+    loadStrategies,
+    createStrategy,
+    toggleStrategy,
+    runBacktest,
+    deleteStrategy,
+    clearError,
+    setCurrentStrategy
   }
 } 

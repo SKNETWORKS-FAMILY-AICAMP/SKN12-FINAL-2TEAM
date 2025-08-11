@@ -4,55 +4,55 @@ import { useState, useCallback, useEffect } from "react"
 import { apiClient } from "@/lib/api/client"
 import { handleApiError, getErrorMessage } from "@/lib/error-handler"
 
-export interface Notification {
-  id: string
-  type: "info" | "success" | "warning" | "error" | "trade" | "system"
-  title: string
-  message: string
-  isRead: boolean
-  createdAt: string
-  metadata?: Record<string, any>
+export interface DashboardData {
+  portfolioValue: number
+  totalReturn: number
+  dailyReturn: number
+  activePositions: number
+  recentTrades: Array<{
+    id: string
+    symbol: string
+    type: "buy" | "sell"
+    quantity: number
+    price: number
+    timestamp: string
+  }>
+  marketOverview: {
+    kospi: { value: number; change: number }
+    kosdaq: { value: number; change: number }
+    usd: { value: number; change: number }
+  }
+  alerts: Array<{
+    id: string
+    type: "info" | "warning" | "error"
+    message: string
+    timestamp: string
+  }>
 }
 
-export interface NotificationError {
+export interface DashboardError {
   code: number
   message: string
   details?: string
 }
 
-export function useNotifications() {
-  const [notifications, setNotifications] = useState<Notification[]>([])
-  const [unreadCount, setUnreadCount] = useState(0)
+export function useDashboard() {
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<NotificationError | null>(null)
+  const [error, setError] = useState<DashboardError | null>(null)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
-  // 알림 목록 불러오기
-  const loadNotifications = useCallback(async () => {
+  // 대시보드 데이터 로드
+  const loadDashboardData = useCallback(async () => {
     setIsLoading(true)
     setError(null)
     
     try {
-      const response = await apiClient.post("/api/notification/list", {
-        read_filter: "all",
-        page: 1,
-        limit: 50
-      }) as any
+      const response = await apiClient.get("/api/dashboard") as any
       
       if (response.errorCode === 0) {
-        const notifs = response.notifications || []
-        // 백엔드 응답 구조에 맞게 데이터 변환
-        const transformedNotifs = notifs.map((notif: any) => ({
-          id: notif.notification_id,
-          type: mapNotificationType(notif.type_id),
-          title: notif.title,
-          message: notif.message,
-          isRead: notif.is_read,
-          createdAt: notif.created_at,
-          metadata: notif.data
-        }))
-        
-        setNotifications(transformedNotifs)
-        setUnreadCount(transformedNotifs.filter((n: Notification) => !n.isRead).length)
+        setDashboardData(response.data)
+        setLastUpdated(new Date())
       } else {
         const errorMessage = getErrorMessage(response.errorCode)
         setError({
@@ -80,44 +80,26 @@ export function useNotifications() {
         message: errorInfo.message,
         details: e.message || "네트워크 오류"
       })
-      console.error("알림 목록 불러오기 실패:", e)
+      console.error("대시보드 데이터 로드 실패:", e)
     } finally {
       setIsLoading(false)
     }
   }, [])
 
-  // 백엔드 알림 타입을 프론트엔드 타입으로 매핑
-  const mapNotificationType = (typeId: string): "info" | "success" | "warning" | "error" | "trade" | "system" => {
-    switch (typeId) {
-      case "SIGNAL_ALERT":
-        return "trade"
-      case "TRADE_COMPLETE":
-        return "success"
-      case "PRICE_ALERT":
-        return "warning"
-      case "SYSTEM_NOTICE":
-        return "system"
-      case "ACCOUNT_SECURITY":
-        return "error"
-      default:
-        return "info"
-    }
-  }
-
-  // 알림 읽음 처리
-  const markAsRead = useCallback(async (notificationId: string) => {
+  // 포트폴리오 요약 데이터만 로드
+  const loadPortfolioSummary = useCallback(async () => {
     try {
-      const response = await apiClient.post("/api/notification/mark-read", {
-        notification_id: notificationId
-      }) as any
+      const response = await apiClient.get("/api/dashboard/portfolio-summary") as any
       
       if (response.errorCode === 0) {
-        setNotifications(prev => prev.map(notif => 
-          notif.id === notificationId 
-            ? { ...notif, isRead: true }
-            : notif
-        ))
-        setUnreadCount(prev => Math.max(0, prev - 1))
+        setDashboardData(prev => prev ? {
+          ...prev,
+          portfolioValue: response.data.portfolioValue,
+          totalReturn: response.data.totalReturn,
+          dailyReturn: response.data.dailyReturn,
+          activePositions: response.data.activePositions
+        } : null)
+        setLastUpdated(new Date())
         return { success: true }
       } else {
         const errorMessage = getErrorMessage(response.errorCode)
@@ -149,14 +131,17 @@ export function useNotifications() {
     }
   }, [])
 
-  // 모든 알림 읽음 처리
-  const markAllAsRead = useCallback(async () => {
+  // 시장 데이터만 로드
+  const loadMarketData = useCallback(async () => {
     try {
-      const response = await apiClient.post("/api/notification/mark-all-read", {}) as any
+      const response = await apiClient.get("/api/dashboard/market-data") as any
       
       if (response.errorCode === 0) {
-        setNotifications(prev => prev.map(notif => ({ ...notif, isRead: true })))
-        setUnreadCount(0)
+        setDashboardData(prev => prev ? {
+          ...prev,
+          marketOverview: response.data.marketOverview
+        } : null)
+        setLastUpdated(new Date())
         return { success: true }
       } else {
         const errorMessage = getErrorMessage(response.errorCode)
@@ -188,19 +173,17 @@ export function useNotifications() {
     }
   }, [])
 
-  // 알림 삭제
-  const deleteNotification = useCallback(async (notificationId: string) => {
+  // 최근 거래 내역만 로드
+  const loadRecentTrades = useCallback(async () => {
     try {
-      const response = await apiClient.post("/api/notification/delete", {
-        notification_id: notificationId
-      }) as any
+      const response = await apiClient.get("/api/dashboard/recent-trades") as any
       
       if (response.errorCode === 0) {
-        const deletedNotif = notifications.find(n => n.id === notificationId)
-        setNotifications(prev => prev.filter(notif => notif.id !== notificationId))
-        if (deletedNotif && !deletedNotif.isRead) {
-          setUnreadCount(prev => Math.max(0, prev - 1))
-        }
+        setDashboardData(prev => prev ? {
+          ...prev,
+          recentTrades: response.data.recentTrades
+        } : null)
+        setLastUpdated(new Date())
         return { success: true }
       } else {
         const errorMessage = getErrorMessage(response.errorCode)
@@ -230,15 +213,20 @@ export function useNotifications() {
       })
       return { success: false, error: errorInfo.message }
     }
-  }, [notifications])
+  }, [])
 
-  // 알림 설정 업데이트
-  const updateNotificationSettings = useCallback(async (settings: Record<string, any>) => {
+  // 알림 데이터만 로드
+  const loadAlerts = useCallback(async () => {
     try {
-      const response = await apiClient.post("/api/profile/update-notification", settings) as any
+      const response = await apiClient.get("/api/dashboard/alerts") as any
       
       if (response.errorCode === 0) {
-        return { success: true, settings: response.settings }
+        setDashboardData(prev => prev ? {
+          ...prev,
+          alerts: response.data.alerts
+        } : null)
+        setLastUpdated(new Date())
+        return { success: true }
       } else {
         const errorMessage = getErrorMessage(response.errorCode)
         setError({
@@ -274,21 +262,21 @@ export function useNotifications() {
     setError(null)
   }, [])
 
-  // 컴포넌트 마운트 시 알림 로드
+  // 컴포넌트 마운트 시 대시보드 데이터 로드
   useEffect(() => {
-    loadNotifications()
-  }, [loadNotifications])
+    loadDashboardData()
+  }, [loadDashboardData])
 
   return {
-    notifications,
-    unreadCount,
+    dashboardData,
     isLoading,
     error,
-    loadNotifications,
-    markAsRead,
-    markAllAsRead,
-    deleteNotification,
-    updateNotificationSettings,
+    lastUpdated,
+    loadDashboardData,
+    loadPortfolioSummary,
+    loadMarketData,
+    loadRecentTrades,
+    loadAlerts,
     clearError
   }
 } 

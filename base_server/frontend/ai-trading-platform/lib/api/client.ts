@@ -7,27 +7,20 @@ class ApiClient {
   private wsConnections: Map<string, WebSocket> = new Map()
 
   constructor() {
-    const baseURL = process.env.NEXT_PUBLIC_API_URL;
-    if (!baseURL) {
-      throw new Error("NEXT_PUBLIC_API_URL 환경변수가 설정되어 있지 않습니다. .env.local 파일에 NEXT_PUBLIC_API_URL을 지정하세요.");
-    }
-    // Next.js rewrite가 /api/*를 처리하므로 baseURL은 백엔드 루트로 설정
-    let normalizedBaseURL = baseURL.trim()
-    if (normalizedBaseURL.endsWith('/')) {
-      normalizedBaseURL = normalizedBaseURL.slice(0, -1)
-    }
-    // Next.js rewrite가 /api/*를 http://127.0.0.1:8000/api/*로 전달하므로
-    // baseURL은 백엔드 루트(http://127.0.0.1:8000)로 유지
-    const timeout = process.env.NEXT_PUBLIC_API_TIMEOUT
-      ? parseInt(process.env.NEXT_PUBLIC_API_TIMEOUT, 10)
+    // 환경 변수가 설정되지 않은 경우 기본값 사용
+    const baseURL = process.env.NEXT_PUBLIC_API_URL || "";
+    const timeout = process.env.NEXT_PUBLIC_API_TIMEOUT 
+      ? parseInt(process.env.NEXT_PUBLIC_API_TIMEOUT, 10) 
       : 10000;
+
     this.client = axios.create({
-      baseURL: normalizedBaseURL,
+      baseURL,
       timeout,
       headers: {
         "Content-Type": "application/json",
       },
     })
+
     this.setupInterceptors()
   }
 
@@ -82,6 +75,9 @@ class ApiClient {
         return response
       },
       async (error) => {
+        console.log("[ERROR_INTERCEPTOR] 에러 발생:", error);
+        console.log("[ERROR_INTERCEPTOR] error.response?.data:", error.response?.data);
+        
         if (error.code === 'ECONNABORTED') {
           // 이미 로그인된 상태라면
           if (typeof window !== 'undefined') {
@@ -108,8 +104,10 @@ class ApiClient {
             localStorage.removeItem("userId");
           }
           
-          // 로그인 페이지로 리다이렉트
-          window.location.href = "/auth/login";
+          // 로그인 페이지에서는 리다이렉트하지 않음 (무한 루프 방지)
+          if (typeof window !== "undefined" && !window.location.pathname.includes("/auth/login")) {
+            window.location.href = "/auth/login";
+          }
           return Promise.reject(error);
         }
 
@@ -120,8 +118,10 @@ class ApiClient {
             await store.dispatch(refreshTokenAsync())
             return this.client(originalRequest)
           } catch (refreshError) {
-            // Redirect to login
-            window.location.href = "/auth/login"
+            // 로그인 페이지에서는 리다이렉트하지 않음 (무한 루프 방지)
+            if (typeof window !== "undefined" && !window.location.pathname.includes("/auth/login")) {
+              window.location.href = "/auth/login"
+            }
             return Promise.reject(refreshError)
           }
         }
@@ -193,6 +193,8 @@ class ApiClient {
       ws.send(JSON.stringify(message))
     }
   }
+
+
 }
 
 export const apiClient = new ApiClient()

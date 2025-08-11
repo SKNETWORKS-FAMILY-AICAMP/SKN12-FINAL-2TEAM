@@ -22,16 +22,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Check for existing session on mount
     const checkAuth = async () => {
       try {
-        // 토큰 유효성 검사 및 자동 리다이렉트
-        if (!authManager.checkTokenValidity()) {
-          // 토큰이 유효하지 않으면 이미 리다이렉트됨
-          setIsLoading(false);
-          return;
-        }
-
+        // 무한 리다이렉트 루프 방지: 자동 리다이렉트 없이 토큰만 검사
         const existingSession = authManager.getSession()
-        if (existingSession) {
+        if (existingSession && existingSession.expiresAt > Date.now()) {
           setUser(existingSession.user)
+        } else {
+          // 세션이 없거나 만료된 경우 세션만 정리 (리다이렉트 없음)
+          if (existingSession && existingSession.expiresAt <= Date.now()) {
+            authManager.clearSession()
+          }
         }
       } catch (error) {
         console.error("Auth check failed:", error)

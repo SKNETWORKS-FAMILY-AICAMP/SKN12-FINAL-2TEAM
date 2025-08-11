@@ -1,6 +1,6 @@
 import 'dotenv/config';
 
-/** @type {import('next').NextConfig} */
+/** @type {import('next'). NextConfig} */
 const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
@@ -59,16 +59,21 @@ const nextConfig = {
   },
   async rewrites() {
     return [
+      // 모든 API 요청을 백엔드로 프록시
       {
         source: '/api/:path*',
-        destination: 'http://localhost:8000/api/:path*',
+        destination: 'http://127.0.0.1:8000/api/:path*',
       },
-      // notification 엔드포인트 추가
+      // notification 엔드포인트도 포함
       {
         source: '/notification/:path*',
         destination: 'http://127.0.0.1:8000/notification/:path*',
       },
     ];
+  },
+  // scroll-behavior 경고 해결
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production',
   },
 }
 
