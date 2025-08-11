@@ -102,7 +102,7 @@ export function StrategyGrid() {
           <Button 
             variant="outline"
             size="sm" 
-            className="flex items-center gap-2 rounded-2xl shadow"
+            className="flex items-center gap-2 rounded-2xl shadow text-foreground"
             onClick={() => setIsModalOpen(true)}
           >
             <Plus className="w-4 h-4" />
