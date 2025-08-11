@@ -7,50 +7,29 @@ import { useRouter } from "next/navigation";
 import { useTutorial } from "@/hooks/use-tutorial"
 import { TutorialOverlay } from "@/components/tutorial/tutorial-overlay"
 import { Settings, User, Bell, Shield, CreditCard, LogOut } from "lucide-react";
-import { profileService } from "@/lib/api/profile";
-import { settingsService } from "@/lib/api/settings";
+import { useProfile } from "@/hooks/use-profile";
 
 export default function SettingsPage() {
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   
-  // Profile data
-  const [profileData, setProfileData] = useState({
-    nickname: "",
-    email: "",
-    phone_number: "",
-    korea_investment_app_key: "",
-    korea_investment_app_secret: "",
-    alpha_vantage_key: "",
-    polygon_key: "",
-    finnhub_key: ""
-  });
-  
-  // Original data for comparison (변경 감지용)
-  const [originalProfileData, setOriginalProfileData] = useState({
-    nickname: "",
-    email: "",
-    phone_number: "",
-    korea_investment_app_key: "",
-    korea_investment_app_secret: "",
-    alpha_vantage_key: "",
-    polygon_key: "",
-    finnhub_key: ""
-  });
-  
-  // Settings data (알림 설정만 사용)
-  const [settingsData, setSettingsData] = useState({
-    email_notifications_enabled: true,
-    sms_notifications_enabled: true,
-    push_notifications_enabled: true,
-    price_alerts: true,
-    news_alerts: true,
-    portfolio_alerts: false,
-    trade_alerts: true
-  });
+  // Profile 훅 사용
+  const {
+    profileData,
+    notificationSettings,
+    loading,
+    error,
+    loadProfile,
+    updateProfile,
+    updateNotifications,
+    changePassword,
+    saveApiKeys,
+    clearError,
+    hasProfileChanges,
+    setProfileData,
+    setNotificationSettings
+  } = useProfile();
 
   // Password change state
   const [passwordData, setPasswordData] = useState({
@@ -73,94 +52,35 @@ export default function SettingsPage() {
 
   // Load data on component mount
   useEffect(() => {
-    loadData();
-  }, []);
+    const abortController = new AbortController();
+    let isMounted = true;
+    
+    const loadDataSafely = async () => {
+      if (abortController.signal.aborted || !isMounted) return;
+      await loadProfile();
+    };
+    
+    loadDataSafely();
+    
+    return () => {
+      isMounted = false;
+      abortController.abort();
+    };
+  }, [loadProfile]);
 
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      
-      // Load profile data (including notification settings)
-      const profileResponse = await profileService.getProfile() as any;
-      console.log("Profile response:", profileResponse); // 디버깅용
-      
-      if (profileResponse.errorCode === 0 && profileResponse.profile) {
-        // profile이 문자열인 경우 파싱
-        const profile = typeof profileResponse.profile === 'string' 
-          ? JSON.parse(profileResponse.profile) 
-          : profileResponse.profile;
-        
-        console.log("Raw profile data:", profile); // 디버깅용
-        
-        const newProfileData = {
-          nickname: profile.nickname !== null && profile.nickname !== undefined ? profile.nickname : "",
-          email: profile.email !== null && profile.email !== undefined ? profile.email : "",
-          phone_number: profile.phone_number !== null && profile.phone_number !== undefined ? profile.phone_number : "",
-          korea_investment_app_key: profile.korea_investment_app_key !== null && profile.korea_investment_app_key !== undefined ? profile.korea_investment_app_key : "",
-          korea_investment_app_secret: profile.korea_investment_app_secret !== null && profile.korea_investment_app_secret !== undefined ? profile.korea_investment_app_secret : "",
-          alpha_vantage_key: profile.alpha_vantage_key !== null && profile.alpha_vantage_key !== undefined ? profile.alpha_vantage_key : "",
-          polygon_key: profile.polygon_key !== null && profile.polygon_key !== undefined ? profile.polygon_key : "",
-          finnhub_key: profile.finnhub_key !== null && profile.finnhub_key !== undefined ? profile.finnhub_key : ""
-        };
-        
-        console.log("Processed profile data:", newProfileData); // 디버깅용
-        
-        setProfileData(newProfileData);
-        setOriginalProfileData(newProfileData); // 원본 데이터 저장
-        
-        // 알림 설정도 profile에서 로드
-        setSettingsData(prev => ({
-          ...prev,
-          email_notifications_enabled: profile.email_notifications_enabled ?? prev.email_notifications_enabled,
-          sms_notifications_enabled: profile.sms_notifications_enabled ?? prev.sms_notifications_enabled,
-          push_notifications_enabled: profile.push_notifications_enabled ?? prev.push_notifications_enabled,
-          price_alerts: profile.price_alert_enabled ?? true,
-          news_alerts: profile.news_alert_enabled ?? true,
-          portfolio_alerts: profile.portfolio_alert_enabled ?? false,
-          trade_alerts: profile.trade_alert_enabled ?? true
-        }));
-      }
-      
-    } catch (error) {
-      console.error("Failed to load data:", error);
-      setMessage("데이터 로드에 실패했습니다.");
-    } finally {
-      setLoading(false);
+  // Error 처리
+  useEffect(() => {
+    if (error) {
+      setMessage(error);
     }
-  };
+  }, [error]);
 
   const handleSave = async () => {
     try {
-      setSaving(true);
       setMessage("");
       
-      // 알림 설정만 별도로 업데이트
-      const notificationData = {
-        email_notifications_enabled: settingsData.email_notifications_enabled,
-        sms_notifications_enabled: settingsData.sms_notifications_enabled,
-        push_notifications_enabled: settingsData.push_notifications_enabled,
-        price_alert_enabled: settingsData.price_alerts,
-        news_alert_enabled: settingsData.news_alerts,
-        portfolio_alert_enabled: settingsData.portfolio_alerts,
-        trade_alert_enabled: settingsData.trade_alerts
-      };
-
-      // 알림 설정 업데이트
-      await profileService.updateNotificationSettings(notificationData);
-      
-      // 프로필 데이터 변경사항이 있는지 확인
-      const hasProfileChanges = 
-        profileData.nickname !== originalProfileData.nickname ||
-        profileData.email !== originalProfileData.email ||
-        profileData.phone_number !== originalProfileData.phone_number ||
-        profileData.korea_investment_app_key !== originalProfileData.korea_investment_app_key ||
-        profileData.korea_investment_app_secret !== originalProfileData.korea_investment_app_secret ||
-        profileData.alpha_vantage_key !== originalProfileData.alpha_vantage_key ||
-        profileData.polygon_key !== originalProfileData.polygon_key ||
-        profileData.finnhub_key !== originalProfileData.finnhub_key;
-      
       // 프로필 데이터 변경사항이 있는 경우
-      if (hasProfileChanges) {
+      if (hasProfileChanges()) {
         // 필수 필드 검증 (닉네임, 이메일, 전화번호)
         if (!profileData.nickname || profileData.nickname.trim() === "") {
           setMessage("닉네임을 입력해주세요.");
@@ -177,46 +97,31 @@ export default function SettingsPage() {
           return;
         }
         
-        // 모든 필수 필드가 입력된 경우에만 업데이트
-        const fullProfileData = {
-          // 프로필 데이터 (현재 입력된 값 사용)
-          nickname: profileData.nickname.trim(),
-          email: profileData.email.trim(),
-          phone_number: profileData.phone_number.trim(),
-          korea_investment_app_key: profileData.korea_investment_app_key || "",
-          korea_investment_app_secret: profileData.korea_investment_app_secret || "",
-          alpha_vantage_key: profileData.alpha_vantage_key || "",
-          polygon_key: profileData.polygon_key || "",
-          finnhub_key: profileData.finnhub_key || "",
-          
-          // 필수 알림 설정 필드들 (현재 설정값 사용)
-          email_notifications_enabled: settingsData.email_notifications_enabled,
-          sms_notifications_enabled: settingsData.sms_notifications_enabled,
-          push_notifications_enabled: settingsData.push_notifications_enabled,
-          price_alert_enabled: settingsData.price_alerts,
-          news_alert_enabled: settingsData.news_alerts,
-          portfolio_alert_enabled: settingsData.portfolio_alerts,
-          trade_alert_enabled: settingsData.trade_alerts,
-          
-          // 비밀번호 변경 (선택사항)
-          current_password: null,
-          new_password: null
-        };
-        
-        try {
-          await profileService.updateProfile(fullProfileData);
-        } catch (profileError) {
-          console.error("Profile update failed:", profileError);
-          // 프로필 업데이트 실패해도 알림 설정은 성공했으므로 성공 메시지 표시
+        // 프로필 업데이트 (updateAllProfile에서 notificationSettings도 함께 처리)
+        const profileResult = await updateProfile(profileData);
+        if (!profileResult.success) {
+          setMessage(profileResult.error || "프로필 업데이트에 실패했습니다.");
+          return;
+        }
+      } else {
+        // 프로필 데이터 변경사항이 없는 경우 알림 설정만 업데이트
+        const notificationResult = await updateNotifications({});
+        if (!notificationResult.success) {
+          setMessage(notificationResult.error || "알림 설정 업데이트에 실패했습니다.");
+          return;
         }
       }
       
       setMessage("설정이 성공적으로 저장되었습니다.");
+      
+      // 3초 후 메시지 제거
+      setTimeout(() => {
+        setMessage("");
+      }, 3000);
+      
     } catch (error) {
       console.error("Failed to save settings:", error);
       setMessage("설정 저장에 실패했습니다.");
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -228,7 +133,7 @@ export default function SettingsPage() {
   };
 
   const handleSettingsChange = (field: string, value: any) => {
-    setSettingsData(prev => ({
+    setNotificationSettings(prev => ({
       ...prev,
       [field]: value
     }));
@@ -267,11 +172,11 @@ export default function SettingsPage() {
       setMessage("");
 
       // 현재 비밀번호와 새 비밀번호로 변경
-      const response = await profileService.changePassword(
+      const response = await changePassword(
         passwordData.currentPassword,
         passwordData.newPassword,
         passwordData.otpCode
-      ) as any;
+      );
 
       // 응답이 문자열인 경우 파싱
       const responseData = typeof response === 'string' ? JSON.parse(response) : response;
@@ -349,15 +254,15 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="h-screen w-full bg-gradient-to-br from-black via-gray-900 to-gray-820 text-white overflow-hidden">
+    <div className="min-h-screen w-full bg-gradient-to-br from-black via-gray-900 to-gray-820 text-white">
       <Header onSidebarOpen={() => setSidebarOpen(true)} />
       <AppSidebar 
         open={sidebarOpen} 
         onClose={() => setSidebarOpen(false)} 
         onNavigate={handleNavigate}
       />
-      <main className="flex flex-col items-center px-6 md:px-12 py-8 bg-transparent h-full overflow-y-auto">
-        <div className="w-full max-w-4xl">
+      <main className="flex flex-col items-center px-6 md:px-12 py-8 bg-transparent min-h-screen">
+        <div className="w-full max-w-4xl pb-20">
           <h1 className="text-2xl md:text-3xl font-bold mb-4 tracking-tight text-white">
             개인 정보 설정 
           </h1>
@@ -424,7 +329,7 @@ export default function SettingsPage() {
                     <input 
                       type="checkbox" 
                       className="sr-only peer" 
-                      checked={settingsData.email_notifications_enabled}
+                      checked={notificationSettings.email_notifications_enabled}
                       onChange={(e) => handleSettingsChange("email_notifications_enabled", e.target.checked)}
                     />
                     <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
@@ -436,7 +341,7 @@ export default function SettingsPage() {
                     <input 
                       type="checkbox" 
                       className="sr-only peer" 
-                      checked={settingsData.sms_notifications_enabled}
+                      checked={notificationSettings.sms_notifications_enabled}
                       onChange={(e) => handleSettingsChange("sms_notifications_enabled", e.target.checked)}
                     />
                     <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
@@ -593,19 +498,9 @@ export default function SettingsPage() {
               <button 
                 onClick={handleSave}
                 className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-3 px-6 rounded-lg transition-colors"
-                disabled={saving}
               >
-                {saving ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    저장 중...
-                  </>
-                ) : (
-                  <>
-                    <LogOut size={16} />
-                    변경 사항 적용
-                  </>
-                )}
+                <LogOut size={16} />
+                변경 사항 적용
               </button>
             </div>
           </div>
