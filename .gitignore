@@ -176,3 +176,12 @@ base_server/**/*.key
 CLAUDE.md
 base_server/frontend/ai-trading-platform/package-lock.json
 .cursor/rules/final-rule.mdc
+
+
+# Dependencies
+node_modules/
+node_modules/*
+
+# 또는 더 구체적으로
+**/node_modules/
+**/node_modules/**
