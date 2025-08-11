@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import axios from "axios";
-import { profileService } from "@/lib/api/profile";
+import { setupProfile } from "@/lib/api/profile";
 
 const steps: Array<{
   key: string;
@@ -110,16 +109,22 @@ export default function OnboardingPage() {
         monthly_budget: parseFloat(answers.monthly_budget),
       };
       
-      // 명시적 타입 지정
-      const res: any = await profileService.setupProfile(payload);
+      console.log("[온보딩] 프로필 설정 요청:", payload);
+      
+      // setupProfile 함수 직접 호출
+      const res = await setupProfile(payload);
+      
+      console.log("[온보딩] 백엔드 응답:", res);
       
       // 응답이 문자열인 경우 JSON 파싱
-      let parsedRes = res;
+      let parsedRes: any = res;
       if (typeof res === 'string') {
         try {
           parsedRes = JSON.parse(res);
         } catch (parseError) {
           console.error("[온보딩] JSON 파싱 에러:", parseError);
+          setError("서버 응답을 처리할 수 없습니다.");
+          return;
         }
       }
       
@@ -128,8 +133,11 @@ export default function OnboardingPage() {
       const errorCode = parsedRes?.errorCode;
       const message = parsedRes?.message;
       
+      console.log("[온보딩] 파싱된 응답:", { errorCode, profile, message });
+      
       // 성공 조건: errorCode가 0이고 profile이 존재하거나, profile이 존재하는 경우
       if (errorCode === 0 || profile) {
+        console.log("[온보딩] 프로필 설정 성공, 대시보드로 이동");
         // 강제로 리다이렉트
         window.location.href = "/dashboard";
       } else {
@@ -137,6 +145,7 @@ export default function OnboardingPage() {
         setError(errorMessage);
       }
     } catch (err: any) {
+      console.error("[온보딩] 에러 발생:", err);
       const errorMessage = err?.response?.data?.message || "제출에 실패했습니다. 다시 시도해 주세요.";
       setError(errorMessage);
     } finally {
