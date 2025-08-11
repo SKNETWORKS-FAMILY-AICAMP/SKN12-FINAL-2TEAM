@@ -19,80 +19,122 @@ interface LocalMessage {
 
 export function useChat() {
   const [rooms, setRooms] = useState<any[]>([]);
-  const [messages, setMessages] = useState<LocalMessage[]>([]);
   const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
-  const [selectedPersona, setSelectedPersona] = useState<string>("GPT4O");
+  const [messages, setMessages] = useState<LocalMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedPersona, setSelectedPersona] = useState<string>("GPT4O");
   const [personas, setPersonas] = useState<any[]>([]);
   const [typingMessageId, setTypingMessageId] = useState<string | null>(null);
 
-  // 채팅방 목록 불러오기 (항상 백엔드에서 최신 데이터 사용)
+  // 채팅방 목록 불러오기 (사용자 액션 기반)
   const loadRooms = useCallback(async () => {
+    setIsLoading(true);
     try {
       const res = await fetchChatRooms();
-      const data = typeof res === "string" ? JSON.parse(res) : res;
-      let rooms = data.rooms || [];
-      // room_state가 'DELETED'이거나, 방 정보가 불완전하면 무조건 목록에서 제외
-      rooms = rooms.filter((room: any) => {
-        if (!room) return false;
-        if (room.room_state === 'DELETED') return false;
-        if (!room.room_id || !room.title || !room.ai_persona) return false;
-        return true;
-      });
-      setRooms(rooms);
-      if (rooms.length === 0) setCurrentRoomId(null);
-      else if (!rooms.find((r: any) => r.room_id === currentRoomId)) setCurrentRoomId(rooms[0].room_id);
+      const data = res as any;
+      console.log("[useChat] fetchChatRooms 응답:", data);
+      
+      // 응답 구조 디버깅
+      console.log("[useChat] 응답 전체 구조:", data);
+      console.log("[useChat] data.rooms:", data.rooms);
+      console.log("[useChat] data.data?.rooms:", data.data?.rooms);
+      
+      // 백엔드 응답 구조에 맞게 수정
+      const fetchedRooms = data.rooms || data.data?.rooms || [];
+      console.log("[useChat] 가져온 채팅방들:", fetchedRooms);
+      setRooms(fetchedRooms);
+      console.log("[useChat] rooms 상태 업데이트됨:", fetchedRooms);
     } catch (e) {
       setError("채팅방 목록 불러오기 실패");
-    }
-  }, [currentRoomId]);
-
-  // 메시지 목록 불러오기
-  const loadMessages = useCallback(async (roomId: string) => {
-    try {
-      const res = await fetchMessages(roomId);
-      const data = typeof res === "string" ? JSON.parse(res) : res;
-      console.log("[FRONT] 메시지 목록 응답:", data);
-      // sender_type을 role로 변환
-      const rawMessages =
-        (data && data.messages) ||
-        (data && data.data && data.data.messages) ||
-        [];
-      const mappedMessages = rawMessages.map((msg: any) => ({
-        id: msg.id || msg.message_id,
-        content: msg.content,
-        role: msg.role || (msg.sender_type === 'USER' ? 'user' : 'assistant'),
-        isTyping: msg.isTyping,
-      }));
-      setMessages(mappedMessages);
-    } catch (e) {
-      setError("메시지 불러오기 실패");
-      console.error("메시지 불러오기 실패:", e);
+      console.error("채팅방 목록 불러오기 실패:", e);
+    } finally {
+      setIsLoading(false);
     }
   }, []);
 
-  // 채팅방 생성
-  const createRoom = useCallback(async (aiPersona: string, title = "") => {
+  // 메시지 목록 불러오기 (사용자 액션 기반)
+  const loadMessages = useCallback(async (roomId: string) => {
+    setIsLoading(true);
     try {
-      const res = await apiCreateChatRoom(title, aiPersona);
-      const data = typeof res === "string" ? JSON.parse(res) : res;
-      console.log("[FRONT] 채팅방 생성 응답:", data);
-      // errorCode가 0이면 optimistic update
-      if (data && data.errorCode === 0 && data.room) {
-        setRooms(prev => [data.room, ...prev]);
-        setCurrentRoomId(data.room.room_id);
-        await loadMessages(data.room.room_id); // 새 방 생성 후 바로 메시지 목록 불러오기
-      } else {
-        await loadRooms(); // fallback
-      }
+      const res = await fetchMessages(roomId);
+      const data = res as any;
+      
+      // 응답 구조 디버깅
+      console.log("[useChat] fetchMessages 응답:", data);
+      console.log("[useChat] 응답 전체 구조:", data);
+      console.log("[useChat] data.messages:", data.messages);
+      console.log("[useChat] data.data?.messages:", data.data?.messages);
+      
+      // 백엔드 응답 구조에 맞게 수정
+      const fetchedMessages = data.messages || data.data?.messages || [];
+      const mappedMessages: LocalMessage[] = fetchedMessages.map((msg: any) => ({
+        id: msg.message_id,
+        content: msg.content,
+        role: msg.role,
+      }));
+      console.log("[useChat] 가져온 메시지들:", mappedMessages);
+      setMessages(mappedMessages);
     } catch (e) {
-      setError("채팅방 생성 실패");
-      console.error("채팅방 생성 실패:", e);
+      setError("메시지 목록 불러오기 실패");
+      console.error("메시지 목록 불러오기 실패:", e);
+    } finally {
+      setIsLoading(false);
     }
-  }, [loadRooms, loadMessages]);
+  }, []);
 
-  // 메시지 전송
+  // 에러 초기화
+  const clearError = useCallback(() => {
+    setError(null);
+  }, []);
+
+  // 초기 로딩 (컴포넌트 마운트 시 한 번만)
+  useEffect(() => {
+    loadRooms();
+    
+    // 페르소나 목록 초기화
+    setPersonas([
+      { 
+        persona_id: "GPT4O", 
+        name: "GPT-4o", 
+        description: "범용 AI 어시스턴트",
+        avatar_url: "https://via.placeholder.com/48x48/3B82F6/FFFFFF?text=GPT"
+      },
+      { 
+        persona_id: "market_analysis", 
+        name: "시장 분석가", 
+        description: "주식 시장 분석 및 예측",
+        avatar_url: "https://via.placeholder.com/48x48/10B981/FFFFFF?text=📊"
+      },
+      { 
+        persona_id: "stock_screener", 
+        name: "종목 스크리너", 
+        description: "투자 가치가 높은 종목 발굴",
+        avatar_url: "https://via.placeholder.com/48x48/F59E0B/FFFFFF?text=🔍"
+      },
+      { 
+        persona_id: "portfolio_optimizer", 
+        name: "포트폴리오 최적화", 
+        description: "투자 포트폴리오 최적화",
+        avatar_url: "https://via.placeholder.com/48x48/8B5CF6/FFFFFF?text=⚖️"
+      },
+      { 
+        persona_id: "trading_signals", 
+        name: "트레이딩 시그널", 
+        description: "매수/매도 타이밍 신호",
+        avatar_url: "https://via.placeholder.com/48x48/EF4444/FFFFFF?text=📈"
+      }
+    ]);
+  }, [loadRooms]);
+
+  // 현재 채팅방이 변경되면 메시지 로드
+  useEffect(() => {
+    if (currentRoomId) {
+      loadMessages(currentRoomId);
+    }
+  }, [currentRoomId, loadMessages]);
+
+  // 메시지 전송 (사용자 액션 기반)
   const sendMessage = useCallback(async (content: string, personaOverride?: string) => {
     const roomIdToUse = currentRoomId || "test_room";
     const persona = personaOverride || selectedPersona || "GPT4O";
@@ -164,7 +206,42 @@ export function useChat() {
     }
   }, [currentRoomId, selectedPersona]);
 
-  // 채팅방 삭제
+  // 채팅방 생성 (사용자 액션 기반)
+  const createRoom = useCallback(async (aiPersona: string, title: string) => {
+    console.log("[useChat] createRoom 호출됨:", { aiPersona, title });
+    try {
+      const res = await apiCreateChatRoom(title, aiPersona);
+      console.log("[useChat] apiCreateChatRoom 응답:", res);
+      const data = res as any;
+      
+      // 응답 구조 디버깅
+      console.log("[useChat] 응답 전체 구조:", data);
+      console.log("[useChat] data.room:", data.room);
+      console.log("[useChat] data.data?.room:", data.data?.room);
+      
+      // 백엔드 응답 구조에 맞게 수정
+      const newRoom = data.room || data.data?.room;
+      if (newRoom) {
+        console.log("[useChat] 새 채팅방 생성됨:", newRoom);
+        setRooms(prev => {
+          const updatedRooms = [newRoom, ...prev];
+          console.log("[useChat] rooms 상태 업데이트:", { prev: prev.length, updated: updatedRooms.length });
+          return updatedRooms;
+        });
+        setCurrentRoomId(newRoom.room_id);
+        console.log("[useChat] currentRoomId 설정됨:", newRoom.room_id);
+        await loadMessages(newRoom.room_id);
+      } else {
+        console.error("[useChat] 응답에 room 데이터가 없음:", data);
+        console.error("[useChat] 응답 구조:", JSON.stringify(data, null, 2));
+      }
+    } catch (e) {
+      setError("채팅방 생성 실패");
+      console.error("채팅방 생성 실패:", e);
+    }
+  }, [loadMessages]);
+
+  // 채팅방 삭제 (사용자 액션 기반)
   const deleteRoom = useCallback(async (roomId: string) => {
     try {
       await apiDeleteChatRoom(roomId);
@@ -177,52 +254,35 @@ export function useChat() {
     }
   }, [currentRoomId, loadRooms]);
 
-  // 채팅방 이름 변경
+  // 채팅방 이름 변경 (사용자 액션 기반)
   const handleRenameRoom = useCallback(async (roomId: string, newTitle: string) => {
     try {
       await apiUpdateChatRoomTitle(roomId, newTitle);
-      setRooms(prev =>
-        prev.map(room =>
-          room.room_id === roomId ? { ...room, title: newTitle } : room
-        )
-      );
+      setRooms(prev => prev.map(room => 
+        room.room_id === roomId ? { ...room, title: newTitle } : room
+      ));
     } catch (e) {
       setError("채팅방 이름 변경 실패");
     }
   }, []);
 
-  useEffect(() => {
-    loadRooms();
-  }, [loadRooms]);
-
-  useEffect(() => {
-    if (currentRoomId) {
-      loadMessages(currentRoomId);
-    }
-  }, [currentRoomId, loadMessages]);
-
-  useEffect(() => {
-    setPersonas([
-      { persona_id: "market_analysis", name: "시장 분석" },
-      { persona_id: "stock_screener", name: "종목 스크리너" },
-      { persona_id: "portfolio_optimizer", name: "포트폴리오 최적화" },
-      { persona_id: "trading_signals", name: "트레이딩 시그널" },
-    ]);
-  }, []);
-
   return {
     rooms,
     currentRoomId,
-    setCurrentRoomId,
     messages,
     isLoading,
     error,
+    selectedPersona,
+    personas,
+    typingMessageId,
+    setCurrentRoomId,
+    setSelectedPersona,
+    loadRooms,
     createRoom,
     sendMessage,
     deleteRoom,
-    handleRenameRoom, // 추가
-    selectedPersona,
-    setSelectedPersona,
-    personas,
+    handleRenameRoom,
+    loadMessages,
+    clearError
   };
 }

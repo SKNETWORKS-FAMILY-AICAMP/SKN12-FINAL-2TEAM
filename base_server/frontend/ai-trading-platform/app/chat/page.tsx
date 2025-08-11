@@ -82,6 +82,17 @@ export default function ChatPage() {
   //   setAccountDbKey(key);
   // }, []);
 
+  // rooms 상태 변화 추적
+  useEffect(() => {
+    console.log("[ChatPage] rooms 상태 변화:", rooms);
+    console.log("[ChatPage] rooms 개수:", rooms.length);
+  }, [rooms]);
+
+  // sidebarOpen 상태 변화 추적
+  useEffect(() => {
+    console.log("[ChatPage] sidebarOpen 상태:", sidebarOpen);
+  }, [sidebarOpen]);
+
   // 스크롤 이벤트 핸들러
   const handleScroll = () => {
     if (!chatContainerRef.current) return;
