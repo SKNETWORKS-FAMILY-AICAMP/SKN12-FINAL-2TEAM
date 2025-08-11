@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Plus, MessageCircle, FolderOpen, Zap, Search, Settings, ArrowUp, Menu, ArrowLeft, X } from "lucide-react";
+import { Plus, Settings, ArrowUp, Menu, ArrowLeft, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useChat } from "@/hooks/use-chat";
 import { useTutorial } from "@/hooks/use-tutorial";
@@ -246,33 +246,7 @@ export default function ChatPage() {
             <span>새 채팅</span>
           </button>
         </div>
-        {/* Navigation */}
-        <div className="p-4 space-y-2">
-          <div className={`flex items-center gap-2 py-2 ${
-            isLoading 
-              ? 'text-gray-500 cursor-not-allowed' 
-              : 'text-gray-300 hover:text-white cursor-pointer'
-          }`}>
-            <MessageCircle size={16} />
-            <span>채팅</span>
-          </div>
-          <div className={`flex items-center gap-2 py-2 ${
-            isLoading 
-              ? 'text-gray-500 cursor-not-allowed' 
-              : 'text-gray-300 hover:text-white cursor-pointer'
-          }`}>
-            <FolderOpen size={16} />
-            <span>프로젝트</span>
-          </div>
-          <div className={`flex items-center gap-2 py-2 ${
-            isLoading 
-              ? 'text-gray-500 cursor-not-allowed' 
-              : 'text-gray-300 hover:text-white cursor-pointer'
-          }`}>
-            <Zap size={16} />
-            <span>아티팩트</span>
-          </div>
-        </div>
+        {/* Navigation removed */}
         {/* Recent History */}
         <div className="flex-1 overflow-y-auto">
           <div className="p-4">
