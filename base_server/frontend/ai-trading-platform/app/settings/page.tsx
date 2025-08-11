@@ -174,14 +174,13 @@ export default function SettingsPage() {
       // 현재 비밀번호와 새 비밀번호로 변경
       const response = await changePassword(
         passwordData.currentPassword,
-        passwordData.newPassword,
-        passwordData.otpCode
+        passwordData.newPassword
       );
 
       // 응답이 문자열인 경우 파싱
       const responseData = typeof response === 'string' ? JSON.parse(response) : response;
 
-      if (responseData.errorCode === 0) {
+      if (responseData.success) {
         setMessage("비밀번호가 성공적으로 변경되었습니다.");
         setPasswordData({
           currentPassword: "",
@@ -201,7 +200,7 @@ export default function SettingsPage() {
         if (responseData.errorCode === 9004) {
           setMessage("현재 비밀번호가 일치하지 않습니다.");
         } else {
-          setMessage(responseData.message || "비밀번호 변경에 실패했습니다.");
+          setMessage(responseData.error || "비밀번호 변경에 실패했습니다.");
         }
       }
     } catch (error: any) {

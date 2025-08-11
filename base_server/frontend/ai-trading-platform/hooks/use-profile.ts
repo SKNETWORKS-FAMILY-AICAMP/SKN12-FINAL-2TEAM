@@ -185,19 +185,22 @@ export function useProfile() {
   }, [notificationSettings]);
 
   // 비밀번호 변경
-  const changePassword = useCallback(async (passwordData: PasswordData) => {
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
     try {
       setLoading(true);
       setError(null);
 
-      const response = await profileService.changePassword(passwordData) as any;
+      const response = await profileService.changePassword({ 
+        current_password: currentPassword, 
+        new_password: newPassword 
+      }) as any;
       console.log("[useProfile] Password change response:", response);
 
       if (response.errorCode === 0) {
-        return { success: true };
+        return { success: true, require_relogin: response.require_relogin || false };
       } else {
         setError("비밀번호 변경에 실패했습니다.");
-        return { success: false, error: response.message };
+        return { success: false, error: response.message, errorCode: response.errorCode };
       }
     } catch (error: any) {
       console.error("[useProfile] Failed to change password:", error);
