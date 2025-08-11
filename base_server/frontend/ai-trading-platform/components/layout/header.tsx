@@ -1,8 +1,6 @@
 "use client"
 
 import { Badge } from "@/components/ui/badge"
-import { Search } from "lucide-react"
-import { Input } from "@/components/ui/input"
 import { Menu } from "lucide-react"
 import { NotificationDropdown } from "@/components/layout/notification-dropdown"
 
@@ -19,13 +17,7 @@ export function Header({ onSidebarOpen = () => {} }: { onSidebarOpen?: () => voi
         <Menu className="h-6 w-6 text-white" />
       </button>
 
-      {/* Search */}
-      <div className="flex-1 max-w-md">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-white h-4 w-4" />
-          <Input placeholder="종목, 뉴스, AI 도구 검색..." className="pl-10 bg-black/80 border border-gray-800 text-white placeholder:text-gray-400" />
-        </div>
-      </div>
+      {/* Search removed */}
 
       {/* Right actions */}
       <div className="flex items-center gap-2 ml-auto">
