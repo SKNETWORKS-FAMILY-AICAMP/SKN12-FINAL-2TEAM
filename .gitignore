@@ -185,3 +185,8 @@ node_modules/*
 # 또는 더 구체적으로
 **/node_modules/
 **/node_modules/**
+base_server/frontend/ai-trading-platform/package-lock.json
+/node_modules/@floating-ui/core
+/node_modules/@floating-ui
+/node_modules
+base_server/frontend/ai-trading-platform/package-lock.json
