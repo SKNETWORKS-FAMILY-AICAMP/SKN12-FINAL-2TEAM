@@ -11,7 +11,7 @@ class ApiClient {
     const baseURL = process.env.NEXT_PUBLIC_API_URL || "";
     const timeout = process.env.NEXT_PUBLIC_API_TIMEOUT 
       ? parseInt(process.env.NEXT_PUBLIC_API_TIMEOUT, 10) 
-      : 10000;
+      : 30000; // 30초로 증가
 
     this.client = axios.create({
       baseURL: process.env.NEXT_PUBLIC_API_BASE ?? 'http://127.0.0.1:8000', // /api 제거
