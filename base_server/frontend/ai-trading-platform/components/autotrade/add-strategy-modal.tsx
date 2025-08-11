@@ -393,7 +393,7 @@ export function AddStrategyModal({ isOpen, onClose, onAddStrategy }: AddStrategy
                 <Button
                   variant="outline"
                   onClick={onClose}
-                  className="flex-1"
+                  className="flex-1 text-foreground"
                 >
                   취소
                 </Button>
