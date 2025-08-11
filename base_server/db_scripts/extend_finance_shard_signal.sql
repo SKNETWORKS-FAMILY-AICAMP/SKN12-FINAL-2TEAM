@@ -1525,3 +1525,67 @@ BEGIN
     WHERE account_db_key = p_account_db_key AND is_deleted = 0;
 END ;;
 DELIMITER ;
+
+-- =====================================
+-- 📈 Shard 2: 활성 심볼 목록만 조회 (모니터링용)
+-- =====================================
+USE finance_shard_2;
+DROP PROCEDURE IF EXISTS `fp_signal_symbols_get_active`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_signal_symbols_get_active`()
+BEGIN
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        GET DIAGNOSTICS @cno = NUMBER;
+        GET DIAGNOSTICS CONDITION @cno
+        @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+            VALUES ('fp_signal_symbols_get_active', @ErrorState, @ErrorNo, @ErrorMessage, '', NOW());
+        SELECT 1 as ErrorCode, COALESCE(@ErrorMessage, 'UNKNOWN ERROR') as ErrorMessage;
+    END;
+    
+    -- 상태 반환
+    SELECT 0 as ErrorCode, 'SUCCESS' as ErrorMessage;
+    
+    -- 활성 심볼 목록만 중복 제거하여 반환
+    SELECT DISTINCT
+        symbol,             -- 종목 코드
+        exchange            -- 거래소
+    FROM table_signal_alarms 
+    WHERE is_active = 1 AND is_deleted = 0
+    ORDER BY symbol ASC;
+    
+END ;;
+DELIMITER ;
+
+-- =====================================
+-- Shard 1에도 동일한 프로시저 생성
+-- =====================================
+USE finance_shard_1;
+DROP PROCEDURE IF EXISTS `fp_signal_symbols_get_active`;
+DELIMITER ;;
+CREATE PROCEDURE `fp_signal_symbols_get_active`()
+BEGIN
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        GET DIAGNOSTICS @cno = NUMBER;
+        GET DIAGNOSTICS CONDITION @cno
+        @ErrorState = RETURNED_SQLSTATE, @ErrorNo = MYSQL_ERRNO, @ErrorMessage = MESSAGE_TEXT;
+        INSERT INTO table_errorlog (procedure_name, error_state, error_no, error_message, param, create_time)
+            VALUES ('fp_signal_symbols_get_active', @ErrorState, @ErrorNo, @ErrorMessage, '', NOW());
+        SELECT 1 as ErrorCode, COALESCE(@ErrorMessage, 'UNKNOWN ERROR') as ErrorMessage;
+    END;
+    
+    -- 상태 반환
+    SELECT 0 as ErrorCode, 'SUCCESS' as ErrorMessage;
+    
+    -- 활성 심볼 목록만 중복 제거하여 반환
+    SELECT DISTINCT
+        symbol,             -- 종목 코드
+        exchange            -- 거래소
+    FROM table_signal_alarms 
+    WHERE is_active = 1 AND is_deleted = 0
+    ORDER BY symbol ASC;
+    
+END ;;
+DELIMITER ;
