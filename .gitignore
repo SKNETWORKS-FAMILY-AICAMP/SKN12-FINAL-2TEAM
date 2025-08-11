@@ -174,3 +174,5 @@ base_server/*.key
 base_server/**/*.crt
 base_server/**/*.key
 CLAUDE.md
+base_server/frontend/ai-trading-platform/package-lock.json
+.cursor/rules/final-rule.mdc
