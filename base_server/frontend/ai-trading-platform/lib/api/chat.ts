@@ -30,7 +30,7 @@ export async function sendMessage(roomId: string, message: string, messageType: 
     content: message, 
     include_portfolio: true,
     analysis_symbols: [],
-    persona: "GPT4O",  // 백엔드 모델에 필수인 persona 필드 추가
+    ai_persona: "GPT4O",  // 백엔드 모델에 필수인 ai_persona 필드 추가
     accessToken: accessToken,
     sequence: sequence
   };
@@ -55,7 +55,7 @@ export async function fetchMessages(roomId: string, page = 1, limit = 50) {
 export async function updateChatRoomTitle(roomId: string, title: string) {
   return await apiClient.post("/api/chat/room/update", {
     room_id: roomId,
-    title
+    new_title: title
   });
 }
 

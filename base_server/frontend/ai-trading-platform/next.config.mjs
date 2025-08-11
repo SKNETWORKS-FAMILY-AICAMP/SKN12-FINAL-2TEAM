@@ -58,6 +58,7 @@ const nextConfig = {
     ];
   },
   async rewrites() {
+    console.log("[NEXT.JS] API 프록시 설정 로드됨");
     return [
       // 모든 API 요청을 백엔드로 프록시
       {

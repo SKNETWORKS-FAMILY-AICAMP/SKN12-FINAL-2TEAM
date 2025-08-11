@@ -14,7 +14,7 @@ class ApiClient {
       : 10000;
 
     this.client = axios.create({
-      baseURL: baseURL || "/api", // Next.js 프록시를 통해 요청 전달
+      baseURL: process.env.NEXT_PUBLIC_API_BASE ?? 'http://127.0.0.1:8000', // /api 제거
       timeout,
       headers: {
         "Content-Type": "application/json",
@@ -74,6 +74,10 @@ class ApiClient {
           };
           console.log("[INTERCEPTOR] Modified data:", config.data);
         }
+
+        // 실제 요청 URL 로그 출력 (디버깅용)
+        console.log("[INTERCEPTOR] Request URL:", `${config.baseURL}${config.url}`);
+        console.log("[INTERCEPTOR] Full URL:", config.url);
 
         return config;
       },

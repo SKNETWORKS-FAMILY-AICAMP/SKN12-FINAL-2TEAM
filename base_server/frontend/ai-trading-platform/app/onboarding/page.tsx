@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { setupProfile } from "@/lib/api/profile";
+import { setupProfile, SetupProfilePayload } from "@/lib/api/profile";
 
 const steps: Array<{
   key: string;
@@ -87,22 +87,22 @@ export default function OnboardingPage() {
     setIsLoading(true);
     setError("");
     try {
-      const experienceMap: Record<string, string> = {
+      const experienceMap: Record<string, "BEGINNER" | "INTERMEDIATE" | "EXPERT"> = {
         "초급": "BEGINNER",
         "중급": "INTERMEDIATE",
         "고급": "EXPERT",
       };
-      const riskMap: Record<string, string> = {
+      const riskMap: Record<string, "CONSERVATIVE" | "MODERATE" | "AGGRESSIVE"> = {
         "보수적": "CONSERVATIVE",
         "보통": "MODERATE",
         "공격적": "AGGRESSIVE",
       };
-      const goalMap: Record<string, string> = {
+      const goalMap: Record<string, "GROWTH" | "INCOME" | "PRESERVATION"> = {
         "장기투자": "GROWTH",
         "단기수익": "INCOME",
         "안정성": "PRESERVATION",
       };
-      const payload = {
+      const payload: SetupProfilePayload = {
         investment_experience: experienceMap[answers.investment_experience],
         risk_tolerance: riskMap[answers.risk_tolerance],
         investment_goal: goalMap[answers.investment_goal],

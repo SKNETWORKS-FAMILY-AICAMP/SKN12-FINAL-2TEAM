@@ -48,8 +48,8 @@ export default function ChatPage() {
     createRoom,
     sendMessage,
     personas,
-    selectedPersona,
-    setSelectedPersona,
+    selected_persona,
+    setSelected_persona,
     deleteRoom,
     handleRenameRoom, // 추가
   } = useChat();
@@ -128,7 +128,7 @@ export default function ChatPage() {
     setShowPersonaModal(true);
   };
   const handleCreateRoomWithPersona = async () => {
-    await createRoom(selectedPersona, `새 채팅 ${rooms.length + 1}`);
+    await createRoom(selected_persona, `새 채팅 ${rooms.length + 1}`);
     setShowPersonaModal(false);
   };
 
@@ -192,7 +192,7 @@ export default function ChatPage() {
             <h2 className="text-xl font-bold mb-4 text-center">AI 페르소나 선택</h2>
             <div className="flex flex-col gap-4 mb-6">
               {personas.map((persona) => (
-                <label key={persona.persona_id} className={`flex items-center gap-4 p-3 rounded-lg cursor-pointer border transition-all ${selectedPersona === persona.persona_id ? 'border-blue-500 bg-blue-900/20' : 'border-[#23243a] bg-[#23243a]/40'}`}>
+                <label key={persona.persona_id} className={`flex items-center gap-4 p-3 rounded-lg cursor-pointer border transition-all ${selected_persona === persona.persona_id ? 'border-blue-500 bg-blue-900/20' : 'border-[#23243a] bg-[#23243a]/40'}`}>
                   <img src={persona.avatar_url} alt={persona.name} className="w-12 h-12 rounded-full object-cover border border-gray-700" />
                   <div className="flex-1">
                     <div className="font-semibold text-base">{persona.name}</div>
@@ -200,8 +200,8 @@ export default function ChatPage() {
                   </div>
                   <input
                     type="radio"
-                    checked={selectedPersona === persona.persona_id}
-                    onChange={() => setSelectedPersona(persona.persona_id)}
+                    checked={selected_persona === persona.persona_id}
+                    onChange={() => setSelected_persona(persona.persona_id)}
                     className="accent-blue-500 w-5 h-5"
                   />
                 </label>
@@ -216,7 +216,7 @@ export default function ChatPage() {
               <button
                 className="px-4 py-2 rounded bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold hover:opacity-90 transition"
                 onClick={handleCreateRoomWithPersona}
-                disabled={isLoading || !selectedPersona}
+                disabled={isLoading || !selected_persona}
               >선택하고 시작</button>
             </div>
           </div>

@@ -29,7 +29,7 @@ class ChatMessageSendRequest(BaseRequest):
     """채팅 메시지 전송 요청"""
     room_id: str
     content: str
-    persona: str 
+    ai_persona: str 
 
 class ChatMessageSendResponse(BaseResponse):
     """채팅 메시지 전송 응답"""

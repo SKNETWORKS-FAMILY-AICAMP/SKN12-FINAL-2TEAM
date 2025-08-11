@@ -17,7 +17,7 @@ export function useChat() {
   const [messages, setMessages] = useState<LocalMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedPersona, setSelectedPersona] = useState<string>("GPT4O");
+  const [selected_persona, setSelected_persona] = useState<string>("GPT4O");
   const [personas, setPersonas] = useState<any[]>([]);
   const [typingMessageId, setTypingMessageId] = useState<string | null>(null);
 
@@ -61,7 +61,8 @@ export function useChat() {
     setError(null)
     
     try {
-      const response = await apiClient.post(`/api/chat/rooms/${roomId}/messages`, {
+      const response = await apiClient.post(`/api/chat/messages`, {
+        room_id: roomId,
         page: 1,
         limit: 50
       }) as any
@@ -141,7 +142,7 @@ export function useChat() {
   // 메시지 전송 (사용자 액션 기반)
   const sendMessage = useCallback(async (content: string, personaOverride?: string) => {
     const roomIdToUse = currentRoomId || "test_room";
-    const persona = personaOverride || selectedPersona || "GPT4O";
+    const persona = personaOverride || selected_persona || "GPT4O";
     setIsLoading(true);
     
     // 고유한 ID 생성 (타임스탬프 + 랜덤 값)
@@ -152,7 +153,7 @@ export function useChat() {
       { id: uniqueId, content, role: "user" }
     ]);
     try {
-      let res = await apiClient.post(`/api/chat/rooms/${roomIdToUse}/messages`, { content, persona });
+      let res = await apiClient.post(`/api/chat/message/send`, { room_id: roomIdToUse, content, ai_persona: persona });
       let parsed: any = res;
       if (parsed && parsed.data && typeof parsed.data === "object") {
         parsed = parsed.data;
@@ -208,13 +209,13 @@ export function useChat() {
     } finally {
       setIsLoading(false);
     }
-  }, [currentRoomId, selectedPersona]);
+  }, [currentRoomId, selected_persona]);
 
   // 채팅방 생성 (사용자 액션 기반)
-  const createRoom = useCallback(async (aiPersona: string, title: string) => {
-    console.log("[useChat] createRoom 호출됨:", { aiPersona, title });
+  const createRoom = useCallback(async (ai_persona: string, title: string) => {
+    console.log("[useChat] createRoom 호출됨:", { ai_persona, title });
     try {
-      const res = await apiClient.post("/api/chat/room/create", { title, aiPersona });
+      const res = await apiClient.post("/api/chat/room/create", { title, ai_persona });
       console.log("[useChat] apiCreateChatRoom 응답:", res);
       const data = res as any;
       
@@ -248,7 +249,7 @@ export function useChat() {
   // 채팅방 삭제 (사용자 액션 기반)
   const deleteRoom = useCallback(async (roomId: string) => {
     try {
-      await apiClient.post(`/api/chat/rooms/${roomId}/delete`, {
+      await apiClient.post(`/api/chat/room/delete`, {
         room_id: roomId
       });
       setRooms(prev => prev.filter(room => room.room_id !== roomId));
@@ -263,7 +264,10 @@ export function useChat() {
   // 채팅방 이름 변경 (사용자 액션 기반)
   const handleRenameRoom = useCallback(async (roomId: string, newTitle: string) => {
     try {
-      await apiClient.put(`/api/chat/rooms/${roomId}`, { title: newTitle });
+      await apiClient.post(`/api/chat/room/update`, { 
+        room_id: roomId, 
+        new_title: newTitle 
+      });
       setRooms(prev => prev.map(room => 
         room.room_id === roomId ? { ...room, title: newTitle } : room
       ));
@@ -278,11 +282,11 @@ export function useChat() {
     messages,
     isLoading,
     error,
-    selectedPersona,
+    selected_persona,
     personas,
     typingMessageId,
     setCurrentRoomId,
-    setSelectedPersona,
+    setSelected_persona,
     loadRooms,
     createRoom,
     sendMessage,
