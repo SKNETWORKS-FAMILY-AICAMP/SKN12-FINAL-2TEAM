@@ -9,7 +9,7 @@ import { apiClient } from "@/lib/api/client"
  * @returns 검색 결과
  */
 export async function searchStocks(query: string) {
-  const data = await apiClient.post<any>("/autotrade/yahoo/search", { query })
+  const data = await apiClient.post<any>("/api/autotrade/yahoo/search", { query })
   return data
 }
 
@@ -22,7 +22,7 @@ export async function getStockDetail(symbol: string) {
   if (!symbol || typeof symbol !== "string" || !symbol.trim()) {
     throw new Error(`유효하지 않은 symbol: ${symbol}`)
   }
-  const data = await apiClient.post<any>("/autotrade/yahoo/detail", { symbol })
+  const data = await apiClient.post<any>("/api/autotrade/yahoo/detail", { symbol })
   return data
 }
 
