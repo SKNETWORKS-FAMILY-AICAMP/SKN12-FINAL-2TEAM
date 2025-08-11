@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Send, Paperclip, Mic } from "lucide-react"
-import { ChatMessage } from "./chat-message"
+import ChatMessage from "./chat-message"
 import { TypingIndicator } from "./typing-indicator"
 import { useChat } from "@/hooks/use-chat"
 

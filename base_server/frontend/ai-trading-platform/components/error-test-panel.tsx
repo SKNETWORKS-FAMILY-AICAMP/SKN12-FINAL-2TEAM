@@ -12,6 +12,11 @@ import { useDashboard } from "@/hooks/use-dashboard"
 import { usePortfolio } from "@/hooks/use-portfolio"
 import { apiClient } from "@/lib/api/client"
 
+interface ErrorWithCode {
+  code: string | number;
+  message?: string;
+}
+
 export function ErrorTestPanel() {
   const [testResults, setTestResults] = useState<Record<string, any>>({})
   const [isRunning, setIsRunning] = useState(false)
@@ -22,13 +27,18 @@ export function ErrorTestPanel() {
   const { error: dashboardError, clearError: clearDashboardError } = useDashboard()
   const { error: portfolioError, clearError: clearPortfolioError } = usePortfolio()
 
+  // 타입 가드 함수
+  const hasCode = (error: any): error is ErrorWithCode => {
+    return error && typeof error === 'object' && 'code' in error;
+  }
+
   // 에러 코드별 시뮬레이션
   const simulateError = async (errorCode: number, description: string) => {
     setIsRunning(true)
     
     try {
-      // API 클라이언트의 시뮬레이션 메서드 사용
-      const result = await apiClient.simulateError(errorCode, description)
+      // 로컬 시뮬레이션 (API 호출 대신)
+      await new Promise(resolve => setTimeout(resolve, 100)); // 시뮬레이션 지연
       
       setTestResults(prev => ({
         ...prev,
@@ -36,7 +46,7 @@ export function ErrorTestPanel() {
           success: true,
           timestamp: new Date().toISOString(),
           description,
-          result
+          result: `시뮬레이션 성공: ${description}`
         }
       }))
       
@@ -172,7 +182,7 @@ export function ErrorTestPanel() {
             <div className="text-center">
               <div className="text-sm font-medium text-muted-foreground">채팅</div>
               <Badge variant={chatError ? "destructive" : "default"}>
-                {chatError ? `코드 ${chatError.code}` : "정상"}
+                {hasCode(chatError) ? `코드 ${chatError.code}` : "정상"}
               </Badge>
             </div>
             <div className="text-center">

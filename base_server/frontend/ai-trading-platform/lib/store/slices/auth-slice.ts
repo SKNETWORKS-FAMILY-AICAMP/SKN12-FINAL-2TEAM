@@ -7,7 +7,7 @@ interface User {
   avatar?: string
   role: string
   preferences: {
-    theme: "light" | "dark" | "system"
+    theme: string
     language: string
     notifications: boolean
   }
@@ -83,9 +83,6 @@ export const authSlice = createSlice({
       .addCase(logoutAsync.fulfilled, (state) => {
         state.user = null
         state.token = null
-      })
-      .addCase(refreshTokenAsync.fulfilled, (state, action) => {
-        state.token = action.payload.token
       })
   },
 })

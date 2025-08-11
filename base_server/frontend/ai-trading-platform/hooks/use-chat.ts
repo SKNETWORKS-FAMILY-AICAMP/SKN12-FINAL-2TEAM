@@ -7,7 +7,7 @@ import { handleApiError, getErrorMessage } from "@/lib/error-handler"
 interface LocalMessage {
   id: string;
   content: string;
-  role: string;
+  role: "user" | "assistant";
   isTyping?: boolean;
   timestamp?: number; // 추가: 메시지 생성 시간
 }

@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Settings, Download, Calendar, BarChart3, PieChart, TrendingUp } from "lucide-react"
+import { Settings, Download, Calendar, BarChart3, PieChart, TrendingUp, FileText } from "lucide-react"
 
 export function CustomReport() {
   const [selectedMetrics, setSelectedMetrics] = useState<string[]>([
@@ -249,4 +249,15 @@ export function CustomReport() {
           <CardTitle>최근 생성된 리포트</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space\
+          <div className="space-y-4">
+            <div className="text-center py-8 text-gray-500">
+              <FileText className="w-12 h-12 mx-auto mb-2 opacity-50" />
+              <p>아직 생성된 리포트가 없습니다</p>
+              <p className="text-sm">첫 번째 리포트를 생성해보세요</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

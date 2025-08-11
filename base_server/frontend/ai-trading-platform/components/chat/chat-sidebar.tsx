@@ -10,7 +10,7 @@ export function ChatSidebar() {
   const { rooms, currentRoomId, setCurrentRoomId, createRoom } = useChat();
 
   const handleNewChat = () => {
-    createRoom("새로운 대화");
+    createRoom("trading_signals", "새로운 대화");
   };
 
   return (

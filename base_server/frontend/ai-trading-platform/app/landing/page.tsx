@@ -9,7 +9,7 @@ export default function LandingPage() {
 
   useEffect(() => {
     if (!isLoading && user) {
-      router.push("/dashboard");
+      router.replace("/dashboard");
     }
   }, [user, isLoading, router]);
 
@@ -60,7 +60,12 @@ export default function LandingPage() {
                 고급 AI 알고리즘과 실시간 시장 분석으로 스마트한 투자 결정을 내리세요. 전문가 수준의 트레이딩을 간단하게.
               </p>
               <div className="hero-actions">
-                <a href="#" className="btn btn-primary btn-large">Start Trading</a>
+                <button 
+                  className="btn btn-primary btn-large"
+                  onClick={() => router.push("/auth/login")}
+                >
+                  Start Trading
+                </button>
                 <a href="#" className="btn btn-secondary btn-large">View Demo</a>
               </div>
               <div className="stats">
