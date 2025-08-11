@@ -114,12 +114,14 @@ export default function ChatPage() {
 
   const handleSubmit = async (e: React.FormEvent | React.KeyboardEvent) => {
     e.preventDefault();
-    if (message.trim() && !isLoading) {
-      await sendMessage(message);
+    const textToSend = message.trim();
+    if (textToSend && !isLoading) {
+      // Clear the input immediately so the text doesn't linger while awaiting response
       setMessage("");
       if (inputRef.current) {
         inputRef.current.focus();
       }
+      await sendMessage(textToSend);
     }
   };
 
