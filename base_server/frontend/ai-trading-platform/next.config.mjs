@@ -24,7 +24,7 @@ const nextConfig = {
   // 웹팩 설정
   webpack: (config, { dev, isServer }) => {
     if (dev && !isServer) {
-      // 개발 환경에서 HMR 최적화
+      // 개발 환경에서 HMR 최적화 (Next.js 기본 설정만 사용)
       config.watchOptions = {
         poll: 1000,
         aggregateTimeout: 300,
@@ -35,7 +35,7 @@ const nextConfig = {
   async headers() {
     return [
       {
-        source: '/(.*)',
+        source: '/api/:path*',
         headers: [
           {
             key: 'Access-Control-Allow-Origin',
@@ -63,7 +63,7 @@ const nextConfig = {
       // 모든 API 요청을 백엔드로 프록시
       {
         source: '/api/:path*',
-        destination: 'http://127.0.0.1:8000/api/:path*',
+        destination: 'http://localhost:8000/api/:path*',
       },
     ];
   },

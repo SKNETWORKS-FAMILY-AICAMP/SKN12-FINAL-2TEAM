@@ -25,9 +25,3 @@ export async function getStockDetail(symbol: string) {
   const data = await apiClient.post<any>("/api/autotrade/yahoo/detail", { symbol })
   return data
 }
-
-
-
-
-
- 

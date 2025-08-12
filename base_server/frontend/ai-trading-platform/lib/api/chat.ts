@@ -64,4 +64,4 @@ export async function deleteChatRoom(roomId: string) {
   return await apiClient.post("/api/chat/room/delete", {
     room_id: roomId
   });
-} 
+}

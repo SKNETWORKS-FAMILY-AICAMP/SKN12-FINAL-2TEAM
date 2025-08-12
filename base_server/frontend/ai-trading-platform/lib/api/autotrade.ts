@@ -160,4 +160,4 @@ export const autotradeService = {
     // 기존 전략 삭제 API가 없으므로 에러 반환
     return { errorCode: 1001, message: "전략 삭제 API가 구현되지 않았습니다." };
   }
-}; 
+};

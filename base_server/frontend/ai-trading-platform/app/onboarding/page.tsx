@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { setupProfile, SetupProfilePayload } from "@/lib/api/profile";
+import { handleSessionExpired } from "@/lib/error-handler";
 
 const steps: Array<{
   key: string;
@@ -135,6 +136,18 @@ export default function OnboardingPage() {
       
       console.log("[온보딩] 파싱된 응답:", { errorCode, profile, message });
       
+      // 에러 코드 10000 (세션 만료) 처리
+      if (errorCode === 10000) {
+        console.log("[온보딩] 에러 코드 10000 감지: 세션 만료");
+        setError("세션이 만료되었습니다. 로그인 페이지로 이동합니다.");
+        
+        // 2초 후 세션 만료 처리 및 리다이렉
+        setTimeout(() => {
+          handleSessionExpired({ response: { data: { errorCode: 10000 } } });
+        }, 2000);
+        return;
+      }
+      
       // 성공 조건: errorCode가 0이고 profile이 존재하거나, profile이 존재하는 경우
       if (errorCode === 0 || profile) {
         console.log("[온보딩] 프로필 설정 성공, 대시보드로 이동");
@@ -146,6 +159,19 @@ export default function OnboardingPage() {
       }
     } catch (err: any) {
       console.error("[온보딩] 에러 발생:", err);
+      
+      // catch 블록에서도 error code 10000 체크
+      if (err?.response?.data?.errorCode === 10000) {
+        console.log("[온보딩] catch 블록에서 에러 코드 10000 감지: 세션 만료");
+        setError("세션이 만료되었습니다. 로그인 페이지로 이동합니다.");
+        
+        // 2초 후 세션 만료 처리 및 리다이렉트
+        setTimeout(() => {
+          handleSessionExpired(err);
+        }, 2000);
+        return;
+      }
+      
       const errorMessage = err?.response?.data?.message || "제출에 실패했습니다. 다시 시도해 주세요.";
       setError(errorMessage);
     } finally {

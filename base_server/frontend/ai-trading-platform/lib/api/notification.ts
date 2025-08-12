@@ -122,4 +122,4 @@ export async function createNotification(params: NotificationCreateParams) {
     params,
   )
   return res
-} 
+}

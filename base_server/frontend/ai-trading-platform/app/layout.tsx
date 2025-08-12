@@ -12,9 +12,8 @@ import { RouteProgressBar } from "@/components/layout/route-progress-bar"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "AI Trading Advisor - Smart Financial Decisions",
-  description: "Advanced AI-powered trading platform with real-time market analysis",
-    generator: 'v0.dev'
+  title: "AI Trading Advisor",
+  description: "AI-powered trading platform"
 }
 
 export default function RootLayout({
@@ -23,7 +22,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="ko" suppressHydrationWarning>
+    <html lang="ko" suppressHydrationWarning data-scroll-behavior="smooth">
       <body className={inter.className}>
         <StoreProvider>
           <DynamicAuthProvider>
