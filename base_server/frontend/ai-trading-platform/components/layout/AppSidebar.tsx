@@ -1,6 +1,6 @@
 import React from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { startRouteProgress, endRouteProgress } from "@/lib/route-progress";
 
 interface AppSidebarProps {
@@ -21,6 +21,7 @@ const menu = [
 export function AppSidebar({ open, onClose, onNavigate }: AppSidebarProps) {
   const { logout } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   const handleLogout = async () => {
     await logout();
@@ -51,6 +52,23 @@ export function AppSidebar({ open, onClose, onNavigate }: AppSidebarProps) {
                 key={item.key}
                 className="text-left px-3 py-2 rounded-lg hover:bg-gray-800 text-white font-medium transition-colors duration-200"
                 onClick={async () => {
+                  // 목적지 경로 계산
+                  const destMap: Record<string, string> = {
+                    dashboard: "/dashboard",
+                    portfolio: "/portfolio",
+                    signals: "/autotrade",
+                    chat: "/chat",
+                    settings: "/settings",
+                  };
+                  const dest = destMap[item.key] || "";
+
+                  // 같은 페이지를 다시 클릭한 경우: 진행바 시작하지 않고 바로 닫기
+                  if (dest && dest === pathname) {
+                    endRouteProgress();
+                    onClose();
+                    return;
+                  }
+
                   if (item.key === "dashboard" || item.key === "chat" || item.key === "portfolio" || item.key === "signals" || item.key === "settings") {
                     startRouteProgress();
                   }
