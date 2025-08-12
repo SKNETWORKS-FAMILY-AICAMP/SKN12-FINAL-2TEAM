@@ -116,12 +116,10 @@ export class WebSocketClient {
 let websocketClient: WebSocketClient | null = null;
 
 export function getWebSocketClient(): WebSocketClient {
-  if (!websocketClient) {
-    // 개발 환경에서는 localhost:8000 사용
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-    const wsUrl = apiBase.replace('http://', 'ws://').replace('https://', 'wss://');
-    websocketClient = new WebSocketClient(`${wsUrl}/ws`);
-    console.log('웹소켓 클라이언트 생성:', `${wsUrl}/ws`);
-  }
+  // 개발 환경에서는 localhost:8000 사용
+  // const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  // const wsUrl = apiBase.replace('http://', 'ws://').replace('https://', 'wss://');
+  // websocketClient = new WebSocketClient(`${wsUrl}/api/dashboard/market/ws`);
+  // console.log('웹소켓 클라이언트 생성:', `${wsUrl}/api/dashboard/market/ws`);
   return websocketClient;
 } 

@@ -59,23 +59,71 @@ export default function ApiKeysPage() {
       console.log("Response status:", response.status);
       console.log("Response ok:", response.ok);
       
-      const data_json = await response.json();
-      const data = JSON.parse(data_json);
-      console.log("API 키 저장 응답:", data); // 디버깅용 로그
-      console.log("errorCode 타입:", typeof data["errorCode"]);
-      console.log("errorCode 값:", data["errorCode"]);
+      const responseText = await response.text();
+      console.log("응답 텍스트:", responseText);
       
-      if (data["errorCode"] === 0 || data["errorCode"] === "0") {
+      let data;
+      try {
+        // 첫 번째 파싱 시도
+        data = JSON.parse(responseText);
+        console.log("첫 번째 파싱 결과:", data);
+        
+        // 만약 여전히 문자열이면 두 번째 파싱 시도 (이중 인코딩 처리)
+        if (typeof data === 'string') {
+          console.log("이중 인코딩 감지, 두 번째 파싱 시도");
+          data = JSON.parse(data);
+          console.log("두 번째 파싱 결과:", data);
+        }
+      } catch (parseError) {
+        console.error("JSON 파싱 오류:", parseError);
+        console.error("파싱 실패한 텍스트:", responseText);
+        setError("서버 응답을 처리할 수 없습니다.");
+        return;
+      }
+      
+      // 배열인 경우 첫 번째 요소 추출
+      console.log("파싱된 데이터 타입:", typeof data);
+      console.log("파싱된 데이터가 배열인가?", Array.isArray(data));
+      console.log("파싱된 데이터:", data);
+      
+      if (Array.isArray(data)) {
+        console.log("배열에서 첫 번째 요소 추출 전:", data);
+        data = data[0];
+        console.log("배열에서 첫 번째 요소 추출 후:", data);
+      }
+      
+      console.log("최종 데이터:", data);
+      console.log("errorCode 타입:", typeof data.errorCode);
+      console.log("errorCode 값:", data.errorCode);
+      console.log("응답 전체 내용:", JSON.stringify(data, null, 2));
+      
+      // 안전장치: data가 유효한지 확인
+      if (!data || typeof data !== 'object') {
+        console.error("유효하지 않은 데이터:", data);
+        setError("서버 응답이 올바르지 않습니다.");
+        return;
+      }
+      
+      if (data.errorCode === 0 || data.errorCode === "0") {
         // 성공 시 온보딩으로 이동
         console.log("API 키 저장 성공, 온보딩으로 이동");
-        window.location.href = "/onboarding";
+        // 강제 새로고침으로 캐시 문제 해결
+        window.location.replace("/onboarding");
       } else {
-        console.log("API 키 저장 실패:", data["message"])
-        setError(data["message"] || "API 키 저장에 실패했습니다.");
+        console.log("API 키 저장 실패:", data.message)
+        setError(data.message || "API 키 저장에 실패했습니다.");
       }
     } catch (err: any) {
       console.error("API 키 저장 에러:", err);
-      setError("API 키 저장에 실패했습니다. 다시 시도해 주세요.");
+      
+      // 더 구체적인 에러 메시지 제공
+      if (err.message?.includes("NEXT_PUBLIC_API_URL")) {
+        setError("환경 설정 오류입니다. 관리자에게 문의해주세요.");
+      } else if (err.message?.includes("fetch")) {
+        setError("서버 연결에 실패했습니다. 백엔드 서버가 실행 중인지 확인해주세요.");
+      } else {
+        setError("API 키 저장에 실패했습니다. 다시 시도해 주세요.");
+      }
     } finally {
       setIsLoading(false);
     }

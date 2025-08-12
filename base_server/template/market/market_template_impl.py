@@ -392,44 +392,14 @@ class MarketTemplateImpl(BaseTemplate):
             market_data = {}
             portfolio_data = []
             
-            # 2. 웹소켓 매니저를 통한 지속적인 연결 관리
+            # 2. 구버전 웹소켓 매니저 - 새로운 WebSocket 시스템으로 대체됨
             if api_keys_result and api_keys_result[0].get('korea_investment_app_key'):
-                Logger.info("웹소켓 매니저를 통한 연결 시도")
-                try:
-                    from service.external.websocket_manager import get_websocket_manager
-                    websocket_manager = get_websocket_manager()
-                    
-                    # 사용자 웹소켓 연결
-                    app_key = api_keys_result[0]['korea_investment_app_key']
-                    app_secret = api_keys_result[0]['korea_investment_app_secret']
-                    
-                    if await websocket_manager.connect_user(str(account_db_key), app_key, app_secret):
-                        Logger.info("웹소켓 매니저 연결 성공")
-                        
-                        # 주식 구독 추가
-                        if request.symbols:
-                            await websocket_manager.subscribe_stocks(str(account_db_key), request.symbols)
-                        
-                        # 연결 상태 확인
-                        if websocket_manager.get_connection_status(str(account_db_key)):
-                            Logger.info("웹소켓 연결 상태 확인됨")
-                            # 실시간 데이터는 웹소켓을 통해 계속 수신되므로
-                            # 여기서는 연결 성공만 확인
-                            market_data = {}  # 실시간으로 업데이트됨
-                            portfolio_data = []  # 실시간으로 업데이트됨
-                        else:
-                            Logger.error("웹소켓 연결 상태 확인 실패")
-                            market_data = {}
-                            portfolio_data = []
-                    else:
-                        Logger.error("웹소켓 매니저 연결 실패")
-                        market_data = {}
-                        portfolio_data = []
-                    
-                except Exception as e:
-                    Logger.error(f"웹소켓 매니저 연결 에러: {e}")
-                    market_data = {}
-                    portfolio_data = []
+                Logger.info("구버전 웹소켓 매니저 - 새로운 WebSocket 시스템 사용 권장")
+                Logger.info("새로운 시스템: /api/dashboard/market/ws 엔드포인트 사용")
+                
+                # 구버전 시스템은 더 이상 사용하지 않음
+                market_data = {}
+                portfolio_data = []
             else:
                 Logger.info("한국투자증권 API 키가 없음")
                 market_data = {}

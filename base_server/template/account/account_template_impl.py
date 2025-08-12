@@ -747,11 +747,25 @@ class AccountTemplateImpl(AccountTemplate):
         response = AccountApiKeysSaveResponse()
         response.sequence = request.sequence
         
-        Logger.info(f"API keys save request: {session.session.account_db_key}")
+        # 세션 검증 강화
+        if not session or not session.session:
+            response.errorCode = 1002
+            response.message = "세션이 유효하지 않습니다. 다시 로그인해주세요."
+            Logger.error("API keys save failed: Invalid session")
+            return response
+            
+        account_db_key = session.session.account_db_key
+        Logger.info(f"API keys save request: {account_db_key}")
+        
+        # account_db_key 검증
+        if account_db_key <= 0:
+            response.errorCode = 1002
+            response.message = "사용자 인증이 필요합니다. 다시 로그인해주세요."
+            Logger.error(f"API keys save failed: Invalid account_db_key: {account_db_key}")
+            return response
         
         try:
             db_service = ServiceContainer.get_database_service()
-            account_db_key = session.session.account_db_key
             
             # API 키 저장 쿼리
             save_query = """
@@ -782,8 +796,10 @@ class AccountTemplateImpl(AccountTemplate):
             
         except Exception as e:
             response.errorCode = 1000
-            response.message = "API 키 저장에 실패했습니다."
+            response.message = f"API 키 저장에 실패했습니다. 오류: {str(e)}"
             Logger.error(f"API keys save error: {e}")
+            Logger.error(f"Error type: {type(e)}")
+            Logger.error(f"Error details: {e.__dict__ if hasattr(e, '__dict__') else 'No details'}")
         
         return response
 

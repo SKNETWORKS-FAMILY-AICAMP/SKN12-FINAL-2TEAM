@@ -1,9 +1,13 @@
 from datetime import datetime
+
+import aiohttp
 from template.base.base_template import BaseTemplate
 from template.dashboard.common.dashboard_serialize import (
     DashboardMainRequest, DashboardMainResponse,
     DashboardAlertsRequest, DashboardAlertsResponse,
-    DashboardPerformanceRequest, DashboardPerformanceResponse
+    DashboardPerformanceRequest, DashboardPerformanceResponse,
+    SecuritiesLoginRequest, SecuritiesLoginResponse,
+    PriceRequest, PriceResponse
 )
 from template.dashboard.common.dashboard_model import AssetSummary, StockHolding, MarketAlert, MarketOverview
 from service.service_container import ServiceContainer
@@ -265,3 +269,243 @@ class DashboardTemplateImpl(BaseTemplate):
             Logger.error(f"Dashboard performance error: {e}")
         
         return response
+
+    async def on_dashboard_oauth_req(self, client_session, request: SecuritiesLoginRequest):
+        """OAuth 인증 요청 처리"""
+        print(f"📥 OAuth body received: {request.model_dump_json()}")
+
+        account_db_key = client_session.session.account_db_key
+        db_service = ServiceContainer.get_database_service()
+        Logger.debug(f"Dashboard OAuth request: account_db_key={account_db_key}")
+
+        # 기본값 설정
+        sequence = request.sequence
+
+        # API 키 조회
+        result = await db_service.call_global_procedure(
+            "fp_get_api_keys",
+            (account_db_key,)
+        )
+        Logger.debug(f"API keys result: {result}")
+
+        if not result:
+            return SecuritiesLoginResponse(
+                result="fail",
+                message="API 키 조회 실패",
+                app_key="",
+                sequence=sequence,
+                errorCode=9007
+            )
+
+        api_data = result[0]
+        try:
+            appkey = api_data.get('korea_investment_app_key', '')
+            appsecret = api_data.get('korea_investment_app_secret', '')
+
+            url = "https://openapi.koreainvestment.com:9443/oauth2/tokenP"
+            payload = {
+                "grant_type": "client_credentials",
+                "appkey": appkey,
+                "appsecret": appsecret
+            }
+
+            import aiohttp
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    url,
+                    json=payload,
+                    headers={"Content-Type": "application/json; charset=utf-8"}
+                ) as resp:
+                    if resp.status != 200:
+                        error_text = await resp.text()
+                        Logger.error(f"🔐 OAuth 인증 실패: {error_text}")
+                        return SecuritiesLoginResponse(
+                            result="fail",
+                            message="한국투자증권 OAuth 인증 실패",
+                            app_key=appkey,
+                            sequence=sequence,
+                            errorCode=5001
+                        )
+
+                    data = await resp.json()
+                    token = data.get("access_token")
+                    Logger.info(f"✅ OAuth 토큰 발급 성공: {token}")
+
+                    # 사용자별 Redis 저장 (계정 단위로 토큰 캐시)
+                    try:
+                        cache_service = ServiceContainer.get_cache_service()
+                        async with cache_service.get_client() as redis_client:
+                            # 키 네임스페이스: user:{account_db_key}:korea_investment:access_token
+                            user_prefix = f"user:{account_db_key}:korea_investment"
+                            expires_in = int(data.get("expires_in", 0)) if str(data.get("expires_in", "")).isdigit() else 0
+                            # 만료는 응답 TTL에서 60초 버퍼, 최소 5분 보장
+                            ttl_seconds = max(expires_in - 60, 300) if expires_in > 0 else 23 * 3600
+                            await redis_client.set_string(f"{user_prefix}:access_token", token, expire=ttl_seconds)
+                            await redis_client.set_string(f"{user_prefix}:issued_at", datetime.utcnow().isoformat(), expire=ttl_seconds)
+                            Logger.info(f"✅ Redis에 사용자별 OAuth 토큰 저장 완료 (account={account_db_key}, ttl={ttl_seconds}s)")
+                    except Exception as cache_e:
+                        Logger.warn(f"⚠️ OAuth 토큰 Redis 저장 실패: {cache_e}")
+
+            return SecuritiesLoginResponse(
+                result="success",
+                message="OAuth 인증 성공",
+                app_key=appkey,
+                sequence=sequence,
+                errorCode=0
+            )
+
+        except Exception as e:
+            Logger.error(f"🔥 Dashboard OAuth error: {e}")
+            return SecuritiesLoginResponse(
+                result="fail",
+                message=f"서버 오류: {str(e)}",
+                app_key="",
+                sequence=sequence,
+                errorCode=1000
+            )
+    async def on_dashboard_price_us_req(self, client_session, request: PriceRequest):
+        """미국 나스닥 종가 조회 요청 처리 (한투증 REST API 사용)"""
+        Logger.info(f"📥 미국 종가 요청: {request.model_dump_json()}")
+
+        ticker = request.ticker.upper()
+        db_service = ServiceContainer.get_database_service()
+
+        Logger.debug(f"🔍 DB에서 API 키 조회 시작: account_db_key={client_session.session.account_db_key}")
+
+        # DB에서 앱키, 앱시크릿, 토큰 정보 가져오기
+        result = await db_service.call_global_procedure(
+            "fp_get_api_keys", (client_session.session.account_db_key,)
+        )
+
+        Logger.debug(f"📦 DB 조회 결과: {result}")
+
+        if not result:
+            Logger.error("❌ API 키 조회 실패 (DB에서 결과 없음)")
+            return PriceResponse(
+                result="fail",
+                message="API 키 조회 실패",
+                ticker=ticker,
+                price=0,
+                change=0,
+                change_pct=0,
+                volume=0,
+                timestamp="",
+                errorCode=9007
+            )
+
+        keys = result[0]
+        appkey = keys.get("korea_investment_app_key", "")
+        app_secret = keys.get("korea_investment_app_secret", "")
+
+        # 우선순위: 사용자별 Redis 저장 토큰 → DB 저장 토큰(폴백)
+        token = ""
+        try:
+            cache_service = ServiceContainer.get_cache_service()
+            async with cache_service.get_client() as redis_client:
+                user_prefix = f"user:{client_session.session.account_db_key}:korea_investment"
+                redis_token = await redis_client.get_string(f"{user_prefix}:access_token")
+                if redis_token:
+                    token = redis_token
+                    Logger.info("✅ Redis에서 사용자별 OAuth 토큰 로드 성공")
+        except Exception as e:
+            Logger.warn(f"⚠️ Redis에서 사용자별 토큰 조회 실패: {e}")
+
+        if not token:
+            # 폴백: DB 컬럼 값 사용
+            token = keys.get("korea_investment_access_token", "")
+            if token:
+                Logger.info("ℹ️ Redis 토큰 없음 → DB 저장 토큰 사용")
+
+        Logger.debug(f"🔑 조회된 앱키: {appkey}, 앱시크릿: {app_secret}, 토큰 유무: {'Y' if token else 'N'}")
+
+        if not token:
+            Logger.error("❌ OAuth 토큰이 없음")
+            return PriceResponse(
+                result="fail",
+                message="OAuth 토큰 없음",
+                ticker=ticker,
+                price=0,
+                change=0,
+                change_pct=0,
+                volume=0,
+                timestamp="",
+                errorCode=9008
+            )
+
+        # 한투증 해외주식 시세 REST API 요청
+        url = "https://openapi.koreainvestment.com:9443/uapi/overseas-price/v1/quotations/price"
+        params = {
+            "AUTH": "",
+            "EXCD": "NAS",  # 나스닥
+            "SYMB": ticker  # 종목 티커
+        }
+        headers = {
+            "authorization": f"Bearer {token}",
+            "appkey": appkey,
+            "appsecret": app_secret,
+            "tr_id": "HHDFS00000300",  # 미국 실시간 시세
+            "custtype": "P",  # 개인
+            "Content-Type": "application/json"
+        }
+
+        Logger.info(f"🌐 한투증 시세 요청 준비: url={url}, params={params}, headers={headers}")
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params, headers=headers) as resp:
+                    Logger.info(f"📡 HTTP 요청 전송됨 (status={resp.status})")
+
+                    if resp.status != 200:
+                        text = await resp.text()
+                        Logger.error(f"🔴 시세 요청 실패: status={resp.status}, body={text}")
+                        return PriceResponse(
+                            result="fail",
+                            message="시세 요청 실패",
+                            ticker=ticker,
+                            price=0,
+                            change=0,
+                            change_pct=0,
+                            volume=0,
+                            timestamp="",
+                            errorCode=5001
+                        )
+
+                    data = await resp.json()
+                    Logger.debug(f"📥 API 응답 JSON: {data}")
+
+                    output = data.get("output", {})
+                    Logger.debug(f"📦 output 데이터: {output}")
+
+                    # 응답 키 가변성 처리: diff/chg, tvol/pvol, ctime 미제공 시 UTC now
+                    change_value = output.get("chg")
+                    if change_value is None:
+                        change_value = output.get("diff", 0)
+                    volume_value = output.get("tvol")
+                    if volume_value is None:
+                        volume_value = output.get("pvol", 0)
+
+                    return PriceResponse(
+                        result="success",
+                        message="시세 요청 성공",
+                        ticker=ticker,
+                        price=float(output.get("last", 0)),
+                        change=float(change_value or 0),
+                        change_pct=float(output.get("rate", 0)),
+                        volume=float(volume_value or 0),
+                        timestamp=output.get("ctime", datetime.utcnow().isoformat()),
+                        errorCode=0
+                    )
+
+        except Exception as e:
+            Logger.error(f"🔥 시세 조회 예외 발생: {e}", exc_info=True)
+            return PriceResponse(
+                result="fail",
+                message=f"서버 오류: {str(e)}",
+                ticker=ticker,
+                price=0,
+                change=0,
+                change_pct=0,
+                volume=0,
+                timestamp="",
+                errorCode=1000
+            )

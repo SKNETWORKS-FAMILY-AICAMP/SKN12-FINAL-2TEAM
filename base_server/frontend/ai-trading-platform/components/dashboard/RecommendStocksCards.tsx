@@ -1,4 +1,6 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
+// import { useKoreaInvestApi } from '@/hooks/use-korea-invest-api'; // 🔥 제거함
+import { useWebSocketStockData } from '@/hooks/use-websocket-stock-data';
 
 const mockStocks = [
   {
@@ -54,6 +56,11 @@ function Sparkline({ data, color = "#60a5fa" }: { data: number[]; color?: string
 }
 
 export default function RecommendStocksCards() {
+  const [hasValidData, setHasValidData] = useState(false);
+
+  // const { hasApiKey, isLoading: apiLoading, marketDataManager } = useKoreaInvestApi(); // 🔥 제거함
+  const { isConnected: wsConnected, getWsStockData } = useWebSocketStockData();
+
   return (
     <div className="w-full max-w-7xl bg-gradient-to-br from-black via-gray-900 to-gray-850 rounded-2xl shadow-2xl border border-gray-800 p-4 flex flex-col gap-4">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
@@ -98,4 +105,4 @@ export default function RecommendStocksCards() {
       </div>
     </div>
   );
-} 
+}
