@@ -1,6 +1,7 @@
 import React from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
+import { startRouteProgress, endRouteProgress } from "@/lib/route-progress";
 
 interface AppSidebarProps {
   open: boolean;
@@ -49,7 +50,21 @@ export function AppSidebar({ open, onClose, onNavigate }: AppSidebarProps) {
               <button
                 key={item.key}
                 className="text-left px-3 py-2 rounded-lg hover:bg-gray-800 text-white font-medium transition-colors duration-200"
-                onClick={() => { onNavigate(item.key); onClose(); }}
+                onClick={async () => {
+                  if (item.key === "chat" || item.key === "portfolio") {
+                    startRouteProgress();
+                  }
+                  try {
+                    await onNavigate(item.key);
+                  } finally {
+                    if (item.key === "chat" || item.key === "portfolio") {
+                      // 종료 신호는 이동 후 대상 페이지에서 보내는 것이 정확하지만,
+                      // fallback으로 2초 후 자동 종료
+                      setTimeout(() => endRouteProgress(), 2000);
+                    }
+                  }
+                  onClose();
+                }}
               >
                 {item.label}
               </button>

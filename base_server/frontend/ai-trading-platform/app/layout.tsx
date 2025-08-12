@@ -7,6 +7,7 @@ import { Toaster } from "@/components/ui/toaster"
 import { StoreProvider } from "@/providers/store-provider"
 import { WebSocketProvider } from "@/providers/websocket-provider"
 import { DynamicAuthProvider } from "@/providers/dynamic-auth-provider"
+import { RouteProgressBar } from "@/components/layout/route-progress-bar"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -33,6 +34,7 @@ export default function RootLayout({
                 enableSystem
                 disableTransitionOnChange
               >
+                <RouteProgressBar />
                 {children}
                 <Toaster />
               </ThemeProvider>

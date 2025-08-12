@@ -24,7 +24,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       case "signals":
         router.push("/autotrade"); break;
       case "chat":
-        router.push("/loading?to=/chat&label=%EC%B1%84%ED%8C%85%20%ED%8E%98%EC%9D%B4%EC%A7%80%EB%A1%9C%20%EC%9D%B4%EB%8F%99%20%EC%A4%91..."); break;
+        router.push("/chat"); break;
       case "settings":
         router.push("/settings"); break;
       default:

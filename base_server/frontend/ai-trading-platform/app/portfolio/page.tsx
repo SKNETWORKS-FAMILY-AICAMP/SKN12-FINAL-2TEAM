@@ -8,6 +8,7 @@ import { Header } from "@/components/layout/header";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { useTutorial } from "@/hooks/use-tutorial";
 import { TutorialOverlay } from "@/components/tutorial/tutorial-overlay";
+import { endRouteProgress } from "@/lib/route-progress";
 
 export default function PortfolioPage() {
   const router = useRouter();
@@ -118,13 +119,19 @@ export default function PortfolioPage() {
       case "signals":
         router.push("/autotrade"); break;
       case "chat":
-        router.push("/loading?to=/chat&label=%EC%B1%84%ED%8C%85%20%ED%8E%98%EC%9D%B4%EC%A7%80%EB%A1%9C%20%EC%9D%B4%EB%8F%99%20%EC%A4%91..."); break;
+        router.push("/chat"); break;
       case "settings":
         router.push("/settings"); break;
       default:
         break;
     }
   };
+
+  // 초기 렌더 완료 시점에 진행바 종료 (필요 시 데이터 로딩 상태를 연결해 확장 가능)
+  React.useEffect(() => {
+    // 포트폴리오 페이지는 현재 정적 데이터라 렌더가 끝나면 바로 종료
+    endRouteProgress();
+  }, []);
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-black via-gray-900 to-gray-820 text-white">

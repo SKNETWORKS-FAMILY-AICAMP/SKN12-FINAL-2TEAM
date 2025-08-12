@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
+import { endRouteProgress } from "@/lib/route-progress";
 import { Plus, Settings, ArrowUp, Menu, ArrowLeft, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useChat } from "@/hooks/use-chat";
@@ -111,6 +112,13 @@ export default function ChatPage() {
       }, 100);
     }
   }, [messages, currentRoomId, autoScroll]);
+
+  // 페이지 마운트 후 초기 데이터 로딩이 끝나면 상단 로딩바 종료
+  useEffect(() => {
+    if (!isLoading) {
+      endRouteProgress();
+    }
+  }, [isLoading]);
 
   const handleSubmit = async (e: React.FormEvent | React.KeyboardEvent) => {
     e.preventDefault();
