@@ -18,6 +18,25 @@ from datetime import datetime, timedelta
 import json
 from contextlib import asynccontextmanager
 
+# --- Compatibility aliases for unpickling older preprocessors ---
+# Some preprocessor.pkl files were created when modules were imported as top-level
+# (e.g., 'data_preprocessor'). When running as a package, we need to map those
+# legacy module names to the current package paths so pickle can resolve classes.
+import sys
+import importlib
+
+MODULE_ALIASES = {
+    "data_preprocessor": "base_server.template.model.data_preprocessor",
+    "manual_data_collector": "base_server.template.model.manual_data_collector",
+    "pytorch_lstm_model": "base_server.template.model.pytorch_lstm_model",
+}
+for _old, _new in MODULE_ALIASES.items():
+    try:
+        sys.modules[_old] = importlib.import_module(_new)
+    except Exception:
+        # If import fails, proceed without alias; pickle may not need it.
+        pass
+
 # 프로젝트 모듈 import
 from .manual_data_collector import ManualStockDataCollector
 from .data_preprocessor import StockDataPreprocessor
