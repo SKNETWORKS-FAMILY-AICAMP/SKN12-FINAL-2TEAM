@@ -29,6 +29,7 @@ MODULE_ALIASES = {
     "data_preprocessor": "base_server.template.model.data_preprocessor",
     "manual_data_collector": "base_server.template.model.manual_data_collector",
     "pytorch_lstm_model": "base_server.template.model.pytorch_lstm_model",
+    "advanced_features": "base_server.template.model.advanced_features",
 }
 for _old, _new in MODULE_ALIASES.items():
     try:
