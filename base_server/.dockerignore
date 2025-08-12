@@ -1,0 +1,120 @@
+# =============================================================================
+# Docker 빌드 시 제외할 파일/폴더 목록
+# =============================================================================
+# 이 파일에 명시된 항목들은 Docker 이미지에 포함되지 않습니다.
+# 빌드 속도 향상 및 보안 강화를 위해 불필요한 파일들을 제외합니다.
+
+# 🔒 보안 위험 파일들
+*.json
+.env*
+*.key
+*.pem
+*.p12
+*secret*
+*password*
+
+# 📁 민감한 디렉토리
+docs/
+산출물/
+db_scripts/
+logs/
+
+# 💾 캐시 및 임시 파일
+*.log
+*.rdb
+*.dump
+*.backup
+*.bak
+*.tmp
+*.temp
+dump.*
+
+# 🧪 개발/테스트 파일
+*test*.py
+CLITest.py
+pytest.ini
+.pytest_cache/
+
+# 📦 Node.js 관련 (프론트엔드)
+node_modules/
+.next/
+package-lock.json
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 🐍 Python 캐시
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 🔧 IDE 설정
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 🔄 버전 관리
+.git/
+.gitignore
+.gitkeep
+.gitattributes
+
+# 📋 문서 파일
+*.md
+README*
+CHANGELOG*
+LICENSE*
+*.pdf
+*.doc
+*.docx
+*.ppt
+*.pptx
+
+# 🖼️ 미디어 파일 (용량 최적화)
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.svg
+*.mp4
+*.avi
+*.mov
+
+# 📊 데이터 파일
+*.csv
+*.xlsx
+*.xls
+
+# 🔧 설정 파일들
+.DS_Store
+Thumbs.db
+.env.example
+docker-compose*.yml
+
+# 🚫 기타 불필요한 파일
+*.tar
+*.zip
+*.gz
+*.7z
+core.*

@@ -1,0 +1,111 @@
+# =============================================================================
+# AI Trading Platform - Docker Compose 설정 예시
+# =============================================================================
+# 하나의 이미지로 두 서버를 동시에 실행하는 예시입니다.
+# 
+# 사용법:
+# 1. 이 파일을 docker-compose.yml로 복사
+# 2. 설정 파일 경로를 실제 경로로 수정
+# 3. docker-compose up -d 실행
+
+version: '3.8'
+
+services:
+  # 🌐 Base Web Server (메인 API 서버)
+  web-server:
+    image: ai-trading-platform:latest
+    container_name: trading-web-server
+    ports:
+      - "8000:8000"                    # 호스트:컨테이너 포트 매핑
+    environment:
+      - APP_ENV=PROD                   # 운영 환경 설정
+    volumes:
+      # 설정 파일을 외부에서 마운트 (보안상 읽기 전용)
+      - /opt/base-configs:/app/application/base_web_server:ro
+      # 로그 파일을 호스트에 저장 (컨테이너 재시작 후에도 보존)
+      - /opt/logs/web-server:/app/logs
+    restart: unless-stopped            # 오류 시 자동 재시작
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    # 기본 CMD 사용: uvicorn application.base_web_server.main:app
+
+  # 🤖 Model Server (ML 예측 서버)  
+  model-server:
+    image: ai-trading-platform:latest  # 같은 이미지 사용!
+    container_name: trading-model-server
+    ports:
+      - "8001:8001"                    # 다른 포트로 매핑
+    environment:
+      - APP_ENV=PROD                   # 운영 환경 설정
+    volumes:
+      # Model Server 전용 설정 파일
+      - /opt/model-configs:/app/application/model_server:ro
+      # Model Server 전용 로그
+      - /opt/logs/model-server:/app/logs
+    restart: unless-stopped
+    # CMD 오버라이드로 Model Server 실행
+    command: ["uvicorn", "application.model_server.main:app", "--host", "0.0.0.0", "--port", "8001"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+# =============================================================================
+# 🚀 실행 방법:
+# =============================================================================
+#
+# 1️⃣ 설정 파일 준비:
+#    sudo mkdir -p /opt/base-configs /opt/model-configs /opt/logs
+#    
+#    # Base Web Server 설정 복사
+#    sudo cp base_web_server-config.json /opt/base-configs/
+#    sudo cp base_web_server-config_debug.json /opt/base-configs/
+#    
+#    # Model Server 설정 복사  
+#    sudo cp model_server-config.json /opt/model-configs/
+#
+# 2️⃣ 권한 설정:
+#    sudo chmod 644 /opt/base-configs/*.json
+#    sudo chmod 644 /opt/model-configs/*.json
+#    sudo chmod 755 /opt/logs
+#
+# 3️⃣ 실행:
+#    docker-compose up -d
+#
+# 4️⃣ 확인:
+#    curl http://localhost:8000/    # Base Web Server
+#    curl http://localhost:8001/    # Model Server
+#    docker-compose ps              # 컨테이너 상태 확인
+#    docker-compose logs -f         # 로그 확인
+#
+# 5️⃣ 개별 제어:
+#    docker-compose up -d web-server     # Web Server만 실행
+#    docker-compose up -d model-server   # Model Server만 실행
+#    docker-compose stop web-server      # Web Server만 정지
+#    docker-compose restart model-server # Model Server만 재시작
+#
+# 6️⃣ 전체 정리:
+#    docker-compose down              # 모든 컨테이너 정지 및 제거
+#    docker-compose down -v          # 볼륨도 함께 제거
+# =============================================================================
+
+# =============================================================================
+# 🔧 개발/스테이징 환경 예시:
+# =============================================================================
+# 
+# 개발 환경에서는 다음과 같이 수정하여 사용:
+# 
+# environment:
+#   - APP_ENV=DEBUG                    # 디버그 모드
+# 
+# volumes:
+#   - ./configs-dev:/app/application/base_web_server:ro  # 로컬 개발 설정
+# 
+# ports:
+#   - "8000:8000"                     # 운영과 동일
+#   - "8001:8001"                     # 운영과 동일
+# =============================================================================

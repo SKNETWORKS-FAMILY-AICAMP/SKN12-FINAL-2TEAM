@@ -139,6 +139,13 @@ class SignalMonitoringService:
                             is_connected = cls._korea_websocket.is_connected()
                             monitoring_count = len(cls._monitoring_symbols)
                             Logger.info(f"📡 WebSocket 상태체크: 연결={'✅' if is_connected else '❌'}, 구독종목={monitoring_count}개 {list(cls._monitoring_symbols)}")
+                            
+                            # PINGPONG 폴백 모드 체크
+                            if cls._korea_websocket.is_rest_fallback_mode():
+                                Logger.info("🔄 REST API 폴백 모드 감지 - 모든 구독 종목을 REST API 폴링으로 전환")
+                                for symbol in cls._monitoring_symbols:
+                                    await cls._start_rest_api_polling(symbol)
+                                Logger.info(f"✅ {len(cls._monitoring_symbols)}개 종목 REST API 폴링 시작됨")
                         else:
                             Logger.warn("⚠️ WebSocket 인스턴스 없음")
                     except Exception as monitor_e:
@@ -302,6 +309,13 @@ class SignalMonitoringService:
             # WebSocket 인스턴스 상태 검증
             if not cls._korea_websocket:
                 Logger.error(f"❌ WebSocket 인스턴스 없음, 구독 불가: {symbol}")
+                return
+                
+            # PINGPONG 폴백 모드 확인
+            if cls._korea_websocket.is_rest_fallback_mode():
+                Logger.info(f"🔄 {symbol} REST API 폴백 모드로 처리")
+                # REST API로 주기적 폴링 처리
+                await cls._start_rest_api_polling(symbol)
                 return
                 
             # 연결 상태 확인 및 자동 재연결 시도
@@ -494,6 +508,101 @@ class SignalMonitoringService:
         except Exception as e:
             Logger.error(f"❌ 신뢰성 해외주식 구독 예외: {e}")
             return False
+    
+    @classmethod
+    async def _start_rest_api_polling(cls, symbol: str):
+        """REST API 폴링 모드 시작 (PINGPONG 대응)"""
+        try:
+            Logger.info(f"🔄 {symbol} REST API 폴링 모드 시작 (30초 간격)")
+            
+            # 폴링 태스크 이름
+            task_name = f"rest_polling_{symbol}"
+            
+            # 기존 폴링 태스크가 있으면 제거
+            if hasattr(cls, '_polling_tasks') and task_name in cls._polling_tasks:
+                cls._polling_tasks[task_name].cancel()
+                
+            # 폴링 태스크 생성
+            if not hasattr(cls, '_polling_tasks'):
+                cls._polling_tasks = {}
+                
+            cls._polling_tasks[task_name] = asyncio.create_task(
+                cls._rest_api_polling_loop(symbol)
+            )
+            
+            Logger.info(f"✅ {symbol} REST API 폴링 태스크 시작됨")
+            
+        except Exception as e:
+            Logger.error(f"❌ REST API 폴링 시작 실패 ({symbol}): {e}")
+    
+    @classmethod
+    async def _rest_api_polling_loop(cls, symbol: str):
+        """REST API 주기적 폴링 루프"""
+        try:
+            while True:
+                try:
+                    # KoreaInvestmentService를 통한 REST API 호출
+                    from service.service_container import ServiceContainer
+                    korea_service = ServiceContainer.get_korea_investment_service()
+                    
+                    if korea_service:
+                        # 거래소 결정 (미국 주식은 대부분 NASDAQ/NYSE)
+                        exchange = cls._determine_exchange(symbol)
+                        
+                        # 해외 주식 가격 조회 (REST API)
+                        price_data = await korea_service.get_overseas_stock_price(exchange, symbol)
+                        
+                        if price_data:
+                            # 빈 문자열이나 None을 0으로 처리
+                            last_price = price_data.get('last', '')
+                            
+                            # 데이터가 빈 문자열이면 Yahoo Finance 사용
+                            if last_price == '' or last_price == '0':
+                                Logger.warn(f"⚠️ {symbol} 한투 API 빈 응답 - Yahoo Finance 사용")
+                                try:
+                                    import yfinance as yf
+                                    ticker = yf.Ticker(symbol)
+                                    info = ticker.info
+                                    
+                                    converted_data = {
+                                        'current_price': float(info.get('currentPrice', info.get('regularMarketPrice', 0))),
+                                        'high_price': float(info.get('dayHigh', 0)),
+                                        'low_price': float(info.get('dayLow', 0)),
+                                        'open_price': float(info.get('open', info.get('regularMarketOpen', 0))),
+                                        'volume': int(info.get('volume', info.get('regularMarketVolume', 0)))
+                                    }
+                                    Logger.info(f"✅ Yahoo Finance 데이터 사용: ${converted_data['current_price']}")
+                                except Exception as yf_e:
+                                    Logger.error(f"❌ Yahoo Finance 실패: {yf_e}")
+                                    converted_data = {'current_price': 0, 'high_price': 0, 'low_price': 0, 'open_price': 0, 'volume': 0}
+                            else:
+                                # 한투 API 데이터 사용
+                                converted_data = {
+                                    'current_price': float(last_price) if last_price else 0,
+                                    'high_price': float(price_data.get('high', 0)) if price_data.get('high') else 0,
+                                    'low_price': float(price_data.get('low', 0)) if price_data.get('low') else 0,
+                                    'open_price': float(price_data.get('open', 0)) if price_data.get('open') else 0,
+                                    'volume': int(price_data.get('tvol', 0)) if price_data.get('tvol') else 0
+                                }
+                            
+                            Logger.info(f"📊 {symbol} REST API 데이터: ${converted_data['current_price']}")
+                            
+                            # 기존 처리 로직 재사용
+                            await cls._handle_us_stock_data(symbol, converted_data)
+                        else:
+                            Logger.warn(f"⚠️ {symbol} REST API 데이터 없음")
+                    
+                    # 30초 대기
+                    await asyncio.sleep(30)
+                    
+                except Exception as loop_e:
+                    Logger.error(f"❌ REST API 폴링 루프 에러 ({symbol}): {loop_e}")
+                    await asyncio.sleep(30)  # 에러 시에도 대기
+                    
+        except asyncio.CancelledError:
+            Logger.info(f"🔄 {symbol} REST API 폴링 태스크 종료됨")
+        except Exception as e:
+            Logger.error(f"❌ REST API 폴링 루프 예외 ({symbol}): {e}")
     
     @classmethod
     async def _handle_us_stock_data(cls, symbol: str, data: Dict):

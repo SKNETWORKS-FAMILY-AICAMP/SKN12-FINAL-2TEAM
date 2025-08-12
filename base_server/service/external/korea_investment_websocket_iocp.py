@@ -25,6 +25,9 @@ class KoreaInvestmentWebSocketIOCP:
         # WebSocket URL
         self.ws_url = "ws://ops.koreainvestment.com:21000"
         
+        # REST API 폴백 플래그
+        self._use_rest_fallback = False
+        
         Logger.info("🚀 한국투자증권 IOCP WebSocket 생성")
     
     async def connect(self, app_key: str, app_secret: str, approval_key: Optional[str] = None) -> bool:
@@ -60,6 +63,10 @@ class KoreaInvestmentWebSocketIOCP:
             }
             
             Logger.info(f"🔌 한국투자증권 WebSocket 연결 시도")
+            
+            # 한투증권 메시지 인터셉터 등록 (연결 전에 등록)
+            self.iocp_websocket.add_message_interceptor(self._korea_message_interceptor)
+            Logger.info("📌 한투증권 메시지 인터셉터 등록 완료")
             
             # IOCP WebSocket으로 연결
             success = await self.iocp_websocket.connect(self.ws_url, headers)
@@ -174,7 +181,7 @@ class KoreaInvestmentWebSocketIOCP:
                     "body": {
                         "input": {
                             "tr_id": "HHDFS76240000",  # 해외주식 실시간 TR ID
-                            "tr_key": f"{exchange}^{symbol}"
+                            "tr_key": f"RBAQ{symbol}"  # 한투증권 해외주식 실시간 포맷
                         }
                     }
                 }
@@ -297,6 +304,85 @@ class KoreaInvestmentWebSocketIOCP:
         except Exception as e:
             Logger.error(f"❌ approval_key 조회 실패: {e}")
             return None
+    
+    async def _korea_message_interceptor(self, data: Dict[str, Any]) -> None:
+        """한국투자증권 전용 메시지 인터셉터 (PINGPONG 처리 포함)"""
+        try:
+            # 모든 메시지 로깅 (디버깅용)
+            Logger.debug(f"🔍 한투증권 인터셉터 수신 데이터: {data}")
+            
+            # PINGPONG 메시지 감지 - 다양한 형태 체크
+            pingpong_detected = False
+            
+            if isinstance(data, dict):
+                # 1. header의 tr_id가 PINGPONG인 경우
+                header = data.get("header", {})
+                if header.get("tr_id") == "PINGPONG":
+                    Logger.warn("🏓 PINGPONG 메시지 감지 (header.tr_id) - REST API 폴백 모드로 전환")
+                    pingpong_detected = True
+                
+                # 2. body의 rt_cd가 특정 값인 경우 (한투증권 PINGPONG 응답 코드)
+                body = data.get("body", {})
+                if body.get("rt_cd") == "9" and "PINGPONG" in str(body.get("msg1", "")):
+                    Logger.warn("🏓 PINGPONG 메시지 감지 (body.msg1) - REST API 폴백 모드로 전환")
+                    pingpong_detected = True
+                
+                # 3. 전체 딕셔너리를 문자열로 변환해서 체크
+                if "PINGPONG" in str(data):
+                    Logger.warn("🏓 PINGPONG 메시지 감지 (전체 데이터) - REST API 폴백 모드로 전환")
+                    pingpong_detected = True
+                    
+            elif isinstance(data, str):
+                # 4. 문자열 데이터에 PINGPONG 포함
+                if "PINGPONG" in data:
+                    Logger.warn("🏓 PINGPONG 메시지 감지 (RAW 문자열) - REST API 폴백 모드로 전환")
+                    pingpong_detected = True
+            
+            # PINGPONG 감지 시 처리
+            if pingpong_detected:
+                self._use_rest_fallback = True
+                
+                # 연결 종료는 별도 태스크로 처리 (이벤트 루프 충돌 방지)
+                asyncio.create_task(self._delayed_disconnect())
+                
+                # REST API 폴백 모드 알림
+                Logger.info("🔄 WebSocket → REST API 폴백 모드 활성화")
+                return
+                
+            # 정상 메시지 처리 로깅
+            if isinstance(data, dict) and "header" in data:
+                tr_id = data.get("header", {}).get("tr_id", "")
+                if tr_id:
+                    Logger.debug(f"📊 한투증권 메시지 수신: {tr_id}")
+                    
+        except Exception as e:
+            Logger.error(f"❌ 한투증권 메시지 인터셉터 에러: {e}")
+    
+    def is_rest_fallback_mode(self) -> bool:
+        """REST API 폴백 모드 여부 확인"""
+        return self._use_rest_fallback
+    
+    def reset_fallback_mode(self) -> None:
+        """폴백 모드 리셋 (WebSocket 재시도용)"""
+        self._use_rest_fallback = False
+        Logger.info("🔄 REST API 폴백 모드 해제")
+    
+    async def _delayed_disconnect(self):
+        """지연된 연결 종료 및 REST API 폴링 시작"""
+        try:
+            await asyncio.sleep(0.1)  # 약간의 지연
+            await self.disconnect()
+            Logger.info("🔌 PINGPONG으로 인한 WebSocket 연결 종료 완료")
+            
+            # REST API 폴링 즉시 시작
+            from service.signal.signal_monitoring_service import SignalMonitoringService
+            if SignalMonitoringService._initialized and SignalMonitoringService._monitoring_symbols:
+                Logger.info(f"🔄 REST API 폴링 즉시 시작 - {len(SignalMonitoringService._monitoring_symbols)}개 종목")
+                for symbol in SignalMonitoringService._monitoring_symbols:
+                    await SignalMonitoringService._start_rest_api_polling(symbol)
+                Logger.info("✅ 모든 종목 REST API 폴링 전환 완료")
+        except Exception as e:
+            Logger.error(f"❌ 지연된 연결 종료 실패: {e}")
     
     # 기존 코드 호환성을 위한 속성들
     @property

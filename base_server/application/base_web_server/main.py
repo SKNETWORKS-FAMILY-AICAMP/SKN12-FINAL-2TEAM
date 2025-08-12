@@ -63,18 +63,40 @@ from service.sms.sms_config import SmsConfig
 log_level = parse_log_level()
 app_env = parse_app_env()
 
-# 환경에 따라 config 파일명 결정
+# 🔧 환경에 따라 config 파일명 결정
 def get_config_filename():
-    # 현재 파일의 디렉토리 경로
+    """
+    APP_ENV 환경변수 값에 따라 적절한 설정 파일 경로를 반환합니다.
+    
+    🎯 환경별 설정 파일 매핑:
+    - APP_ENV=LOCAL  → base_web_server-config_local.json   (로컬 개발)
+    - APP_ENV=DEBUG  → base_web_server-config_debug.json   (개발/테스트)
+    - APP_ENV=PROD   → base_web_server-config.json         (운영)
+    - APP_ENV=RELEASE → base_web_server-config.json        (운영, 기본값)
+    - 기타 모든 값   → base_web_server-config.json         (운영으로 폴백)
+    
+    🐳 Docker 환경에서의 사용:
+    - docker run -e APP_ENV=PROD → config.json 사용 (볼륨 마운트 필요)
+    - docker run -e APP_ENV=DEBUG → config_debug.json 사용
+    
+    📁 파일 위치: /app/application/base_web_server/ (Docker 내부 경로)
+    
+    Returns:
+        str: 전체 config 파일 경로
+    """
+    # 현재 파일의 디렉토리 경로 (/app/application/base_web_server/)
     current_dir = os.path.dirname(os.path.abspath(__file__))
     
+    # 🎛️ 환경별 config 파일 선택 로직
     if app_env == "LOCAL":
-        filename = "base_web_server-config_local.json"
+        filename = "base_web_server-config_local.json"     # 로컬 개발용
     elif app_env == "DEBUG":
-        filename = "base_web_server-config_debug.json"
+        filename = "base_web_server-config_debug.json"     # 개발/테스트용
     else:
-        filename = "base_web_server-config.json"
+        # PROD, RELEASE, 또는 기타 모든 값 → 운영용 설정 파일
+        filename = "base_web_server-config.json"           # 운영용 (기본값)
     
+    # 📍 최종 경로: /app/application/base_web_server/base_web_server-config.json
     return os.path.join(current_dir, filename)
 
 config_file = get_config_filename()

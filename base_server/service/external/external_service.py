@@ -130,6 +130,11 @@ class ExternalService:
         client = cls.get_client(api_name)
         return await client.request("DELETE", url, **kwargs)
     
+    @classmethod
+    async def post_request(cls, api_name: str, url: str, **kwargs) -> Dict[str, Any]:
+        """POST 요청 (post_request alias for backward compatibility)"""
+        return await cls.post(api_name, url, **kwargs)
+    
     # === 모니터링 및 관리 메서드 ===
     @classmethod
     async def health_check(cls, api_name: Optional[str] = None) -> Dict[str, Any]:
