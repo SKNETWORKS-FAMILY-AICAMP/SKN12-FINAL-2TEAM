@@ -127,9 +127,8 @@ export default function PortfolioPage() {
     }
   };
 
-  // 초기 렌더 완료 시점에 진행바 종료 (필요 시 데이터 로딩 상태를 연결해 확장 가능)
+  // TODO: 실제 포트폴리오 데이터 fetch 연동 시, 완료 지점에서 endRouteProgress() 호출
   React.useEffect(() => {
-    // 포트폴리오 페이지는 현재 정적 데이터라 렌더가 끝나면 바로 종료
     endRouteProgress();
   }, []);
 

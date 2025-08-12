@@ -113,7 +113,7 @@ export default function ChatPage() {
     }
   }, [messages, currentRoomId, autoScroll]);
 
-  // 페이지 마운트 후 초기 데이터 로딩이 끝나면 상단 로딩바 종료
+  // 초기 데이터(rooms/messages) 로딩 완료 시 상단 로딩바 종료
   useEffect(() => {
     if (!isLoading) {
       endRouteProgress();

@@ -8,6 +8,7 @@ import { useTutorial } from "@/hooks/use-tutorial"
 import { TutorialOverlay } from "@/components/tutorial/tutorial-overlay"
 import { Settings, User, Bell, Shield, CreditCard, LogOut } from "lucide-react";
 import { useProfile } from "@/hooks/use-profile";
+import { endRouteProgress } from "@/lib/route-progress";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -240,6 +241,13 @@ export default function SettingsPage() {
     }
     setSidebarOpen(false);
   };
+
+  // 프로필 초기 로딩 완료 시 상단 진행바 종료
+  useEffect(() => {
+    if (!loading) {
+      endRouteProgress();
+    }
+  }, [loading]);
 
   if (loading) {
     return (

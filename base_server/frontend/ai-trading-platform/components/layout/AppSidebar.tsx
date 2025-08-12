@@ -51,18 +51,10 @@ export function AppSidebar({ open, onClose, onNavigate }: AppSidebarProps) {
                 key={item.key}
                 className="text-left px-3 py-2 rounded-lg hover:bg-gray-800 text-white font-medium transition-colors duration-200"
                 onClick={async () => {
-                  if (item.key === "chat" || item.key === "portfolio") {
+                  if (item.key === "dashboard" || item.key === "chat" || item.key === "portfolio" || item.key === "signals" || item.key === "settings") {
                     startRouteProgress();
                   }
-                  try {
-                    await onNavigate(item.key);
-                  } finally {
-                    if (item.key === "chat" || item.key === "portfolio") {
-                      // 종료 신호는 이동 후 대상 페이지에서 보내는 것이 정확하지만,
-                      // fallback으로 2초 후 자동 종료
-                      setTimeout(() => endRouteProgress(), 2000);
-                    }
-                  }
+                  await onNavigate(item.key);
                   onClose();
                 }}
               >

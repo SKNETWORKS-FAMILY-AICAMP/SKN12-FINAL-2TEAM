@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useTutorial } from "@/hooks/use-tutorial";
 import { TutorialOverlay } from "@/components/tutorial/tutorial-overlay";
 import { StrategyGrid } from "@/components/autotrade/strategy-grid";
+import { endRouteProgress } from "@/lib/route-progress";
 
 /**
  * Auto-Trading Page
@@ -45,6 +46,11 @@ export default function AutoTradingPage() {
     setSidebarOpen(false);
   };
 
+  // StrategyGrid의 첫 데이터 로딩 완료 시점을 받아 상단 진행바 종료
+  const handleInitialLoadEnd = React.useCallback(() => {
+    endRouteProgress();
+  }, []);
+
   return (
     <>
       <Header onSidebarOpen={() => setSidebarOpen(true)} />
@@ -54,7 +60,7 @@ export default function AutoTradingPage() {
         onNavigate={handleNavigate}
       />
       <div className="min-h-screen bg-gradient-to-br from-[#0b1221] to-[#02050a] p-6 md:p-10 text-white">
-        <StrategyGrid />
+        <StrategyGrid onInitialLoadEnd={handleInitialLoadEnd} />
       </div>
       
       {/* 튜토리얼 오버레이 */}

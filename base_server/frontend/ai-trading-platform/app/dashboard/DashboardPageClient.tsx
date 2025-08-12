@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { endRouteProgress } from "@/lib/route-progress";
 import { useAuth }         from "@/hooks/use-auth";
 import { useNasdaqStocks } from "@/hooks/use-nasdaq-stocks";
 import { useTutorial }     from "@/hooks/use-tutorial";
@@ -75,7 +76,11 @@ export default function DashboardPageClient() {
     };
 
     recompute();                 // 초기 1회
-    return subscribeStore(recompute);
+    const unsubscribe = subscribeStore(recompute);
+    // 초기 구독과 첫 데이터 가공이 끝난 시점에 진행바 종료
+    // 실시간 WS 초기화(initWs)도 별도 effect에서 수행되며 성공 시 곧바로 데이터가 들어옴
+    endRouteProgress();
+    return unsubscribe;
   }, [getStock, subscribeStore]);
 
   /* ────────── 튜토리얼 훅 ────────── */
