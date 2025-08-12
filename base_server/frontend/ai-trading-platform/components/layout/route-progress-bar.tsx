@@ -47,8 +47,11 @@ export function RouteProgressBar() {
   return (
     <div className="fixed top-0 left-0 right-0 z-[100] pointer-events-none">
       <div
-        className={`h-[3px] bg-blue-500 transition-opacity duration-150 ${visible ? "opacity-100" : "opacity-0"}`}
-        style={{ width: `${width}%` }}
+        className={`h-[3px] transition-opacity duration-150 ${visible ? "opacity-100" : "opacity-0"}`}
+        style={{
+          width: `${width}%`,
+          background: "linear-gradient(90deg, #667eea, #764ba2)",
+        }}
       />
     </div>
   );
