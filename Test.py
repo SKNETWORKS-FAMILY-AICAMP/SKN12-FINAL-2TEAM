@@ -5,7 +5,7 @@ from openai import OpenAI, APIError
 
 # 방법 1) 환경변수 OPENAI_API_KEY 사용 (권장)
 # 방법 2) 아래 API_KEY 변수에 직접 붙여넣기
-API_KEY = """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"""
+API_KEY = """sk-proj-bpTVKxPgjDa4BpMs8yf8DNigIWIvaGbd-317vAwRDdxuBEJcwFaY5vajuReRkev-uojgacb2lT3BlbkFJ0pwUjqzCmiUKmVeEOA1io60W5o_wuI8Pq8CKJKJfFFUIM8Bme-XXda9TIml6Z8aI8moEK_vDMA"""
 
 MODEL = "gpt-4.1-mini"  # 가볍고 저렴한 일반 질의응답용 모델
 
