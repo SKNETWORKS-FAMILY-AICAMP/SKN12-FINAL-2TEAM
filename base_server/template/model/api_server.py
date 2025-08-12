@@ -34,7 +34,7 @@ from .common.model_serialize import (
     ModelsListRequest, 
     ModelsListResponse
 )
-from common.model_protocol import ModelProtocol
+from .common.model_protocol import ModelProtocol
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
