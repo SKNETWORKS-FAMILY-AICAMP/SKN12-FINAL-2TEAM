@@ -8,6 +8,7 @@ import { Header } from "@/components/layout/header";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { useTutorial } from "@/hooks/use-tutorial";
 import { TutorialOverlay } from "@/components/tutorial/tutorial-overlay";
+import { endRouteProgress } from "@/lib/route-progress";
 
 export default function PortfolioPage() {
   const router = useRouter();
@@ -125,6 +126,11 @@ export default function PortfolioPage() {
         break;
     }
   };
+
+  // TODO: 실제 포트폴리오 데이터 fetch 연동 시, 완료 지점에서 endRouteProgress() 호출
+  React.useEffect(() => {
+    endRouteProgress();
+  }, []);
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-black via-gray-900 to-gray-820 text-white">

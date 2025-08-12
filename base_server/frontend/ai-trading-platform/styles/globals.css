@@ -75,6 +75,24 @@ body::after {
     }
 }
 
+/* 지수 티커 마퀴 애니메이션 */
+@keyframes marquee {
+    0% { 
+        transform: translateX(0); 
+    }
+    100% { 
+        transform: translateX(-50%); 
+    }
+}
+
+.animate-marquee {
+    animation: marquee 30s linear infinite;
+}
+
+.animate-marquee:hover {
+    animation-play-state: paused;
+}
+
 .container {
     max-width: 1200px;
     margin: 0 auto;

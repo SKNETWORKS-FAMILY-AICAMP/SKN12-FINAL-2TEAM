@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.ticker-container {
+    display: flex;
+    width: max-content; /* Ensure the container is wide enough */
+}
+
+.ticker-content {
+    display: flex;
+    align-items: center;
+    animation: ticker-scroll 20s linear infinite;
+}
+
+.ticker-item {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 1.5rem; /* 24px */
+    flex-shrink: 0;
+}
+
+@keyframes ticker-scroll {
+    0% {
+        transform: translateX(0%);
+    }
+    100% {
+        transform: translateX(-100%);
+    }
+}

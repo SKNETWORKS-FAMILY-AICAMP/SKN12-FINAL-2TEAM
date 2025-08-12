@@ -52,11 +52,21 @@ class DashboardPerformanceResponse(BaseResponse):
 # =========================
 class SecuritiesLoginRequest(BaseRequest):
     """증권사 API 로그인 요청"""
-    appkey: str
-    appsecret: str
     mode: str = "prod"
 
 class SecuritiesLoginResponse(BaseResponse):
-    """증권사 API 로그인 응답"""
     result: str
-    error: Optional[str] = None
+    message: str
+    app_key: str
+
+class PriceRequest(BaseRequest):
+    appkey: str         # 한국투자증권 AppKey
+    ticker: str         # 조회할 종목 코드 (예: "005930")
+
+class PriceResponse(BaseResponse):
+    ticker: str
+    price: float
+    change: float
+    change_pct: float
+    volume: float
+    timestamp: str

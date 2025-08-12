@@ -18,6 +18,26 @@ from datetime import datetime, timedelta
 import json
 from contextlib import asynccontextmanager
 
+# --- Compatibility aliases for unpickling older preprocessors ---
+# Some preprocessor.pkl files were created when modules were imported as top-level
+# (e.g., 'data_preprocessor'). When running as a package, we need to map those
+# legacy module names to the current package paths so pickle can resolve classes.
+import sys
+import importlib
+
+MODULE_ALIASES = {
+    "data_preprocessor": "base_server.template.model.data_preprocessor",
+    "manual_data_collector": "base_server.template.model.manual_data_collector",
+    "pytorch_lstm_model": "base_server.template.model.pytorch_lstm_model",
+    "advanced_features": "base_server.template.model.advanced_features",
+}
+for _old, _new in MODULE_ALIASES.items():
+    try:
+        sys.modules[_old] = importlib.import_module(_new)
+    except Exception:
+        # If import fails, proceed without alias; pickle may not need it.
+        pass
+
 # 프로젝트 모듈 import
 from .manual_data_collector import ManualStockDataCollector
 from .data_preprocessor import StockDataPreprocessor
@@ -34,7 +54,7 @@ from .common.model_serialize import (
     ModelsListRequest, 
     ModelsListResponse
 )
-from common.model_protocol import ModelProtocol
+from .common.model_protocol import ModelProtocol
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -280,7 +300,7 @@ async def load_model_and_preprocessor():
             model = PyTorchStockLSTM(
                 sequence_length=60,
                 prediction_length=5,
-                num_features=42,  # 기존 모델과 호환성 유지
+                num_features=18,  # 기존 모델과 호환성 유지
                 num_targets=3
             )
             model.load_model(model_path, hidden_size=512)  # 🔥 RTX 4090 최적화
@@ -295,7 +315,7 @@ async def load_model_and_preprocessor():
                 preprocessor = pickle.load(f)
             
             # 🚀 고급 피처 활성화 (42개 피처 모드)
-            preprocessor.advanced_features_enabled = True
+            preprocessor.advanced_features_enabled = False
             
             logger.info("Preprocessor loaded successfully")
             logger.info("🚀 Advanced features enabled (42 features mode)")

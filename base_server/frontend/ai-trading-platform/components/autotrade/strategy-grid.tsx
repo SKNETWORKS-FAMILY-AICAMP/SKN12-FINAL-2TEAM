@@ -23,10 +23,15 @@ interface Strategy {
   stockInfo?: any;
 }
 
-export function StrategyGrid() {
+interface StrategyGridProps {
+  onInitialLoadEnd?: () => void;
+}
+
+export function StrategyGrid({ onInitialLoadEnd }: StrategyGridProps) {
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const notifiedRef = React.useRef(false);
 
   const loadStrategies = async () => {
     setIsLoading(true)
@@ -61,6 +66,10 @@ export function StrategyGrid() {
       setStrategies([])
     } finally {
       setIsLoading(false)
+      if (!notifiedRef.current) {
+        notifiedRef.current = true;
+        onInitialLoadEnd?.();
+      }
     }
   }
 

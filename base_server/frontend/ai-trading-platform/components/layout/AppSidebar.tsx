@@ -1,6 +1,7 @@
 import React from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
+import { startRouteProgress, endRouteProgress } from "@/lib/route-progress";
 
 interface AppSidebarProps {
   open: boolean;
@@ -11,6 +12,7 @@ interface AppSidebarProps {
 const menu = [
   { key: "dashboard", label: "대시보드" },
   { key: "portfolio", label: "포트폴리오" },
+  { key: "realtime", label: "실시간 시세" },
   { key: "signals", label: "매매 시그널" },
   { key: "chat", label: "AI 채팅" },
   { key: "settings", label: "설정" },
@@ -48,7 +50,13 @@ export function AppSidebar({ open, onClose, onNavigate }: AppSidebarProps) {
               <button
                 key={item.key}
                 className="text-left px-3 py-2 rounded-lg hover:bg-gray-800 text-white font-medium transition-colors duration-200"
-                onClick={() => { onNavigate(item.key); onClose(); }}
+                onClick={async () => {
+                  if (item.key === "dashboard" || item.key === "chat" || item.key === "portfolio" || item.key === "signals" || item.key === "settings") {
+                    startRouteProgress();
+                  }
+                  await onNavigate(item.key);
+                  onClose();
+                }}
               >
                 {item.label}
               </button>
