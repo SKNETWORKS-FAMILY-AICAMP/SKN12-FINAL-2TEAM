@@ -783,10 +783,10 @@ class SignalMonitoringService:
             )
             
             # Model Server API 호출 (JSON 형태로 전송)
-            response_data = await external_service.post_request(
+            response_data = await external_service.post(
                 api_name="model_server",
-                endpoint="/api/model/predict",
-                data=predict_request.model_dump(),  # Pydantic 모델을 dict로 변환
+                url="/predict",
+                json=predict_request.model_dump(),  # Pydantic 모델을 dict로 변환
                 timeout=30
             )
             
@@ -1080,11 +1080,7 @@ class SignalMonitoringService:
     async def _save_signal(cls, symbol: str, price: float, signal_type: str, band_data: Dict):
         """시그널 저장 및 Model Server 연동"""
         try:
-            # TODO: Model Server 연동 - ExternalService 사용하여 추론 요청
-            # 1. Model Server에 시그널 분석 요청
-            # 2. 응답 받은 후 확정된 시그널만 DB 저장
-            # 
-            # 현재는 볼린저 밴드 시그널을 바로 저장
+            # Model Server 연동으로 시그널 검증 후 확정된 시그널만 DB 저장
             
             db_service = ServiceContainer.get_database_service()
             
@@ -1108,7 +1104,7 @@ class SignalMonitoringService:
                                 alarm_id = alarm_data.get('alarm_id')
                                 account_db_key = alarm_data.get('account_db_key')
                                 
-                                # TODO: Model Server 추론 요청
+                                # Model Server 시그널 검증 요청
                                 model_decision = await cls._request_model_inference(
                                     symbol, price, signal_type, band_data
                                 )
@@ -1174,9 +1170,39 @@ class SignalMonitoringService:
             # if response.get("success"):
             #     return response.get("data")
             
-            Logger.info(f"TODO: Model Server 추론 요청 - {symbol} {signal_type} @ {price}")
+            # 기존 캐시 시스템 활용: _call_model_server_predict 사용
+            prediction_result = await cls._call_model_server_predict(symbol)
             
-            # 임시로 None 반환 (Model Server 미구현)
+            if prediction_result and prediction_result.status == 'success':
+                predictions = prediction_result.predictions
+                
+                # 예측 트렌드 분석 (5일 예측 중 상승/하락 비율)
+                up_trends = sum(1 for p in predictions if p.get("trend") == "up")
+                down_trends = sum(1 for p in predictions if p.get("trend") == "down")
+                
+                # 시그널 일치도 계산
+                if signal_type == "BUY" and up_trends >= 3:
+                    confidence = min(0.9, 0.6 + (up_trends * 0.1))
+                    recommendation = "CONFIRM"
+                elif signal_type == "SELL" and down_trends >= 3:
+                    confidence = min(0.9, 0.6 + (down_trends * 0.1))
+                    recommendation = "CONFIRM"
+                else:
+                    confidence = 0.4
+                    recommendation = "REJECT"
+                
+                inference_result = {
+                    "signal_type": signal_type,
+                    "recommendation": recommendation,
+                    "confidence": confidence,
+                    "model_predictions": predictions[:3],  # 처음 3일만 포함
+                    "analysis_summary": f"AI 예측: {up_trends}일 상승, {down_trends}일 하락"
+                }
+                
+                Logger.info(f"✅ Model Server 시그널 검증: {symbol} {recommendation} (신뢰도: {confidence:.1%})")
+                return inference_result
+            
+            Logger.warn(f"⚠️ Model Server 시그널 검증 실패: {symbol}")
             return None
             
         except Exception as e:

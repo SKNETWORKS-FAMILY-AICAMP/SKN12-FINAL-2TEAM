@@ -266,6 +266,50 @@ async def lifespan(app: FastAPI):
                 Logger.warn("External 서비스 연결 테스트 타임아웃 - 네트워크 지연 가능")
             except Exception as test_e:
                 Logger.warn(f"External 서비스 연결 테스트 오류: {test_e}")
+            
+            # Model Server 연결 테스트 (AAPL 5일 LSTM 예측)
+            try:
+                Logger.info("🧪 Model Server AAPL 5일 LSTM 예측 테스트 시작")
+                request_data = {"symbol": "AAPL"}
+                Logger.info(f"📤 Request: {request_data}")
+                
+                model_test_result = await asyncio.wait_for(
+                    ExternalService.post("model_server", "/predict", json=request_data),
+                    timeout=30.0
+                )
+                
+                Logger.info(f"📥 Response: {model_test_result}")
+                
+                # ExternalService가 래핑한 응답에서 실제 데이터 추출
+                if model_test_result.get("success") and "data" in model_test_result:
+                    actual_data = model_test_result["data"]
+                    Logger.info(f"📥 Model Server Response Body: {actual_data}")
+                    
+                    if actual_data.get("symbol") == "AAPL":
+                        predictions = actual_data.get("predictions", [])
+                        current_price = actual_data.get("current_price", 0)
+                        confidence = actual_data.get("confidence_score", 0)
+                        Logger.info("✅ Model Server AAPL 5일 LSTM 예측 테스트 성공")
+                        Logger.info(f"📊 현재가: ${current_price:.2f}")
+                        Logger.info(f"📊 예측 일수: {len(predictions)}일")
+                        Logger.info(f"📊 신뢰도: {confidence}")
+                        
+                        # 예측 결과 상세 출력
+                        for i, pred in enumerate(predictions[:3]):  # 처음 3일만 출력
+                            day = pred.get("day", i+1)
+                            date = pred.get("date", "N/A")
+                            price = pred.get("predicted_close", 0)
+                            trend = pred.get("trend", "N/A")
+                            Logger.info(f"📊 Day {day} ({date}): ${price:.2f} ({trend})")
+                    else:
+                        Logger.warn(f"⚠️ Model Server 예측 테스트 실패 - 심볼 불일치")
+                else:
+                    Logger.warn(f"⚠️ Model Server 예측 테스트 실패 - ExternalService 응답 오류")
+                    Logger.warn(f"⚠️ 실제 응답: {model_test_result}")
+            except asyncio.TimeoutError:
+                Logger.warn("⚠️ Model Server 예측 테스트 타임아웃 - 모델 추론 시간 초과")
+            except Exception as model_test_e:
+                Logger.warn(f"⚠️ Model Server 예측 테스트 오류: {model_test_e}")
                 
         except Exception as e:
             Logger.error(f"❌ External 서비스 초기화 실패: {e}")
