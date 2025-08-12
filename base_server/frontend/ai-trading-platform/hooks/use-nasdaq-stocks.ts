@@ -53,7 +53,9 @@ async function fetchOAuthCredential(): Promise<{ token: string; appkey: string }
       if (!accessToken) throw new Error("accessToken 없음");
 
       const res = await fetch("/api/dashboard/oauth/authenticate", {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accessToken: accessToken }),
       });
       console.log("[OAuth] TESWTdddddsdfga응답:", res);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -137,10 +139,12 @@ async function fetchRestPrice(sym: string) {
     const res = await fetch("/api/dashboard/price/us", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${userAccessToken}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(reqBody),
+      body: JSON.stringify({
+        ...reqBody,
+        accessToken: userAccessToken
+      }),
     });
 
     console.debug("[REST] HTTP 상태코드:", res.status);
@@ -408,8 +412,11 @@ class NasdaqWebSocketManager {
     }
     this.ws.send(
       JSON.stringify({
-        header: { authorization: `Bearer ${token}`, appkey, tr_id: "NASD_QTES" },
-        body: { input: { tr_key: sym } },
+        header: { appkey, tr_id: "NASD_QTES" },
+        body: { 
+          accessToken: token,
+          input: { tr_key: sym } 
+        },
       })
     );
     console.log("%c[WS] SUB ▶", "color:#ff0", sym);

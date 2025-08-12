@@ -6,7 +6,8 @@ from template.base.template_service import TemplateService
 from template.dashboard.common.dashboard_serialize import (
     DashboardMainRequest, DashboardAlertsRequest, DashboardPerformanceRequest,
     SecuritiesLoginRequest, SecuritiesLoginResponse,
-    PriceRequest, PriceResponse
+    PriceRequest, PriceResponse,
+    StockRecommendationRequest, StockRecommendationResponse
 )
 from template.dashboard.common.dashboard_protocol import DashboardProtocol
 from fastapi import Header
@@ -23,6 +24,7 @@ def setup_dashboard_protocol_callbacks():
     dashboard_protocol.on_dashboard_performance_req_callback = getattr(dashboard_template, "on_dashboard_performance_req", None)
     dashboard_protocol.on_dashboard_oauth_req_callback = getattr(dashboard_template, "on_dashboard_oauth_req", None)
     dashboard_protocol.on_dashboard_price_us_req_callback = getattr(dashboard_template, "on_dashboard_price_us_req", None)
+    dashboard_protocol.on_stock_recommendation_req_callback = getattr(dashboard_template, "on_stock_recommendation_req", None)
 @router.post("/main")
 async def dashboard_main(request: DashboardMainRequest, req: Request):
     """대시보드 메인 데이터"""
@@ -75,20 +77,15 @@ async def dashboard_performance(request: DashboardPerformanceRequest, req: Reque
 async def dashboard_oauth(
     request: SecuritiesLoginRequest,
     req: Request,
-    authorization: Annotated[str | None, Header()] = None,
 ):
     """OAuth 인증"""
     print(f"📥 OAuth body received: {request.model_dump_json()}")
 
-    # 바디에서 accessToken 우선 사용
+    # 바디에서 accessToken 사용
     payload = request.model_dump()
     access_token = payload.get("accessToken")
 
-    # 바디에 없으면 헤더에서 추출
-    if not access_token and authorization and authorization.startswith("Bearer "):
-        access_token = authorization.removeprefix("Bearer ").strip()
-
-    print(f"🔑 최종 accessToken: {access_token}")
+    print(f"🔑 accessToken: {access_token}")
 
     # IP 추출
     ip = req.headers.get("X-Forwarded-For")
@@ -96,10 +93,6 @@ async def dashboard_oauth(
         ip = req.client.host
     else:
         ip = ip.split(",")[0]
-
-    # accessToken이 있으면 payload에 반영
-    if access_token:
-        payload["accessToken"] = access_token
 
     return await TemplateService.run_user(
         req.method,
@@ -114,20 +107,15 @@ async def dashboard_oauth(
 async def dashboard_price_us(
     request: PriceRequest,
     req: Request,
-    authorization: Annotated[str | None, Header()] = None,
 ):
     """미국 나스닥 종가 조회"""
     print(f"📥 미국 종가 요청: {request.model_dump_json()}")
 
-    # 바디에서 accessToken 우선 사용
+    # 바디에서 accessToken 사용
     payload = request.model_dump()
     access_token = payload.get("accessToken")
 
-    # 바디에 없으면 헤더에서 추출
-    if not access_token and authorization and authorization.startswith("Bearer "):
-        access_token = authorization.removeprefix("Bearer ").strip()
-
-    print(f"🔑 최종 accessToken: {access_token}")
+    print(f"🔑 accessToken: {access_token}")
 
     # IP 추출
     ip = req.headers.get("X-Forwarded-For")
@@ -136,14 +124,41 @@ async def dashboard_price_us(
     else:
         ip = ip.split(",")[0]
 
-    # accessToken이 있으면 payload에 반영
-    if access_token:
-        payload["accessToken"] = access_token
-
     return await TemplateService.run_user(
         req.method,
         req.url.path,
         ip,
         json.dumps(payload, ensure_ascii=False),
         dashboard_protocol.dashboard_price_us_req_controller
+    )
+
+
+@router.post("/stock/recommendation")
+async def stock_recommendation(
+    request: StockRecommendationRequest,
+    req: Request,
+):
+    """주식 종목 추천 (매개변수 2개만 사용)"""
+    print(f"📥 주식 추천 요청: {request.model_dump_json()}")
+    print(f"🎯 시장: {request.market}, 전략: {request.strategy}")
+
+    # 바디에서 accessToken 사용
+    payload = request.model_dump()
+    access_token = payload.get("accessToken")
+
+    print(f"🔑 accessToken: {access_token}")
+
+    # IP 추출
+    ip = req.headers.get("X-Forwarded-For")
+    if not ip:
+        ip = req.client.host
+    else:
+        ip = ip.split(",")[0]
+
+    return await TemplateService.run_user(
+        req.method,
+        req.url.path,
+        ip,
+        json.dumps(payload, ensure_ascii=False),
+        dashboard_protocol.stock_recommendation_req_controller
     )

@@ -52,6 +52,7 @@ class DashboardPerformanceResponse(BaseResponse):
 # =========================
 class SecuritiesLoginRequest(BaseRequest):
     """증권사 API 로그인 요청"""
+    accessToken: str = ""  # 사용자 accessToken
     mode: str = "prod"
 
 class SecuritiesLoginResponse(BaseResponse):
@@ -60,6 +61,7 @@ class SecuritiesLoginResponse(BaseResponse):
     app_key: str
 
 class PriceRequest(BaseRequest):
+    accessToken: str = ""  # 사용자 accessToken
     appkey: str         # 한국투자증권 AppKey
     ticker: str         # 조회할 종목 코드 (예: "005930")
 
@@ -70,3 +72,18 @@ class PriceResponse(BaseResponse):
     change_pct: float
     volume: float
     timestamp: str
+
+# =========================
+# 주식 종목 추천 요청/응답
+# =========================
+class StockRecommendationRequest(BaseRequest):
+    """주식 종목 추천 요청 (매개변수 2개만 사용)"""
+    accessToken: str = ""  # 사용자 accessToken
+    market: str = "KOSPI"      # 시장 구분 (KOSPI, KOSDAQ, NASDAQ)
+    strategy: str = "MOMENTUM"  # 투자 전략 (MOMENTUM, VALUE, GROWTH)
+
+class StockRecommendationResponse(BaseResponse):
+    """주식 종목 추천 응답"""
+    result: str
+    recommendations: List[Dict[str, Any]] = []
+    message: str = ""

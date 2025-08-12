@@ -7,7 +7,8 @@ from template.dashboard.common.dashboard_serialize import (
     DashboardAlertsRequest, DashboardAlertsResponse,
     DashboardPerformanceRequest, DashboardPerformanceResponse,
     SecuritiesLoginRequest, SecuritiesLoginResponse,
-    PriceRequest, PriceResponse
+    PriceRequest, PriceResponse,
+    StockRecommendationRequest, StockRecommendationResponse
 )
 from template.dashboard.common.dashboard_model import AssetSummary, StockHolding, MarketAlert, MarketOverview
 from service.service_container import ServiceContainer
@@ -509,3 +510,106 @@ class DashboardTemplateImpl(BaseTemplate):
                 timestamp="",
                 errorCode=1000
             )
+
+    async def on_stock_recommendation_req(self, client_session, request: StockRecommendationRequest):
+        """주식 종목 추천 요청 처리 (매개변수 2개만 사용)"""
+        Logger.info(f"📥 주식 추천 요청: {request.model_dump_json()}")
+        Logger.info(f"🎯 시장: {request.market}, 전략: {request.strategy}")
+
+        response = StockRecommendationResponse()
+        response.sequence = request.sequence
+
+        try:
+            account_db_key = client_session.session.account_db_key
+            shard_id = client_session.session.shard_id
+            
+            db_service = ServiceContainer.get_database_service()
+            
+            # 1. 주식 종목 추천 데이터 조회 (예시 데이터)
+            # 실제로는 fp_get_stock_recommendations 프로시저가 필요
+            recommendations = []
+            
+            if request.market == "KOSPI":
+                if request.strategy == "MOMENTUM":
+                    recommendations = [
+                        {
+                            "symbol": "005930",
+                            "name": "삼성전자",
+                            "price": 75000,
+                            "change_pct": 2.5,
+                            "reason": "모멘텀 상승, 기술적 지표 양호"
+                        },
+                        {
+                            "symbol": "000660",
+                            "name": "SK하이닉스",
+                            "price": 145000,
+                            "change_pct": 1.8,
+                            "reason": "반도체 업종 회복세"
+                        }
+                    ]
+                elif request.strategy == "VALUE":
+                    recommendations = [
+                        {
+                            "symbol": "051910",
+                            "name": "LG화학",
+                            "price": 520000,
+                            "change_pct": -0.5,
+                            "reason": "저평가, 배당률 우수"
+                        }
+                    ]
+                elif request.strategy == "GROWTH":
+                    recommendations = [
+                        {
+                            "symbol": "207940",
+                            "name": "삼성바이오로직스",
+                            "price": 850000,
+                            "change_pct": 3.2,
+                            "reason": "바이오 신약 파이프라인 확대"
+                        }
+                    ]
+            
+            elif request.market == "KOSDAQ":
+                if request.strategy == "MOMENTUM":
+                    recommendations = [
+                        {
+                            "symbol": "035420",
+                            "name": "NAVER",
+                            "price": 185000,
+                            "change_pct": 1.5,
+                            "reason": "AI 기술 개발 가속화"
+                        }
+                    ]
+            
+            elif request.market == "NASDAQ":
+                if request.strategy == "MOMENTUM":
+                    recommendations = [
+                        {
+                            "symbol": "AAPL",
+                            "name": "Apple Inc.",
+                            "price": 175.50,
+                            "change_pct": 1.2,
+                            "reason": "iPhone 15 시리즈 판매 호조"
+                        },
+                        {
+                            "symbol": "MSFT",
+                            "name": "Microsoft Corporation",
+                            "price": 380.25,
+                            "change_pct": 0.8,
+                            "reason": "클라우드 서비스 성장"
+                        }
+                    ]
+            
+            response.result = "success"
+            response.recommendations = recommendations
+            response.message = f"{request.market} 시장 {request.strategy} 전략 추천 완료"
+            response.errorCode = 0
+            
+            Logger.info(f"✅ 주식 추천 완료: {len(recommendations)}개 종목")
+            
+        except Exception as e:
+            response.result = "fail"
+            response.message = f"서버 오류: {str(e)}"
+            response.errorCode = 1000
+            Logger.error(f"🔥 주식 추천 오류: {e}")
+        
+        return response

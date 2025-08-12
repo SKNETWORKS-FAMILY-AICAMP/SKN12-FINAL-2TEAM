@@ -58,7 +58,7 @@ export default function DashboardPageClient() {
             label: s,
             value: info?.price ?? 0,
             change: info
-      ? `${info.change > 0 ? "+" : ""}${(info.changePct ?? 0).toFixed(2)}%`
+      ? `${info.changePct >= 0 ? "+" : ""}${(info.changePct ?? 0).toFixed(2)}%`
       : "N/A",
           };
         })

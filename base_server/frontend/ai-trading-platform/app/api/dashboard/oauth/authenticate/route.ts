@@ -8,12 +8,14 @@ let cachedAppKey: string | null = null
 let cachedUntil  = 0                          // ms epoch
 let inFlight: Promise<void> | null = null
 
-export async function GET(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     console.log("들어왔습니다. 인증하러")
-    /* 1. 프런트에서 넘긴 사용자 accessToken 확인 */
-    const accessToken =
-      request.headers.get("authorization")?.replace("Bearer ", "")
+    
+    /* 1. 바디에서 사용자 accessToken 확인 */
+    const body = await request.json()
+    const accessToken = body.accessToken
+    
     if (!accessToken) {
       return NextResponse.json(
         { error: "사용자 토큰 없음" },
@@ -47,10 +49,12 @@ export async function GET(request: NextRequest) {
       const res = await fetch(`${backend}/api/dashboard/oauth`, {
         method : "POST",
         headers: {
-          Authorization : `Bearer ${accessToken}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ mode: "prod" }),
+        body: JSON.stringify({ 
+          accessToken: accessToken,
+          mode: "prod" 
+        }),
       })
 
       /* 4-1) HTTP 오류 */

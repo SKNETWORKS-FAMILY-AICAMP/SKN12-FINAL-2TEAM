@@ -9,7 +9,8 @@ export function MarketOverviewCard({ markets }: { markets: { label: string; valu
           const isUp = m.change.startsWith("+");
           const isDown = m.change.startsWith("-");
           const isNA = m.value === 0 || m.change === "N/A";
-          const color = isUp ? "text-green-400" : isDown ? "text-red-400" : "text-gray-300";
+          // 한국 주식 시장 기준: 상승=빨강, 하락=파랑
+          const color = isUp ? "text-red-400" : isDown ? "text-blue-400" : "text-gray-300";
           return (
             <div key={m.label} className="flex flex-col gap-1 w-full">
               <div className="flex items-center justify-between w-full">

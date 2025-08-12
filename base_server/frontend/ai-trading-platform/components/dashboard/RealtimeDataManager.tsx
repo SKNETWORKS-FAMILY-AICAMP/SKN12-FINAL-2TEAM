@@ -30,10 +30,11 @@ export function RealtimeDataManager({ onDataUpdate }: RealtimeDataManagerProps) 
     
     try {
       const response = await fetch('/api/dashboard/realtime/status', {
+        method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
-        }
+        },
+        body: JSON.stringify({ accessToken: token })
       })
       
       if (response.ok) {
@@ -57,9 +58,9 @@ export function RealtimeDataManager({ onDataUpdate }: RealtimeDataManagerProps) 
       const response = await fetch('/api/dashboard/oauth/authenticate', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
-        }
+        },
+        body: JSON.stringify({ accessToken: token })
       })
       
       if (response.ok) {
@@ -93,10 +94,13 @@ export function RealtimeDataManager({ onDataUpdate }: RealtimeDataManagerProps) 
       const response = await fetch('/api/dashboard/realtime/subscribe', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ symbols, indices })
+        body: JSON.stringify({ 
+          accessToken: token,
+          symbols, 
+          indices 
+        })
       })
       
       if (response.ok) {
@@ -123,10 +127,13 @@ export function RealtimeDataManager({ onDataUpdate }: RealtimeDataManagerProps) 
       const response = await fetch('/api/dashboard/realtime/unsubscribe', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ symbols, indices })
+        body: JSON.stringify({ 
+          accessToken: token,
+          symbols, 
+          indices 
+        })
       })
       
       if (response.ok) {
@@ -151,9 +158,9 @@ export function RealtimeDataManager({ onDataUpdate }: RealtimeDataManagerProps) 
       const response = await fetch('/api/dashboard/realtime/disconnect', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
-        }
+        },
+        body: JSON.stringify({ accessToken: token })
       })
       
       if (response.ok) {
