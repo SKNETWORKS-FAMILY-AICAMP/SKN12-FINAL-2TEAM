@@ -2,11 +2,21 @@
 
 import { useAuth } from "@/hooks/use-auth"
 import { useRouter } from "next/navigation"
-import { useEffect } from "react"
+import { useCallback, useEffect, useState } from "react"
 
 export default function HomePage() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
+  const [loadingKey, setLoadingKey] = useState<number>(0)
+
+  const navigateWithProgress = useCallback((path: string) => {
+    // 진행칸 애니메이션을 다시 시작하기 위해 key 변경
+    setLoadingKey((prev) => prev + 1)
+    // 기존 진행칸 애니메이션 지속 시간(2s)에 맞춰 네비게이션
+    setTimeout(() => {
+      router.push(path)
+    }, 2000)
+  }, [router])
 
   useEffect(() => {
     if (!isLoading && user) {
@@ -20,7 +30,7 @@ export default function HomePage() {
   // 랜딩 페이지 UI 직접 렌더링
   return (
     <>
-      <div className="loading-bar"></div>
+      <div className="loading-bar" key={loadingKey}></div>
       <header className="header">
         <div className="container">
           <div className="header-content">
@@ -36,13 +46,13 @@ export default function HomePage() {
             <div className="auth-buttons">
               <button
                 className="btn btn-secondary"
-                onClick={() => router.push("/auth/login")}
+                onClick={() => navigateWithProgress("/auth/login")}
               >
                 Login
               </button>
               <button
                 className="btn btn-primary"
-                onClick={() => router.push("/auth/register")}
+                onClick={() => navigateWithProgress("/auth/register")}
               >
                 Get Started
               </button>
@@ -63,7 +73,7 @@ export default function HomePage() {
               <div className="hero-actions">
                 <button 
                   className="btn btn-primary btn-large"
-                  onClick={() => router.push("/auth/login")}
+                  onClick={() => navigateWithProgress("/auth/login")}
                 >
                   Start Trading
                 </button>
