@@ -439,7 +439,7 @@ export default function ChatPage() {
                     handleSubmit(e);
                   }
                 }}
-                placeholder={currentRoomId ? "메시지를 입력하세요..." : "채팅방을 선택하거나 새로 만들어주세요"}
+                placeholder={currentRoomId ? "메시지를 입력하세요" : "채팅방을 선택하거나 새로 만들어주세요"}
                 className="w-full bg-gray-800 border border-gray-700 rounded-2xl px-4 py-3 pr-12 text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
                 disabled={isLoading || !currentRoomId}
               />
