@@ -370,17 +370,17 @@ export function useTutorial() {
         shouldStart: currentProgress < totalSteps && totalSteps > 0
       });
 
-      // 완료되지 않은 튜토리얼만 시작
-      if (currentProgress < totalSteps && totalSteps > 0) {
-        const delay = currentPath === '/dashboard' ? 3000 : 2000;
-        const timeoutId = setTimeout(() => {
-          if (!currentTutorial) { // 중복 실행 방지
-            startTutorial(tutorialType);
-          }
-        }, delay);
-        
-        return () => clearTimeout(timeoutId);
-      } else {
+              // 완료되지 않은 튜토리얼만 시작
+        if (currentProgress < totalSteps && totalSteps > 0) {
+          const delay = 0; // 즉시 표시
+          const timeoutId = setTimeout(() => {
+            if (!currentTutorial) { // 중복 실행 방지
+              startTutorial(tutorialType);
+            }
+          }, delay);
+          
+          return () => clearTimeout(timeoutId);
+        } else {
         console.log('✅ Tutorial already completed:', tutorialType);
       }
     }

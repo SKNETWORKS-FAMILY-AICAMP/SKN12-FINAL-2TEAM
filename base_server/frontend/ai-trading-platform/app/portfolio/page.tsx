@@ -9,11 +9,15 @@ import { AppSidebar } from "@/components/layout/AppSidebar";
 import { useTutorial } from "@/hooks/use-tutorial";
 import { TutorialOverlay } from "@/components/tutorial/tutorial-overlay";
 import { endRouteProgress } from "@/lib/route-progress";
+import { useKoreaInvestApiStatus } from "@/hooks/use-korea-invest-api-status";
+import KoreaInvestApiRequired from "@/components/KoreaInvestApiRequired";
 
 export default function PortfolioPage() {
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { isConfigured, isLoading, error } = useKoreaInvestApiStatus();
   
+  // API가 설정되지 않았으면 다른 훅들을 실행하지 않음
   const {
     currentTutorial,
     currentStep,
@@ -129,8 +133,53 @@ export default function PortfolioPage() {
 
   // TODO: 실제 포트폴리오 데이터 fetch 연동 시, 완료 지점에서 endRouteProgress() 호출
   React.useEffect(() => {
+    // API가 설정되지 않았으면 실행하지 않음
+    if (!isConfigured) return;
+    
     endRouteProgress();
-  }, []);
+  }, [isConfigured]);
+
+  // 한국투자증권 API 설정이 안 되어 있다면 설명 페이지 표시
+  if (isLoading) {
+    return (
+      <div className="min-h-screen w-full bg-gradient-to-br from-black via-gray-900 to-gray-820 text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-gray-300">API 설정 상태를 확인하는 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen w-full bg-gradient-to-br from-black via-gray-900 to-gray-820 text-white flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-400 mb-4">오류가 발생했습니다: {error}</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors"
+          >
+            다시 시도
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isConfigured) {
+    return (
+      <div className="min-h-screen w-full bg-gradient-to-br from-black via-gray-900 to-gray-820 text-white">
+        <Header onSidebarOpen={() => setSidebarOpen(true)} />
+        <AppSidebar 
+          open={sidebarOpen} 
+          onClose={() => setSidebarOpen(false)} 
+          onNavigate={handleNavigate}
+        />
+        <KoreaInvestApiRequired pageType="portfolio" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-black via-gray-900 to-gray-820 text-white">

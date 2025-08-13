@@ -5,6 +5,7 @@ import { endRouteProgress } from "@/lib/route-progress";
 import { useAuth }         from "@/hooks/use-auth";
 import { useNasdaqStocks } from "@/hooks/use-nasdaq-stocks";
 import { useTutorial }     from "@/hooks/use-tutorial";
+import { useKoreaInvestApiStatus } from "@/hooks/use-korea-invest-api-status";
 
 import WorldIndicesTicker         from "@/components/dashboard/WorldIndicesTicker";
 import RecommendStocksCards       from "@/components/dashboard/RecommendStocksCards";
@@ -12,6 +13,7 @@ import { MarketOverviewCard }     from "@/components/dashboard/MarketOverviewCar
 import { PortfolioBreakdownCard } from "@/components/dashboard/PortfolioBreakdownCard";
 import { AiSignal, AISignalCard } from "@/components/dashboard/AISignalCard";
 import { TutorialOverlay }        from "@/components/tutorial/tutorial-overlay";
+import KoreaInvestApiRequired     from "@/components/KoreaInvestApiRequired";
 
 /* ────────── 가시 종목 ────────── */
 const INDEX = ["QQQ", "TQQQ", "SOXL"];
@@ -19,10 +21,20 @@ const PORTF = ["005930", "000660", "051910"];
 
 export default function DashboardPageClient() {
   const { accessTokenReady } = useAuth();
+  const { isConfigured, isLoading, error } = useKoreaInvestApiStatus();
+
+  // API가 설정되지 않았으면 다른 훅들을 실행하지 않음
   const { initWs, addSymbol, getStock, subscribeStore } = useNasdaqStocks();
+  const {
+    currentTutorial, currentStep, currentStepInfo,
+    nextStep, previousStep, skipTutorial,
+  } = useTutorial();
 
   // ✅ 한번만 초기화 + 구독 (성공/실패 분기 추가)
   useEffect(() => {
+    // API가 설정되지 않았으면 실행하지 않음
+    if (!isConfigured) return;
+    
     console.log("[PAGE] effect fired, accessTokenReady =", accessTokenReady);
 
     let mounted = true;
@@ -38,7 +50,7 @@ export default function DashboardPageClient() {
     })();
 
     return () => { mounted = false; };
-  }, [accessTokenReady, initWs, addSymbol]);
+  }, [accessTokenReady, initWs, addSymbol, isConfigured]);
 
   // ── 시세 상태 ───────────────────────────
   const [marketData, setMarketData] = useState<any[]>([]);
@@ -50,6 +62,9 @@ export default function DashboardPageClient() {
 
   // ✅ 스토어 변경 시 즉시 리렌더
   useEffect(() => {
+    // API가 설정되지 않았으면 실행하지 않음
+    if (!isConfigured) return;
+    
     const recompute = () => {
       setMarketData(
         INDEX.map((s) => {
@@ -81,17 +96,53 @@ export default function DashboardPageClient() {
     // 실시간 WS 초기화(initWs)도 별도 effect에서 수행되며 성공 시 곧바로 데이터가 들어옴
     endRouteProgress();
     return unsubscribe;
-  }, [getStock, subscribeStore]);
+  }, [getStock, subscribeStore, isConfigured]);
 
   /* ────────── 튜토리얼 훅 ────────── */
-  const {
-    currentTutorial, currentStep, currentStepInfo,
-    nextStep, previousStep, skipTutorial,
-  } = useTutorial();
+  // const {
+  //   currentTutorial, currentStep, currentStepInfo,
+  //   nextStep, previousStep, skipTutorial,
+  // } = useTutorial();
+
+  // 한국투자증권 API 설정이 안 되어 있다면 설명 페이지 표시
+  if (isLoading) {
+    return (
+      <div className="min-h-screen w-full bg-gradient-to-br from-black via-gray-900 to-gray-820 text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-gray-300">API 설정 상태를 확인하는 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen w-full bg-gradient-to-br from-black via-gray-900 to-gray-820 text-white flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-400 mb-4">오류가 발생했습니다: {error}</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors"
+          >
+            다시 시도
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isConfigured) {
+    return (
+      <div className="w-full bg-gradient-to-br from-black via-gray-900 to-gray-820 text-white">
+        <KoreaInvestApiRequired pageType="dashboard" />
+      </div>
+    );
+  }
 
   /* ────────── UI ────────── */
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-black via-gray-900 to-gray-820 text-white">
+    <div className="w-full bg-gradient-to-br from-black via-gray-900 to-gray-820 text-white">
       <WorldIndicesTicker />
 
       <main className="flex-1 flex flex-col items-center px-6 md:px-12 py-2">
