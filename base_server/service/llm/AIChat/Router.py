@@ -293,7 +293,7 @@ class AIChatRouter:
 
         @tool(args_schema=KalmanRegimeFilterInput)
         def kalman_regime_filter_tool(**params):
-            """매수/매도 시점 예측, 포지션 크기 계산, 손절가/목표가 설정을 제공합니다. \"언제 사야하냐\", \"매수 타이밍\", \"진입 시점\" 질문에 적합합니다."""
+            """매수/매도 시점 예측, 포지션 크기 계산, 손절가/목표가 설정, 블랙-숄즈 옵션 분석, 이론가 대비 시장가 편차 기반 매수/매도/관망 액션을 제공합니다. \"언제 사야하냐\", \"매수 타이밍\", \"진입 시점\", \"옵션 전략\", \"이 옵션이 싸다/비싸다\" 질문에 적합합니다."""
             agent = KalmanRegimeFilterTool(self.ai_chat_service)
             
             # 🆕 세션 정보 주입 (SessionAwareTool 지원)
@@ -313,43 +313,40 @@ class AIChatRouter:
             
             result = agent.get_data(**params)
             
-            # 🆕 마크다운 형식으로 포맷된 결과 반환
-            # 예측 정보 추출
-            prediction = result.recommendations.get('prediction', {})
-            prediction_section = ""
-            if prediction and prediction.get('enabled', False):
-                prediction_section = f"""
-## 🔮 가격 예측 ({prediction.get('horizon_days', 'N/A')}일 후)
-
-- **중심 예측**: {prediction.get('center', 'N/A')} 📊
-- **신뢰구간**: {prediction.get('ci', 'N/A')} 📈
-- **하단 예측**: {prediction.get('lower', 'N/A')} 📉
-- **상단 예측**: {prediction.get('upper', 'N/A')} 📈
-- **가정**: {prediction.get('assumption', 'N/A')} 💡
-"""
-
+            # 🆕 간결한 마크다운 형식으로 결과 반환
+            options = result.recommendations.get('options', {})
+            current_price = options.get('spot', 'N/A') if options else 'N/A'
+            preferred = options.get('preferred', 'N/A') if options else 'N/A'
+            volatility = f"{options.get('sigma_annual', 0)*100:.1f}%" if options else 'N/A'
+            
+            # 🆕 블랙-숄즈 기반 손절가/목표가
+            stop_loss = result.recommendations.get('stop_loss', 'N/A')
+            take_profit = result.recommendations.get('take_profit', 'N/A')
+            
             detailed_summary = f"""# 📊 칼만 필터 분석 결과
 
-**{result.summary}**
-
-## 📈 주요 지표
-
-- **트레이딩 신호**: {result.recommendations.get('trading_signal', 'N/A')} 📊
+## 📈 트레이딩 신호
+- **신호**: {result.recommendations.get('trading_signal', 'N/A')} 📊
 - **전략**: {result.recommendations.get('strategy', 'N/A')} ♟️
-- **종합 신호 강도**: {result.recommendations.get('combined_signal', 'N/A')} 💪
-- **손절가**: ${result.recommendations.get('stop_loss', 'N/A')} 🛡️
-- **목표가**: ${result.recommendations.get('take_profit', 'N/A')} 🎯
-- **리스크 점수**: {result.recommendations.get('risk_score', 'N/A')}
-- **시장 안정성**: {result.recommendations.get('market_stability', 'N/A')}{prediction_section}
+- **신호 강도**: {result.recommendations.get('combined_signal', 'N/A')} 💪
+- **신뢰도**: {result.recommendations.get('signal_confidence', 'N/A')} 🔍
 
-## 📊 상태 추정치
+## 🎯 블랙-숄즈 가격 예측
+- **현재가**: ${current_price}
+- **선호**: {preferred} 옵션
+- **변동성**: {volatility} (평균적으로 가격이 움직임)
+- **예상 상승가**: {take_profit} 🎯
+- **손절가**: {stop_loss} 🛡️
 
-- **트렌드**: {result.recommendations.get('state_estimates', {}).get('trend', 'N/A')} 📈
-- **모멘텀**: {result.recommendations.get('state_estimates', {}).get('momentum', 'N/A')} ⚡
-- **변동성**: {result.recommendations.get('state_estimates', {}).get('volatility', 'N/A')} 📊
-- **거시 신호**: {result.recommendations.get('state_estimates', {}).get('macro_signal', 'N/A')} 🌍
-- **기술 신호**: {result.recommendations.get('state_estimates', {}).get('tech_signal', 'N/A')} 🔧
-"""
+## 📈 진입각
+**진입 시점**: 현재 {result.recommendations.get('trading_signal', 'N/A')} 신호가 있으며, 신호 강도가 약하므로 신중한 접근이 필요합니다.
+
+**매수 고려**: 손절가인 {stop_loss} 이하로 하락하지 않는 범위 내에서 매수를 고려하는 것이 좋습니다.
+
+**목표가**: 예상 상승가인 {take_profit}에 도달할 경우 수익 실현 가능성을 염두에 두세요.
+
+## ⚠️ 결론
+**신호 강도가 약하고 리스크가 높은 상황**이므로, **소규모 포지션으로 시작**하여 시장 방향성 확인 후 단계적 확대를 권장합니다."""
             return detailed_summary
 
         return [

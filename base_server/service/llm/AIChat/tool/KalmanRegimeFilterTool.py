@@ -35,6 +35,18 @@ class KalmanRegimeFilterInput(BaseModel):
     ci_level: float      = Field(0.8,  gt=0, lt=1,  description="신뢰구간 신뢰수준(예: 0.8, 0.9, 0.95)")
     drift_scale: float   = Field(0.0015, description="combined_signal → 일간 기대수익률 변환 계수")
 
+    # 🆕 옵션 시장가 입력 (선택적)
+    option_market_prices: Optional[Dict[str, Dict[str, float]]] = Field(
+        None, 
+        description="옵션 시장가: {'306.76': {'call': 35.0, 'put': 0.8}, '340.84': {'call': 9.5, 'put': 9.4}}"
+    )
+    
+    # 🆕 옵션 시그널 임계값
+    option_signal_threshold: float = Field(
+        0.05, 
+        description="이론가 대비 시장가 편차 임계값 (5% = 0.05)"
+    )
+
 
 class KalmanRegimeFilterActionOutput(BaseModel):
     summary: str
@@ -84,22 +96,663 @@ class KalmanRegimeFilterTool(SessionAwareTool):
         """세션은 선택사항 (fallback 지원)"""
         return False
 
-    # 🆕 예측 관련 유틸리티 함수들
-    _Z_MAP = {0.8: 1.2816, 0.9: 1.6449, 0.95: 1.96}
+    # 🆕 블랙-숄즈 옵션 뷰 어댑터 메서드들
+    
+    def _simple_action_from_ratio(self, ratio: float, threshold: float) -> str:
+        """
+        편차율을 기반으로 매수/매도/관망 액션 결정
+        
+        Args:
+            ratio: (시장가 - 이론가) / 이론가
+            threshold: 임계값 (예: 0.05 = 5%)
+            
+        Returns:
+            "매수", "매도", "관망" 중 하나
+        """
+        if ratio <= -threshold:
+            return "매수"    # 이론가 대비 싸다 → 매수
+        elif ratio >= +threshold:
+            return "매도"    # 이론가 대비 비싸다 → 매도
+        else:
+            return "관망"    # 적정가 범위
+    
+    def _analyze_option_signals(
+        self, 
+        bs_inputs: Dict[str, Any], 
+        market_prices: Dict[str, Dict[str, float]], 
+        threshold: float, 
+        bias: str
+    ) -> List[Dict[str, Any]]:
+        """
+        옵션 이론가 vs 시장가 비교하여 매수/매도/관망 시그널 생성
+        
+        Args:
+            bs_inputs: 블랙-숄즈 입력 파라미터
+            market_prices: 시장가 딕셔너리
+            threshold: 편차 임계값
+            bias: 칼만 필터 방향성 (Long/Short/Neutral)
+            
+        Returns:
+            정렬된 옵션 신호 리스트 (bias_ok 우선 → 절대편차 큰 순)
+        """
+        try:
+            from service.llm.AIChat.BasicTools.BlackScholesTool import BlackScholesTool
+            bs = BlackScholesTool()
+            
+            S, T, r, q, sigma = bs_inputs["S"], bs_inputs["T"], bs_inputs["r"], bs_inputs["q"], bs_inputs["sigma"]
+            signals = []
+            
+            print(f"[DEBUG] _analyze_option_signals 시작:")
+            print(f"  - S: {S}, T: {T}, r: {r}, q: {q}, sigma: {sigma}")
+            print(f"  - threshold: {threshold}, bias: {bias}")
+            print(f"  - market_prices: {market_prices}")
+            
+            for strike_str, prices in market_prices.items():
+                try:
+                    K = float(strike_str)
+                    print(f"[DEBUG] Strike {K} 분석 중...")
+                    
+                    # 이론가 계산
+                    theo_call = bs.price(S=S, K=K, T=T, r=r, sigma=sigma, option_type="call", q=q)
+                    theo_put = bs.price(S=S, K=K, T=T, r=r, sigma=sigma, option_type="put", q=q)
+                    
+                    print(f"[DEBUG]  - 이론가: CALL=${theo_call:.4f}, PUT=${theo_put:.4f}")
+                    
+                    # 시장가
+                    mcall = prices.get("call")
+                    mput = prices.get("put")
+                    
+                    print(f"[DEBUG]  - 시장가: CALL=${mcall}, PUT=${mput}")
+                    
+                    # 콜 옵션 분석
+                    if mcall and theo_call > 1e-8:
+                        ratio = (mcall - theo_call) / theo_call
+                        action = self._simple_action_from_ratio(ratio, threshold)
+                        
+                        # 칼만 방향성과 정합성 체크
+                        bias_ok = (
+                            (bias == "Long" and action == "매수") or 
+                            (bias == "Short" and action == "매도") or 
+                            (bias == "Neutral")
+                        )
+                        
+                        signals.append({
+                            "option": f"CALL {K:g}",
+                            "action": action,
+                            "why": f"시장가 ${mcall:.2f} vs 이론가 ${theo_call:.2f} ({ratio*100:+.1f}%)",
+                            "bias_ok": bias_ok,
+                            "ratio": ratio,
+                            "strike": K
+                        })
+                        
+                        print(f"[DEBUG]  - 콜 신호: {action}, ratio: {ratio:.4f}, bias_ok: {bias_ok}")
+                    
+                    # 풋 옵션 분석
+                    if mput and theo_put > 1e-8:
+                        ratio = (mput - theo_put) / theo_put
+                        action = self._simple_action_from_ratio(ratio, threshold)
+                        
+                        # 칼만 방향성과 정합성 체크 (풋은 콜과 반대)
+                        bias_ok = (
+                            (bias == "Short" and action == "매수") or 
+                            (bias == "Long" and action == "매도") or 
+                            (bias == "Neutral")
+                        )
+                        
+                        signals.append({
+                            "option": f"PUT {K:g}",
+                            "action": action,
+                            "why": f"시장가 ${mput:.2f} vs 이론가 ${theo_put:.2f} ({ratio*100:+.1f}%)",
+                            "bias_ok": bias_ok,
+                            "ratio": ratio,
+                            "strike": K
+                        })
+                        
+                        print(f"[DEBUG]  - 풋 신호: {action}, ratio: {ratio:.4f}, bias_ok: {bias_ok}")
+                        
+                except Exception as e:
+                    print(f"[DEBUG] Strike {strike_str} 분석 실패: {e}")
+                    signals.append({
+                        "option": strike_str, 
+                        "action": "관망", 
+                        "why": f"계산오류: {e}", 
+                        "bias_ok": False,
+                        "ratio": 0.0,
+                        "strike": float(strike_str) if strike_str.replace('.', '').isdigit() else 0.0
+                    })
+            
+            # 우선순위 정렬: bias_ok 우선 → 절대편차 큰 순
+            def sort_key(s):
+                return (not s["bias_ok"], -abs(s["ratio"]))
+            
+            signals.sort(key=sort_key)
+            
+            print(f"[DEBUG] _analyze_option_signals 완료: {len(signals)}개 신호")
+            for i, s in enumerate(signals[:3]):  # 상위 3개만 로그
+                print(f"[DEBUG]  - {i+1}: {s['action']} {s['option']} - {s['why']}")
+            
+            return signals
+            
+        except Exception as e:
+            print(f"[DEBUG] _analyze_option_signals 전체 실패: {e}")
+            import traceback
+            print(f"[DEBUG] 에러 상세: {traceback.format_exc()}")
+            return []
+    
+    def _generate_basic_option_signals(
+        self, 
+        bs_inputs: Dict[str, Any], 
+        signal: str, 
+        preferred: str
+    ) -> List[Dict[str, Any]]:
+        """
+        시장가 데이터가 없을 때 기본적인 옵션 전략 신호 생성
+        
+        Args:
+            bs_inputs: 블랙-숄즈 입력 파라미터
+            signal: 칼만 필터 신호 (Long/Short/Neutral)
+            preferred: 선호 옵션 타입 (call/put/neutral)
+            
+        Returns:
+            기본 옵션 전략 액션 리스트
+        """
+        try:
+            S = bs_inputs["S"]
+            sigma = bs_inputs["sigma"]
+            T = bs_inputs["T"]
+            
+            actions = []
+            
+            print(f"[DEBUG] _generate_basic_option_signals 시작:")
+            print(f"  - S: {S}, sigma: {sigma}, T: {T}")
+            print(f"  - signal: {signal}, preferred: {preferred}")
+            
+            # 1. 기본 전략: 현재가 기준 ITM/ATM/OTM 옵션 추천
+            if signal.lower() == "long":
+                # Long 신호일 때 콜 옵션 전략
+                if preferred == "call":
+                    # ITM 콜 (현재가보다 낮은 행사가)
+                    itm_strike = round(S * 0.95, 2)  # 현재가의 95%
+                    actions.append({
+                        "label": "매수",
+                        "why": f"ITM 콜 옵션 전략 - 강한 상승 모멘텀 활용",
+                        "what": f"콜 매수(행사가 ${itm_strike}) - 높은 델타로 상승 수익 극대화",
+                        "confidence": "높음"
+                    })
+                    
+                    # ATM 콜 (현재가 근처)
+                    atm_strike = round(S, 2)
+                    actions.append({
+                        "label": "매수",
+                        "why": f"ATM 콜 옵션 전략 - 균형잡힌 리스크/수익",
+                        "what": f"콜 매수(행사가 ${atm_strike}) - 중간 델타로 안정적 상승 수익",
+                        "confidence": "보통"
+                    })
+                    
+                    # OTM 콜 (현재가보다 높은 행사가)
+                    otm_strike = round(S * 1.05, 2)  # 현재가의 105%
+                    actions.append({
+                        "label": "매수",
+                        "why": f"OTM 콜 옵션 전략 - 높은 수익률 추구",
+                        "what": f"콜 매수(행사가 ${otm_strike}) - 낮은 델타로 높은 수익률",
+                        "confidence": "낮음"
+                    })
+                    
+            elif signal.lower() == "short":
+                # Short 신호일 때 풋 옵션 전략
+                if preferred == "put":
+                    # ITM 풋 (현재가보다 높은 행사가)
+                    itm_strike = round(S * 1.05, 2)  # 현재가의 105%
+                    actions.append({
+                        "label": "매수",
+                        "why": f"ITM 풋 옵션 전략 - 강한 하락 모멘텀 활용",
+                        "what": f"풋 매수(행사가 ${itm_strike}) - 높은 델타로 하락 수익 극대화",
+                        "confidence": "높음"
+                    })
+                    
+                    # ATM 풋 (현재가 근처)
+                    atm_strike = round(S, 2)
+                    actions.append({
+                        "label": "매수",
+                        "why": f"ATM 풋 옵션 전략 - 균형잡힌 리스크/수익",
+                        "what": f"풋 매수(행사가 ${atm_strike}) - 중간 델타로 안정적 하락 수익",
+                        "confidence": "보통"
+                    })
+                    
+                    # OTM 풋 (현재가보다 낮은 행사가)
+                    otm_strike = round(S * 0.95, 2)  # 현재가의 95%
+                    actions.append({
+                        "label": "매수",
+                        "why": f"OTM 풋 옵션 전략 - 높은 수익률 추구",
+                        "what": f"풋 매수(행사가 ${otm_strike}) - 낮은 델타로 높은 수익률",
+                        "confidence": "낮음"
+                    })
+            
+            # 2. 변동성 기반 전략 추가
+            if sigma > 0.4:  # 높은 변동성
+                actions.append({
+                    "label": "관망",
+                    "why": f"높은 변동성({sigma*100:.1f}%) - 스트래들/스트랭글 전략 고려",
+                    "what": "변동성 확대 시점까지 대기 후 방향성 전략 실행",
+                    "confidence": "보통"
+                })
+            elif sigma < 0.2:  # 낮은 변동성
+                actions.append({
+                    "label": "매수",
+                    "why": f"낮은 변동성({sigma*100:.1f}%) - 방향성 전략 유리",
+                    "what": "방향성 옵션 매수로 변동성 확대 수익 기대",
+                    "confidence": "높음"
+                })
+            
+            # 3. 시간 가치 고려
+            if T < 0.02:  # 1주일 이내 만기
+                actions.append({
+                    "label": "매도",
+                    "why": f"단기 만기({T*365:.0f}일) - 시간가치 급감 주의",
+                    "what": "기존 옵션 포지션 정리 또는 단기 전략 실행",
+                    "confidence": "보통"
+                })
+            
+            print(f"[DEBUG] _generate_basic_option_signals 완료: {len(actions)}개 액션")
+            return actions
+            
+        except Exception as e:
+            print(f"[DEBUG] _generate_basic_option_signals 실패: {e}")
+            import traceback
+            print(f"[DEBUG] 에러 상세: {traceback.format_exc()}")
+            return []
 
-    def _get_z(self, ci: float) -> float:
-        keys = sorted(self._Z_MAP.keys())
-        closest = min(keys, key=lambda k: abs(k - ci))
-        return self._Z_MAP[closest]
+    def _build_bs_inputs(
+        self,
+        entry_price: float,
+        atr_pct: float,
+        *,
+        rate: float = 0.02,        # r 기본 2%
+        div_yield: float = 0.0,    # q 기본 0
+        days_to_expiry: int = 30   # 기본 30D
+    ) -> Dict[str, Any]:
+        """
+        칼만 필터 데이터를 블랙-숄즈 입력으로 변환
+        
+        Args:
+            entry_price: 현재가 (S)
+            atr_pct: ATR 백분율 (일간 변동성)
+            rate: 무위험이자율 (연)
+            div_yield: 배당수익률 (연)
+            days_to_expiry: 만기까지 일수
+            
+        Returns:
+            블랙-숄즈 계산에 필요한 입력 딕셔너리
+        """
+        print(f"[DEBUG] _build_bs_inputs 시작:")
+        print(f"  - entry_price: {entry_price}")
+        print(f"  - atr_pct: {atr_pct}")
+        print(f"  - rate: {rate}")
+        print(f"  - div_yield: {div_yield}")
+        print(f"  - days_to_expiry: {days_to_expiry}")
+        
+        # 1) 변동성: 일간 → 연환산 (안전 가드 포함)
+        sigma_daily = float(np.clip(atr_pct, 0.005, 0.15))
+        sigma_annual = float(np.clip(sigma_daily * math.sqrt(252.0), 0.05, 1.50))
+        
+        print(f"[DEBUG] 변동성 계산:")
+        print(f"  - 원본 atr_pct: {atr_pct}")
+        print(f"  - 클리핑된 sigma_daily: {sigma_daily}")
+        print(f"  - sqrt(252): {math.sqrt(252.0)}")
+        print(f"  - sigma_annual (클리핑 전): {sigma_daily * math.sqrt(252.0)}")
+        print(f"  - 최종 sigma_annual: {sigma_annual}")
 
-    def _forecast_price(self, s0: float, mu_daily: float, sigma_daily: float,
-                        horizon_days: int, z: float) -> Dict[str, float]:
-        h = max(1, int(horizon_days))
-        center = s0 * ((1.0 + mu_daily) ** h)
-        width = sigma_daily * math.sqrt(h)
-        lower = max(0.01, center * math.exp(-z * width))
-        upper = center * math.exp(+z * width)
-        return {"center": center, "lower": lower, "upper": upper}
+        # 2) 만기(연) - 최소 1일 보장
+        T = max(days_to_expiry, 1) / 365.0
+        print(f"[DEBUG] 만기 계산:")
+        print(f"  - days_to_expiry: {days_to_expiry}")
+        print(f"  - max(days_to_expiry, 1): {max(days_to_expiry, 1)}")
+        print(f"  - T (연): {T}")
+
+        # 3) 행사가 그리드 (기본 ATM ±5%, ±10%)
+        multipliers = [0.9, 0.95, 1.0, 1.05, 1.1]
+        strikes = [entry_price * m for m in multipliers]
+        strikes = [float(round(k, 4)) for k in strikes]
+        
+        print(f"[DEBUG] 행사가 그리드 생성:")
+        print(f"  - multipliers: {multipliers}")
+        print(f"  - 원본 strikes: {[entry_price * m for m in multipliers]}")
+        print(f"  - 최종 strikes: {strikes}")
+
+        result = {
+            "S": float(entry_price),
+            "T": float(T),
+            "r": float(rate),
+            "q": float(div_yield),
+            "sigma": float(sigma_annual),
+            "strikes": strikes,
+        }
+        
+        print(f"[DEBUG] _build_bs_inputs 결과:")
+        print(f"  - S: {result['S']}")
+        print(f"  - T: {result['T']}")
+        print(f"  - r: {result['r']}")
+        print(f"  - q: {result['q']}")
+        print(f"  - sigma: {result['sigma']}")
+        print(f"  - strikes: {result['strikes']}")
+        
+        return result
+
+    def _attach_option_view(
+        self, 
+        rec: Dict[str, Any], 
+        bs_inputs: Dict[str, Any], 
+        signal: str, 
+        market_prices: Optional[Dict[str, Dict[str, float]]] = None, 
+        threshold: float = 0.05
+    ):
+        """
+        블랙-숄즈 계산 실행 및 결과를 recommendations에 추가
+        
+        Args:
+            rec: recommendations 딕셔너리
+            bs_inputs: 블랙-숄즈 입력 파라미터
+            signal: 트레이딩 신호 (Long/Short/Neutral)
+            market_prices: 옵션 시장가 (선택적)
+            threshold: 편차 임계값 (기본 5%)
+        """
+        print(f"[DEBUG] _attach_option_view 시작:")
+        print(f"  - signal: {signal}")
+        print(f"  - bs_inputs: {bs_inputs}")
+        
+        try:
+            print(f"[DEBUG] BlackScholesTool import 시도...")
+            from service.llm.AIChat.BasicTools.BlackScholesTool import BlackScholesTool
+            print(f"[DEBUG] BlackScholesTool import 성공!")
+            
+            # BlackScholesTool 인스턴스 생성
+            print(f"[DEBUG] BlackScholesTool 인스턴스 생성...")
+            bs = BlackScholesTool()
+            print(f"[DEBUG] BlackScholesTool 인스턴스 생성 완료: {type(bs)}")
+            
+            S, T, r, q, sigma = bs_inputs["S"], bs_inputs["T"], bs_inputs["r"], bs_inputs["q"], bs_inputs["sigma"]
+            print(f"[DEBUG] 블랙-숄즈 파라미터:")
+            print(f"  - S: {S}")
+            print(f"  - T: {T}")
+            print(f"  - r: {r}")
+            print(f"  - q: {q}")
+            print(f"  - sigma: {sigma}")
+            
+            table = []
+            print(f"[DEBUG] strikes 개수: {len(bs_inputs['strikes'])}")
+
+            # 각 strike에 대해 콜/풋 가격과 그릭스 계산
+            for i, K in enumerate(bs_inputs["strikes"]):
+                print(f"[DEBUG] Strike {i+1}/{len(bs_inputs['strikes'])} 계산 중: K={K}")
+                row = {"K": round(K, 4)}
+                
+                # 콜/풋 가격 계산
+                try:
+                    print(f"[DEBUG]  - 콜 옵션 가격 계산...")
+                    call_price = bs.price(S=S, K=K, T=T, r=r, sigma=sigma, option_type="call", q=q)
+                    print(f"[DEBUG]  - 콜 가격: {call_price}")
+                    
+                    print(f"[DEBUG]  - 풋 옵션 가격 계산...")
+                    put_price = bs.price(S=S, K=K, T=T, r=r, sigma=sigma, option_type="put", q=q)
+                    print(f"[DEBUG]  - 풋 가격: {put_price}")
+                    
+                    print(f"[DEBUG]  - 콜 그릭스 계산...")
+                    greeks_call = bs.greeks(S=S, K=K, T=T, r=r, sigma=sigma, option_type="call", q=q)
+                    print(f"[DEBUG]  - 그릭스: {greeks_call}")
+                    
+                    row.update({
+                        "call": round(call_price, 4),
+                        "put": round(put_price, 4),
+                        "delta": round(greeks_call["delta"], 6),
+                        "gamma": round(greeks_call["gamma"], 6),
+                        "vega": round(greeks_call["vega"], 6),
+                        "theta": round(greeks_call["theta"], 6),
+                        "rho": round(greeks_call["rho"], 6),
+                    })
+                    print(f"[DEBUG]  - 행 추가 완료: {row}")
+                    
+                except Exception as e:
+                    print(f"[DEBUG]  - Strike {K} 계산 실패: {e}")
+                    # 계산 실패시 에러 정보 기록
+                    row.update({
+                        "call": "ERROR",
+                        "put": "ERROR",
+                        "delta": "ERROR",
+                        "gamma": "ERROR",
+                        "vega": "ERROR",
+                        "theta": "ERROR",
+                        "rho": "ERROR",
+                        "error": str(e)
+                    })
+                
+                table.append(row)
+
+            print(f"[DEBUG] 테이블 생성 완료: {len(table)}개 행")
+            print(f"[DEBUG] 테이블 내용: {table}")
+
+            # 신호 방향에 따라 선호 옵션 타입 결정
+            print(f"[DEBUG] 선호 옵션 타입 결정...")
+            if signal.lower() == "long":
+                preferred = "call"
+            elif signal.lower() == "short":
+                preferred = "put"
+            else:
+                preferred = "neutral"
+            print(f"[DEBUG] 선호 옵션 타입: {preferred}")
+
+            # recommendations에 옵션 뷰 추가
+            print(f"[DEBUG] rec['options'] 설정...")
+            rec["options"] = {
+                "spot": round(S, 4),
+                "r": r,
+                "q": q,
+                "T_years": round(T, 6),
+                "sigma_annual": round(sigma, 6),
+                "view": "call/put grid by strikes",
+                "preferred": preferred,
+                "table": table
+            }
+            
+            print(f"[DEBUG] rec['options'] 설정 완료:")
+            print(f"  - spot: {rec['options']['spot']}")
+            print(f"  - sigma_annual: {rec['options']['sigma_annual']}")
+            print(f"  - preferred: {rec['options']['preferred']}")
+            print(f"  - table 행 수: {len(rec['options']['table'])}")
+            
+            # 🆕 시장가 비교 신호 분석 및 액션 요약 생성
+            if market_prices:
+                print(f"[DEBUG] 시장가 비교 신호 분석 시작...")
+                raw_signals = self._analyze_option_signals(bs_inputs, market_prices, threshold, signal)
+                
+                if raw_signals:
+                    # 상세 옵션 신호
+                    rec["options"]["trading_signals"] = [
+                        f"{s['action'].upper()} {s['option']}: {s['why']}" for s in raw_signals[:6]
+                    ]
+                    rec["options"]["signal_analysis"] = f"이론가 대비 {int(threshold*100)}% 편차 기준"
+                    
+                    print(f"[DEBUG] 옵션 신호 생성 완료: {len(raw_signals)}개")
+                    
+                    # 🆕 사용자 친화적 3줄 액션 요약 생성
+                    friendly_actions = []
+                    for s in raw_signals:
+                        if len(friendly_actions) >= 3:  # 최대 3개까지만
+                            break
+                        if s["action"] == "관망":  # 관망은 건너뛰기
+                            continue
+                        
+                        # what 필드 생성 (구체적인 행동 지침)
+                        if "CALL" in s["option"]:
+                            if s["action"] == "매수":
+                                what = f"콜 매수({s['option']})"
+                            else:  # 매도
+                                what = f"콜 매도({s['option']})"
+                        elif "PUT" in s["option"]:
+                            if s["action"] == "매수":
+                                what = f"풋 매수({s['option']})"
+                            else:  # 매도
+                                what = f"풋 매도({s['option']})"
+                        else:
+                            what = f"옵션 {s['action']}({s['option']})"
+                        
+                        # confidence 결정 (편차폭 + 칼만 정합성 기반)
+                        if s["bias_ok"] and abs(s["ratio"]) > threshold * 2:  # bias_ok + 큰 편차
+                            confidence = "높음"
+                        elif s["bias_ok"] or abs(s["ratio"]) > threshold * 1.5:  # bias_ok 또는 중간 편차
+                            confidence = "보통"
+                        else:
+                            confidence = "낮음"
+                        
+                        friendly_actions.append({
+                            "label": s["action"],
+                            "why": s["why"],
+                            "what": what,
+                            "confidence": confidence
+                        })
+                    
+                    if friendly_actions:
+                        # rec["actions"] = friendly_actions  # 🆕 액션 생성 비활성화
+                        print(f"[DEBUG] 액션 요약 생성 완료: {len(friendly_actions)}개")
+                        for i, action in enumerate(friendly_actions):
+                            print(f"[DEBUG]  - {i+1}: {action['label']} - {action['why']} → {action['what']} (신뢰도: {action['confidence']})")
+                    else:
+                        print(f"[DEBUG] 액션 요약 생성 실패: 유효한 액션이 없음")
+                else:
+                    print(f"[DEBUG] 옵션 신호 분석 실패: raw_signals가 비어있음")
+            else:
+                print(f"[DEBUG] 시장가 미제공: 기본 옵션 전략 신호 생성")
+                # 🆕 시장가가 없어도 기본적인 옵션 전략 신호 생성
+                basic_actions = self._generate_basic_option_signals(bs_inputs, signal, preferred)
+                if basic_actions:
+                    # rec["actions"] = basic_actions  # 🆕 액션 생성 비활성화
+                    print(f"[DEBUG] 기본 옵션 신호 생성 완료: {len(basic_actions)}개")
+                    for i, action in enumerate(basic_actions):
+                        print(f"[DEBUG]  - {i+1}: {action['label']} - {action['why']} → {action['what']} (신뢰도: {action['confidence']})")
+                else:
+                    print(f"[DEBUG] 기본 옵션 신호 생성 실패")
+                
+                # 🆕 블랙-숄즈 기반 손절가/목표가 계산
+                if signal.lower() == "long":
+                    # Long 신호: 상승 예상
+                    # ATM 콜 옵션 이론가 기반으로 목표가 설정
+                    atm_call_price = bs.price(S=S, K=S, T=T, r=r, sigma=sigma, option_type="call", q=q)
+                    # 목표가: 현재가 + (ATM 콜 가격의 2배만큼 상승)
+                    take_profit = S + (atm_call_price * 2.0)
+                    # 손절가: 현재가 - (ATM 콜 가격의 1.5배만큼 하락)
+                    stop_loss = S - (atm_call_price * 1.5)
+                elif signal.lower() == "short":
+                    # Short 신호: 하락 예상
+                    # ATM 풋 옵션 이론가 기반으로 목표가 설정
+                    atm_put_price = bs.price(S=S, K=S, T=T, r=r, sigma=sigma, option_type="put", q=q)
+                    # 목표가: 현재가 - (ATM 풋 가격의 2배만큼 하락)
+                    take_profit = S - (atm_put_price * 2.0)
+                    # 손절가: 현재가 + (ATM 풋 가격의 1.5배만큼 상승)
+                    stop_loss = S + (atm_put_price * 1.5)
+                else:
+                    # Neutral 신호: 중립
+                    # 기본 변동성 기반
+                    stop_loss = S * (1 - 1.0 * sigma * math.sqrt(T))
+                    take_profit = S * (1 + 1.0 * sigma * math.sqrt(T))
+                
+                # 손절가/목표가를 rec에 추가
+                rec["stop_loss"] = f"${stop_loss:.2f}"
+                rec["take_profit"] = f"${take_profit:.2f}"
+                
+                print(f"[DEBUG] 블랙-숄즈 기반 손절가/목표가 계산 완료:")
+                print(f"  - 손절가: ${stop_loss:.2f}")
+                print(f"  - 목표가: ${take_profit:.2f}")
+                
+                # 🆕 옵션 추천 정보 생성 (간단한 형태)
+                option_recommendations = []
+                
+                # 🆕 현재가와 가장 가까운 행사가 찾기 (진짜 ATM 옵션)
+                current_price = S
+                closest_strike = None
+                min_distance = float('inf')
+                
+                for strike in bs_inputs["strikes"]:
+                    distance = abs(strike - current_price)
+                    if distance < min_distance:
+                        min_distance = distance
+                        closest_strike = strike
+                
+                print(f"[DEBUG] ATM 옵션 선택:")
+                print(f"  - 현재가: ${current_price:.2f}")
+                print(f"  - 선택된 행사가: ${closest_strike:.2f}")
+                print(f"  - 거리: ${min_distance:.2f}")
+                
+                if closest_strike:
+                    # 🆕 현재가를 기준으로 현실적인 옵션 시장가 추정
+                    # ITM/ATM/OTM에 따라 다른 가격 추정
+                    if closest_strike < current_price:  # ITM 콜 (행사가 < 현재가)
+                        # 🆕 ITM 콜: 내재가치 + 시간가치 (더 현실적으로)
+                        intrinsic_value = current_price - closest_strike
+                        time_value = max(0.01, current_price * 0.005)  # 현재가의 0.5%
+                        estimated_call_market_price = intrinsic_value + time_value
+                        estimated_put_market_price = max(0.01, current_price * 0.005)  # 시간가치만
+                        option_type = "ITM 콜"
+                    elif abs(closest_strike - current_price) / current_price < 0.02:  # ATM (행사가 ≈ 현재가)
+                        # 🆕 ATM 옵션은 더 현실적인 가격으로 추정
+                        estimated_call_market_price = max(0.01, current_price * 0.008)  # 현재가의 0.8% (약 $2.73)
+                        estimated_put_market_price = max(0.01, current_price * 0.008)  # 현재가의 0.8% (약 $2.73)
+                        option_type = "ATM"
+                    else:  # OTM (행사가 > 현재가)
+                        # 🆕 OTM 콜: 시간가치만 (더 현실적으로)
+                        estimated_call_market_price = max(0.01, current_price * 0.003)  # 현재가의 0.3%
+                        intrinsic_value = closest_strike - current_price
+                        time_value = max(0.01, current_price * 0.005)  # 현재가의 0.5%
+                        estimated_put_market_price = intrinsic_value + time_value
+                        option_type = "OTM 콜"
+                    
+                    print(f"[DEBUG] 옵션 타입: {option_type}")
+                    print(f"[DEBUG] 추정 시장가:")
+                    print(f"  - 콜: ${estimated_call_market_price:.4f}")
+                    print(f"  - 풋: ${estimated_put_market_price:.4f}")
+                    
+                    # 콜 옵션 추천 (실제 시장가와 비교)
+                    call_rec = bs.get_option_recommendation(
+                        S=current_price, K=closest_strike, T=T, r=r, sigma=sigma,
+                        market_price=estimated_call_market_price,  # 추정 시장가 사용
+                        option_type="call", q=q
+                    )
+                    
+                    # 풋 옵션 추천 (실제 시장가와 비교)
+                    put_rec = bs.get_option_recommendation(
+                        S=current_price, K=closest_strike, T=T, r=r, sigma=sigma,
+                        market_price=estimated_put_market_price,   # 추정 시장가 사용
+                        option_type="put", q=q
+                    )
+                    
+                    option_recommendations.append({
+                        "strike": closest_strike,
+                        "call": call_rec,
+                        "put": put_rec,
+                        "option_type": option_type
+                    })
+                    print(f"[DEBUG] 옵션 추천 생성 완료: {option_type}")
+                
+                # 옵션 추천 정보를 rec에 추가
+                if option_recommendations:
+                    rec["option_recommendations"] = option_recommendations
+                    print(f"[DEBUG] 옵션 추천 정보 생성 완료: {len(option_recommendations)}개")
+                
+                print(f"[KalmanFilter] 블랙-숄즈 옵션 뷰 추가 완료: {len(table)}개 strike")
+            
+            print(f"[KalmanFilter] 블랙-숄즈 옵션 뷰 추가 완료: {len(table)}개 strike")
+            
+        except Exception as e:
+            print(f"[DEBUG] _attach_option_view 전체 실패: {e}")
+            print(f"[DEBUG] 에러 타입: {type(e)}")
+            import traceback
+            print(f"[DEBUG] 에러 상세: {traceback.format_exc()}")
+            
+            print(f"[KalmanFilter] 블랙-숄즈 옵션 뷰 추가 실패: {e}")
+            # 에러 발생시 기본 옵션 정보라도 제공
+            rec["options"] = {
+                "error": f"옵션 계산 실패: {str(e)}",
+                "spot": round(bs_inputs["S"], 4),
+                "sigma_annual": round(bs_inputs["sigma"], 6)
+            }
  
     # ---------- 유틸 ----------
     @staticmethod
@@ -614,8 +1267,13 @@ class KalmanRegimeFilterTool(SessionAwareTool):
             signal = "Neutral"
             strategy = "Market Neutral"
 
+        # 🆕 신뢰도 계산
+        signal_confidence = abs(combined_signal) / 5.0  # 0.0 ~ 1.0 (0% ~ 100%)
+        confidence_level = "높음" if signal_confidence > 0.7 else "보통" if signal_confidence > 0.4 else "낮음"
+        
         rec["trading_signal"] = signal
         rec["strategy"] = strategy
+        rec["signal_confidence"] = f"{confidence_level} ({signal_confidence:.1%})"
         rec["combined_signal"] = self._convert_signal_strength_with_description(combined_signal)
 
         # ── 포지션 크기
@@ -670,50 +1328,63 @@ class KalmanRegimeFilterTool(SessionAwareTool):
         atr_pct = 0.02 + 0.03 * (vol_clamped / 2.0)  # 0.02~0.05
         atr = entry_price * atr_pct
 
-        # 🆕 항상 가격 예측 수행
-        # 1) 드리프트/변동성 산출
-        #    - 드리프트: combined_signal(±5) → 일간 기대수익률로 선형 매핑
-        #      예) drift_scale=0.0015이면, 신호 +1 ≈ +0.15%/일
-        mu_daily = float(np.clip(inp.drift_scale * combined_signal, -0.05, 0.05))
-        #    - 변동성: ATR%를 일간 표준편차 근사로 사용(간단하고 일관적)
-        sigma_daily = float(np.clip(atr_pct, 0.005, 0.15))
-
-        # 2) z-score 선택 (0.8/0.9/0.95 지원)
-        z = self._get_z(inp.ci_level)
-
-        # 3) 예측
-        pred = self._forecast_price(entry_price, mu_daily, sigma_daily, inp.horizon_days, z)
-
-        # 4) 출력용 포맷
-        def _pct(x): return (x / entry_price - 1.0) * 100.0
-        rec["prediction"] = {
-            "enabled": True,
-            "horizon_days": inp.horizon_days,
-            "center": f"${pred['center']:.2f} ({_pct(pred['center']):+.2f}%)",
-            "ci": f"{int(round(inp.ci_level*100))}%",
-            "lower":  f"${pred['lower']:.2f} ({_pct(pred['lower']):+.2f}%)",
-            "upper":  f"${pred['upper']:.2f} ({_pct(pred['upper']):+.2f}%)",
-            # 사용자 노출용 간단 가정(모델 내부 스케일 언급 없이)
-            "assumption": "일간 드리프트(신호 기반)·변동성(ATR%) 고정 가정"
-        }
+        # 🆕 블랙-숄즈 옵션 뷰로 대체
+        print(f"[DEBUG] 🚀 블랙-숄즈 옵션 뷰 시작!")
+        print(f"[DEBUG] 입력값:")
+        print(f"  - entry_price: {entry_price}")
+        print(f"  - atr_pct: {atr_pct}")
+        print(f"  - horizon_days: {inp.horizon_days}")
+        print(f"  - signal: {signal}")
         
-        # 🆕 디버그 로그 추가
-        print(f"[KalmanFilter] 예측 계산 완료:")
+        # 1) 블랙-숄즈 입력 파라미터 생성
+        print(f"[DEBUG] _build_bs_inputs 호출...")
+        bs_inputs = self._build_bs_inputs(
+            entry_price=entry_price,
+            atr_pct=atr_pct,
+            rate=0.02,                  # 기본 2% (필요시 설정/환경변수로)
+            div_yield=0.0,              # 기본 0% (주식/ETF 배당 정보 필요시 수정)
+            days_to_expiry=inp.horizon_days  # 예측 기간과 동일
+        )
+        print(f"[DEBUG] _build_bs_inputs 완료: {bs_inputs}")
+
+        # 2) 블랙-숄즈 옵션 뷰 추가
+        print(f"[DEBUG] _attach_option_view 호출...")
+        market_prices = getattr(inp, 'option_market_prices', None)
+        threshold = getattr(inp, 'option_signal_threshold', 0.05)
+        
+        print(f"[DEBUG] 옵션 파라미터:")
+        print(f"  - market_prices: {market_prices}")
+        print(f"  - threshold: {threshold}")
+        
+        self._attach_option_view(rec, bs_inputs, signal, market_prices, threshold)
+        print(f"[DEBUG] _attach_option_view 완료!")
+        
+        # 🆕 최종 확인 로그
+        print(f"[DEBUG] 🎯 블랙-숄즈 옵션 뷰 최종 결과:")
+        print(f"  - rec에 'options' 키 존재: {'options' in rec}")
+        if 'options' in rec:
+            print(f"  - options 내용: {rec['options']}")
+        else:
+            print(f"  - ❌ options 키가 rec에 없음!")
+        
+        # 🆕 actions 키 확인
+        print(f"  - rec에 'actions' 키 존재: {'actions' in rec}")
+        if 'actions' in rec:
+            print(f"  - actions 내용: {rec['actions']}")
+            print(f"  - actions 개수: {len(rec['actions'])}")
+        else:
+            print(f"  - ❌ actions 키가 rec에 없음!")
+        
+        print(f"[KalmanFilter] 블랙-숄즈 옵션 뷰 계산 완료:")
         print(f"  - entry_price: ${entry_price:.2f}")
-        print(f"  - combined_signal: {combined_signal:.3f}")
-        print(f"  - mu_daily: {mu_daily:.6f}")
-        print(f"  - sigma_daily: {sigma_daily:.6f}")
-        print(f"  - z-score: {z:.4f}")
-        print(f"  - prediction: {rec['prediction']}")
+        print(f"  - atr_pct: {atr_pct:.6f}")
+        print(f"  - sigma_annual: {bs_inputs['sigma']:.6f}")
+        print(f"  - T_years: {bs_inputs['T']:.6f}")
+        print(f"  - strikes: {bs_inputs['strikes']}")
+        print(f"  - signal: {signal}")
         
-        # 손절가 및 목표가 계산 (바닥 가드 포함)
-        stop_loss = max(entry_price * (1 - 1.5 * atr_pct), entry_price * 0.5)  # 최소 50% 가드
-        take_profit = entry_price * (1 + 3.0 * atr_pct)
-        
-        # 🆕 출력 포맷 개선
-        sl_pct = (stop_loss - entry_price) / entry_price * 100
-        tp_pct = (take_profit - entry_price) / entry_price * 100
-        rr = abs(tp_pct / sl_pct) if sl_pct != 0 else None
+        # 🆕 손절가/목표가는 블랙-숄즈에서 계산됨 (위에서 이미 설정됨)
+        # rec["stop_loss"]와 rec["take_profit"]은 이미 설정되어 있음
         
         # VIX 기준 시장 안정성
         vix_value = raw_features.get("VIX", 20.0)
@@ -726,12 +1397,9 @@ class KalmanRegimeFilterTool(SessionAwareTool):
         else:
             stability = "Turbulent"
         
-        # 🆕 개선된 출력 포맷
+        # 🆕 개선된 출력 포맷 (손절가/목표가는 이미 설정됨)
         rec["current_price"] = f"${entry_price:.2f}"
-        rec["stop_loss"] = f"${stop_loss:.2f} ({sl_pct:+.2f}%)"
-        rec["take_profit"] = f"${take_profit:.2f} ({tp_pct:+.2f}%)"
-        if rr is not None:
-            rec["risk_reward_ratio"] = f"{rr:.2f}"
+        # rec["stop_loss"]와 rec["take_profit"]은 블랙-숄즈에서 이미 설정됨
         rec["market_stability"] = f"{stability} (VIX={vix_value:.2f})"
 
         # ── 리스크 지표
@@ -857,15 +1525,29 @@ class KalmanRegimeFilterTool(SessionAwareTool):
             rec["warnings"] = warning_messages
 
         # 8️⃣ 결과 반환
+        print(f"[DEBUG] 🎯 최종 결과 반환 준비:")
+        print(f"  - rec 키들: {list(rec.keys())}")
+        print(f"  - 'options' 키 존재: {'options' in rec}")
+        if 'options' in rec:
+            print(f"  - options 타입: {type(rec['options'])}")
+            print(f"  - options 내용: {rec['options']}")
+        else:
+            print(f"  - ❌ options 키가 최종 rec에 없음!")
+        
         data_status = "완전" if not missing_features else f"부분 ({len(missing_features)}개 누락)"
         summary = (
-            f"5차원 칼만 필터 분석 완료 - {signal} 신호, 변동성: {vol:.3f}, "
+            f"5차원 칼만 필터 + 블랙-숄즈 옵션 분석 완료 - {signal} 신호, 변동성: {vol:.3f}, "
             f"성능: {performance_metrics['status']}, 데이터: {data_status} · "
-            f"예측:{inp.horizon_days}D {int(round(inp.ci_level*100))}%CI"
+            f"옵션 분석: {inp.horizon_days}D 만기, {len(bs_inputs['strikes'])}개 행사가"
         )
         
         if missing_features:
             rec["data_warnings"] = f"다음 피처들이 기본값으로 대체됨: {missing_features}"
+        
+        print(f"[DEBUG] 🚀 KalmanRegimeFilterActionOutput 반환:")
+        print(f"  - summary: {summary}")
+        print(f"  - recommendations 키 수: {len(rec)}")
+        print(f"  - options 포함 여부: {'options' in rec}")
         
         return KalmanRegimeFilterActionOutput(
             summary=summary,
