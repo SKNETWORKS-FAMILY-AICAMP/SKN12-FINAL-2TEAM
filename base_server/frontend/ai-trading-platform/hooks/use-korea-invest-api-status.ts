@@ -60,6 +60,7 @@ export function useKoreaInvestApiStatus(): KoreaInvestApiStatus {
             "Authorization": `Bearer ${accessToken}`,
           },
           body: JSON.stringify({
+            accessToken: accessToken, // accessToken을 body에 포함
             sequence: Date.now(), // 현재 시간을 sequence로 사용
           }),
         });

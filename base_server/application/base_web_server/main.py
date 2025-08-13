@@ -1715,10 +1715,10 @@ async def test_queue_systems():
 
 app = FastAPI(lifespan=lifespan)
 
-# CORS 미들웨어 추가 (모든 origin, method, header 허용)
+# CORS 미들웨어 추가 (프론트엔드 도메인 허용)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
