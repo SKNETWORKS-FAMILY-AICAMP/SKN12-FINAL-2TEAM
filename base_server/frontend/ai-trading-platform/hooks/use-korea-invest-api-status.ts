@@ -54,7 +54,7 @@ export function useKoreaInvestApiStatus(): KoreaInvestApiStatus {
         // OAuth 인증 상태 직접 확인
         const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/dashboard/oauth`, {
           method: "POST",
-          credentials: "include",
+          credentials: "omit",
           headers: {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${accessToken}`,

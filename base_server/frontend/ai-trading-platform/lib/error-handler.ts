@@ -88,7 +88,17 @@ export function handleSessionExpired(
  */
 export function getErrorMessage(errorCode: number): string {
   switch (errorCode) {
-    // 인증 관련
+    // 로그인/인증 관련
+    case 1000:
+      return "서버 오류가 발생했습니다."
+    case 1001:
+      return "비밀번호가 올바르지 않습니다."
+    case 1002:
+      return "존재하지 않는 계정입니다."
+    case 1003:
+      return "차단된 계정입니다."
+    
+    // 세션 관련
     case 10000:
       return "세션이 만료되었습니다. 다시 로그인해 주세요."
     

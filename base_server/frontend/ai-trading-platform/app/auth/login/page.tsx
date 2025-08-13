@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Loader2, TrendingUp, Zap } from "lucide-react"
 import { authManager } from "@/lib/auth"
+import { getErrorMessage } from "@/lib/error-handler"
 import axios from "axios"
 
 export default function LoginPage() {
@@ -70,7 +71,9 @@ export default function LoginPage() {
       } else {
         const errorCode = data.errorCode;
         const message = data.message;
-        setError(message || `로그인 실패: 에러코드 ${errorCode}`);
+        // getErrorMessage 함수를 사용하여 사용자 친화적인 메시지 표시
+        const userFriendlyMessage = getErrorMessage(errorCode) || message || "로그인에 실패했습니다.";
+        setError(userFriendlyMessage);
       }
     } catch (err: any) {
       if (err.code === 'ECONNABORTED') {
@@ -78,7 +81,9 @@ export default function LoginPage() {
       } else {
         const errorCode = err?.response?.data?.errorCode;
         const message = err?.response?.data?.message;
-        setError(message || "네트워크 오류가 발생했습니다.");
+        // getErrorMessage 함수를 사용하여 사용자 친화적인 메시지 표시
+        const userFriendlyMessage = errorCode ? getErrorMessage(errorCode) : (message || "네트워크 오류가 발생했습니다.");
+        setError(userFriendlyMessage);
       }
     } finally {
       setIsLoading(false)
