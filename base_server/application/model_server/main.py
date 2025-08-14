@@ -62,6 +62,8 @@ async def lifespan(app: FastAPI):
     # ConsoleLogger로 초기화
     console_logger = ConsoleLogger(log_level=log_level)
     Logger.init(console_logger)
+    # 모든 로그는 숨기고 "log.test"가 포함된 메시지만 출력
+    Logger.allow_only_messages_containing("log.test")
     Logger.info(f"model_server 시작 (로그레벨: {log_level.name}, 환경: {app_env}, config: {config_file})")
     
     try:

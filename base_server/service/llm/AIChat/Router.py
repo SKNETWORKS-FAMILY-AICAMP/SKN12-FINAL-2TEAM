@@ -62,6 +62,7 @@ from service.llm.AIChat.tool.KalmanRegimeFilterTool import (
     KalmanRegimeFilterTool,
     KalmanRegimeFilterInput,
 )
+from service.llm.AIChat.BasicTools.RagTool import RagTool, RagInput
 
 # ──────────────────── 유틸 ──────────────────────────────────────────
 
@@ -109,6 +110,7 @@ class AIChatRouter:
             "- \"언제 사야 하냐\", \"매수 타이밍\", \"진입 시점\" → `kalman_regime_filter_tool`\n"
             "- \"기술적 지표\", \"RSI\", \"MACD\" → `technical_analysis`\n"
             "- \"뉴스\", \"실적\", \"발표\" → `news`\n"
+            "- \"문서 검색\", \"관련 문서\", \"RAG\" → `rag`\n"
             "- \"재무 실적\", \"손익계산서\" → `income_statement_tool`\n"
             "- \"재무상태표\", \"자산\", \"부채\" → `balance_sheet_tool`\n"
             "- \"현금 흐름\" → `cashflow_statement_tool`\n"
@@ -126,6 +128,7 @@ class AIChatRouter:
             "- `kalman_regime_filter_tool`: 매수/매도 시점, 손절가, 포지션 사이즈 예측\n"
             "- `technical_analysis`: RSI, MACD 등 기술적 분석\n"
             "- `news`: 최근 뉴스 요약, 실적 발표, 감정 분석\n"
+            "- `rag`: 뉴스 데이터 기반 하이브리드 문서 검색과 요약\n"
             "- `income_statement_tool`: 매출, 이익, 비용 등 수익성 분석\n"
             "- `balance_sheet_tool`: 자산, 부채, 자본 구조 분석\n"
             "- `cashflow_statement_tool`: 영업/투자/재무 흐름 분석\n"
@@ -285,6 +288,16 @@ class AIChatRouter:
             agent = IndustryAnalysisTool(self.ai_chat_service)
             return agent.get_data(**params).summary
 
+        @tool(args_schema=RagInput)
+        def rag(**params):
+            """금융 문서에 대한 하이브리드(RAG) 검색을 수행하고 요약을 제공합니다. \"문서 검색\", \"관련 문서\", \"RAG\" 질문에 적합합니다."""
+            agent = RagTool(self.ai_chat_service)
+            result = agent.get_data(**params)
+            print(f"[Router] rag result: {result.summary} 전체 데이터 :  {result}")
+            # 내부 식별 토큰을 붙여 REST 경로에서 직접 반환하도록 유도
+            # (클라이언트에는 노출되지 않음: 서비스 레이어에서 제거)
+            return "🛠 rag:\n" + (result.summary or "")
+
         @tool(args_schema=MarketRegimeDetectorInput)
         def market_regime_detector_tool(**params):
             """시장 레짐(강세/약세/횡보) 판단을 위한 통계 모델을 실행합니다. \"시장 레짐\", \"강세/약세\", \"시장 상태\" 질문에 적합합니다."""
@@ -368,6 +381,7 @@ class AIChatRouter:
             industry_analysis,
             market_regime_detector_tool,
             kalman_regime_filter_tool,
+            rag,
         ]
 
     # ────────────────── LangGraph 로직 ───────────────────────────

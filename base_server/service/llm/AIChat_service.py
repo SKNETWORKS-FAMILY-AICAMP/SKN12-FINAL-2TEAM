@@ -135,6 +135,16 @@ class AIChatService:
     async def _full_answer(self, sid: str, question: str, tool_out):
         """전체 응답 생성 (REST API용)"""
         joined = "\n".join(tool_out) if isinstance(tool_out, list) else str(tool_out)
+
+        # 🛠 표식이 있으면 도구 결과를 그대로 반환하되, 프런트는 HTML을 기대하므로 Markdown → HTML 변환
+        if "🛠 rag:" in joined:
+            direct = joined.split("🛠 rag:", 1)[1].strip()
+            direct_html = markdown(direct)
+            memory = self.mem(sid)
+            memory.chat_memory.add_user_message(question)
+            memory.chat_memory.add_ai_message(direct_html)
+            return direct_html
+
         memory = self.mem(sid)
         prompt = ChatPromptTemplate.from_messages(
             [("system", "당신은 친절하고 정확한 AI 비서입니다.")] +

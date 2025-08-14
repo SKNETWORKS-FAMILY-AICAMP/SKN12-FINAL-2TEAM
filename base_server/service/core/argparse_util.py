@@ -13,7 +13,7 @@ def parse_log_level(args: Optional[List[str]] = None) -> LogLevel:
                 return LogLevel[level_str]
             except KeyError:
                 pass
-    return LogLevel.ALL
+    return LogLevel.ERROR
 
 def parse_app_env(args: Optional[List[str]] = None) -> str:
     """

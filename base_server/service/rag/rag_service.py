@@ -44,6 +44,7 @@ class RagService:
             bool: 초기화 성공 여부
         """
         try:
+            Logger.debug("log.test rag.init.enter")
             Logger.info("🚀 RAG 서비스 초기화 시작...")
             
             if cls._initialized:
@@ -75,11 +76,13 @@ class RagService:
             Logger.info(f"   - 벡터 검색: {'활성화' if cls._vector_available else '비활성화'}")
             Logger.info(f"   - 키워드 검색: {'활성화' if cls._search_available else '비활성화'}")
             Logger.info(f"   - 하이브리드 모드: {'활성화' if (cls._vector_available and cls._search_available) else '비활성화'}")
+            Logger.debug("log.test rag.init.ok")
             
             return True
             
         except Exception as e:
             Logger.error(f"❌ RAG 서비스 초기화 실패: {e}")
+            Logger.debug(f"log.test rag.init.fail err={str(e)}")
             cls._initialized = False
             cls._config = None
             return False
@@ -88,6 +91,7 @@ class RagService:
     def _validate_config(cls, config: RagConfig) -> bool:
         """RAG 설정 검증"""
         try:
+            Logger.debug("log.test rag.validate_config.enter")
             if not config.collection_name:
                 Logger.error("collection_name이 설정되지 않음")
                 return False
@@ -105,16 +109,19 @@ class RagService:
                 return False
             
             Logger.debug("RAG 설정 검증 통과")
+            Logger.debug("log.test rag.validate_config.ok")
             return True
             
         except Exception as e:
             Logger.error(f"RAG 설정 검증 중 오류: {e}")
+            Logger.debug(f"log.test rag.validate_config.fail err={str(e)}")
             return False
 
     @classmethod
     def _validate_dependencies(cls) -> bool:
         """의존 서비스 초기화 상태 검증"""
         try:
+            Logger.debug("log.test rag.validate_deps.enter")
             from service.search.search_service import SearchService
             from service.vectordb.vectordb_service import VectorDbService
             
@@ -129,6 +136,7 @@ class RagService:
             # RAG 전용 벡터 클라이언트 초기화 (coroutine 재사용 문제 해결)
             if cls._vector_available and cls._config.enable_vector_db:
                 try:
+                    Logger.debug("log.test rag.validate_deps.vector_client.init")
                     # RAG 설정에서 벡터 DB 설정 추출
                     vector_config = RagVectorDbConfig(
                         aws_access_key_id=cls._config.aws_access_key_id,
@@ -143,26 +151,32 @@ class RagService:
                     
                     cls._rag_vector_client = RagVectorDbClient(vector_config)
                     Logger.info("✅ RAG 전용 벡터 클라이언트 초기화 완료")
+                    Logger.debug("log.test rag.validate_deps.vector_client.ok")
                     
                 except Exception as e:
                     Logger.error(f"❌ RAG 전용 벡터 클라이언트 초기화 실패: {e}")
+                    Logger.debug(f"log.test rag.validate_deps.vector_client.fail err={str(e)}")
                     cls._vector_available = False
             
             # 최소 하나의 서비스는 사용 가능해야 함
             if not (cls._search_available or cls._vector_available):
                 Logger.error("Search와 Vector 서비스 모두 사용할 수 없음")
+                Logger.debug("log.test rag.validate_deps.none_available")
                 return False
             
+            Logger.debug("log.test rag.validate_deps.ok")
             return True
             
         except Exception as e:
             Logger.error(f"의존 서비스 검증 중 오류: {e}")
+            Logger.debug(f"log.test rag.validate_deps.fail err={str(e)}")
             return False
 
     @classmethod
     def _validate_hybrid_setup(cls) -> bool:
         """하이브리드 검색 설정 검증"""
         try:
+            Logger.debug("log.test rag.validate_hybrid.enter")
             # 벡터 DB 설정 확인
             if cls._config.enable_vector_db and not cls._vector_available:
                 Logger.warn("벡터 DB 활성화 설정이지만 VectorDbService가 사용 불가")
@@ -178,10 +192,12 @@ class RagService:
             else:
                 Logger.warn("⚠️ 제한된 검색 모드로 동작")
             
+            Logger.debug(f"log.test rag.validate_hybrid.ok hybrid={hybrid_possible}")
             return True
             
         except Exception as e:
             Logger.error(f"하이브리드 검색 설정 검증 중 오류: {e}")
+            Logger.debug(f"log.test rag.validate_hybrid.fail err={str(e)}")
             return False
 
     @classmethod
@@ -210,6 +226,7 @@ class RagService:
             raise RuntimeError("RAG 서비스가 초기화되지 않음")
         
         start_time = time.time()
+        Logger.debug(f"log.test rag.add_docs.enter count={len(documents)}")
         Logger.info(f"📄 문서 인지션 파이프라인 시작: {len(documents)}개 문서")
         
         try:
@@ -222,9 +239,11 @@ class RagService:
             # 문서 청킹 (긴 문서를 작은 단위로 분할)
             chunked_docs = cls._chunk_documents(processed_docs)
             Logger.info(f"📝 문서 청킹 완료: {len(chunked_docs)}개 청크")
+            Logger.debug(f"log.test rag.add_docs.chunked total_chunks={len(chunked_docs)}")
             
             # 병렬 저장 실행
             storage_results = await cls._parallel_storage(chunked_docs)
+            Logger.debug(f"log.test rag.add_docs.storage done success={storage_results.get('success_count',0)} error={storage_results.get('error_count',0)}")
             
             # 결과 집계
             total_time = time.time() - start_time
@@ -235,6 +254,7 @@ class RagService:
             cls._stats["documents_indexed"] += success_count
             
             Logger.info(f"✅ 문서 인지션 완료: {success_count}개 성공, {error_count}개 실패 ({total_time:.2f}초)")
+            Logger.debug("log.test rag.add_docs.ok")
             
             return {
                 "success": error_count == 0,
@@ -248,6 +268,7 @@ class RagService:
             
         except Exception as e:
             Logger.error(f"❌ 문서 인지션 실패: {e}")
+            Logger.debug(f"log.test rag.add_docs.fail err={str(e)}")
             return {
                 "success": False,
                 "error": str(e),
@@ -258,6 +279,7 @@ class RagService:
     def _preprocess_documents(cls, documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """문서 전처리 및 검증"""
         processed = []
+        Logger.debug(f"log.test rag.preprocess.enter count={len(documents)}")
         
         for i, doc in enumerate(documents):
             try:
@@ -287,6 +309,7 @@ class RagService:
                 Logger.warn(f"문서 {i} 전처리 실패: {e}")
                 continue
         
+        Logger.debug(f"log.test rag.preprocess.ok kept={len(processed)}")
         return processed
 
     @classmethod
@@ -298,6 +321,7 @@ class RagService:
     def _chunk_documents(cls, documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """문서 청킹 - 긴 문서를 작은 단위로 분할"""
         chunks = []
+        Logger.debug(f"log.test rag.chunk.enter docs={len(documents)}")
         max_chunk_size = cls._config.max_content_length
         
         for doc in documents:
@@ -324,12 +348,14 @@ class RagService:
                 }
                 chunks.append(chunk_doc)
         
+        Logger.debug(f"log.test rag.chunk.ok chunks={len(chunks)}")
         return chunks
 
     @classmethod
     def _split_text(cls, text: str, max_size: int) -> List[str]:
         """텍스트를 지정된 크기로 분할"""
         if len(text) <= max_size:
+            Logger.debug("log.test rag.split.noop")
             return [text]
         
         chunks = []
@@ -347,11 +373,13 @@ class RagService:
         if current_chunk:
             chunks.append(current_chunk.strip())
         
+        Logger.debug(f"log.test rag.split.ok parts={len(chunks)}")
         return chunks
 
     @classmethod
     async def _parallel_storage(cls, documents: List[Dict[str, Any]]) -> Dict[str, Any]:
         """두 서비스에 병렬로 문서 저장"""
+        Logger.debug(f"log.test rag.parallel_storage.enter docs={len(documents)}")
         search_results = []
         vector_results = []
         
@@ -379,6 +407,7 @@ class RagService:
                 else:
                     success_count += result.get("success_count", 0)
                     error_count += result.get("error_count", 0)
+            Logger.debug(f"log.test rag.parallel_storage.done success={success_count} error={error_count}")
         
         return {
             "success_count": success_count,
@@ -394,6 +423,7 @@ class RagService:
             from service.search.search_service import SearchService
             
             Logger.debug(f"OpenSearch에 {len(documents)}개 문서 저장 시작")
+            Logger.debug(f"log.test rag.store_search.enter count={len(documents)}")
             
             success_count = 0
             error_count = 0
@@ -428,6 +458,7 @@ class RagService:
                     error_count += 1
             
             Logger.info(f"OpenSearch 저장 완료: {success_count}개 성공, {error_count}개 실패")
+            Logger.debug("log.test rag.store_search.ok")
             
             return {
                 "service": "search",
@@ -437,6 +468,7 @@ class RagService:
             
         except Exception as e:
             Logger.error(f"OpenSearch 저장 실패: {e}")
+            Logger.debug(f"log.test rag.store_search.fail err={str(e)}")
             return {
                 "service": "search",
                 "success_count": 0,
@@ -451,6 +483,7 @@ class RagService:
             from service.vectordb.vectordb_service import VectorDbService
             
             Logger.debug(f"VectorDB에 {len(documents)}개 문서 저장 시작")
+            Logger.debug(f"log.test rag.store_vector.enter count={len(documents)}")
             
             success_count = 0
             error_count = 0
@@ -474,6 +507,7 @@ class RagService:
                     error_count += 1
             
             Logger.info(f"VectorDB 저장 완료: {success_count}개 성공, {error_count}개 실패")
+            Logger.debug("log.test rag.store_vector.ok")
             
             return {
                 "service": "vector",
@@ -483,6 +517,7 @@ class RagService:
             
         except Exception as e:
             Logger.error(f"VectorDB 저장 실패: {e}")
+            Logger.debug(f"log.test rag.store_vector.fail err={str(e)}")
             return {
                 "service": "vector",
                 "success_count": 0,
@@ -493,6 +528,7 @@ class RagService:
     @classmethod
     def _preprocess_query(cls, query: str) -> str:
         """검색어 전처리 - 주식 심볼 확장, 동의어 처리"""
+        Logger.debug(f"log.test rag.preprocess_query.enter q_len={len(query) if query else 0}")
         if not query:
             return query
         
@@ -730,9 +766,11 @@ class RagService:
             # 원본 검색어 + 심볼로 확장
             expanded_query = f"{query} {symbol}"
             Logger.debug(f"검색어 확장: '{query}' → '{expanded_query}'")
+            Logger.debug("log.test rag.preprocess_query.expand")
             return expanded_query
         
         # 원본 검색어 반환
+        Logger.debug("log.test rag.preprocess_query.no_change")
         return query
 
     @classmethod
@@ -755,6 +793,7 @@ class RagService:
         Returns:
             List[Dict]: 검색 결과 문서 리스트
         """
+        Logger.debug(f"log.test rag.retrieve.enter k={top_k} hybrid={hybrid} bw={bm25_weight} vw={vector_weight}")
         if not cls._initialized:
             raise RuntimeError("RAG 서비스가 초기화되지 않음")
         
@@ -788,11 +827,26 @@ class RagService:
             cls._update_search_stats(search_time)
             
             Logger.info(f"✅ 검색 완료: {len(results)}개 결과 ({search_time:.3f}초)")
+            Logger.debug(f"log.test rag.retrieve.ok results={len(results)} time={search_time:.3f}")
+            # 결과 일부 상세 표시 (상위 5개)
+            try:
+                preview_count = min(5, len(results))
+                for idx in range(preview_count):
+                    r = results[idx]
+                    md = r.get("metadata", {}) if isinstance(r, dict) else {}
+                    title = md.get("title") or (r.get("content", "")[:60] if isinstance(r, dict) else "")
+                    source = md.get("source", "unknown")
+                    score_val = r.get("score", 0.0) if isinstance(r, dict) else 0.0
+                    s_type = r.get("search_type", "unknown") if isinstance(r, dict) else "unknown"
+                    Logger.debug(f"log.test rag.result#{idx+1} type={s_type} score={score_val:.3f} source='{source}' title='{title}'")
+            except Exception as _e:
+                Logger.debug(f"log.test rag.retrieve.preview.fail err={str(_e)}")
             
             return results
             
         except Exception as e:
             Logger.error(f"❌ 검색 실패: {e}")
+            Logger.debug(f"log.test rag.retrieve.fail err={str(e)}")
             return []
 
     @classmethod
@@ -803,6 +857,7 @@ class RagService:
                            vector_weight: float) -> List[Dict[str, Any]]:
         """하이브리드 검색 실행"""
         Logger.debug("하이브리드 검색 모드 시작")
+        Logger.debug(f"log.test rag.hybrid.enter q='{query}' k={k} bw={bm25_weight} vw={vector_weight}")
         
         # 병렬로 두 가지 검색 실행
         bm25_task = cls._bm25_search_only(query, k * 2)  # 더 많이 가져와서 다양성 확보
@@ -817,12 +872,15 @@ class RagService:
         )
         
         # 상위 K개 반환
-        return combined_results[:k]
+        out = combined_results[:k]
+        Logger.debug(f"log.test rag.hybrid.ok returned={len(out)}")
+        return out
 
     @classmethod
     async def _bm25_search_only(cls, query: str, k: int) -> List[Dict[str, Any]]:
         """BM25 키워드 검색만 실행 - 크롤러 구조에 맞춤"""
         try:
+            Logger.debug(f"log.test rag.bm25.enter q='{query}' k={k}")
             from service.search.search_service import SearchService
             
             # 크롤러에서 저장한 OpenSearch 구조에 맞춤
@@ -876,16 +934,19 @@ class RagService:
                 }
                 results.append(result)
             
+            Logger.debug(f"log.test rag.bm25.ok results={len(results)}")
             return results
             
         except Exception as e:
             Logger.error(f"BM25 검색 실패: {e}")
+            Logger.debug(f"log.test rag.bm25.fail err={str(e)}")
             return []
 
     @classmethod
     async def _vector_search_only(cls, query: str, k: int) -> List[Dict[str, Any]]:
         """벡터 유사도 검색만 실행 - RAG 전용 클라이언트 사용"""
         try:
+            Logger.debug(f"log.test rag.vector.enter q='{query}' k={k}")
             # RAG 전용 벡터 클라이언트 사용 (coroutine 재사용 문제 해결)
             if cls._rag_vector_client:
                 vector_results = await cls._rag_vector_client.similarity_search(
@@ -908,6 +969,7 @@ class RagService:
                     }
                     results.append(doc_result)
                 
+                Logger.debug(f"log.test rag.vector.ok results={len(results)}")
                 return results
             
             else:
@@ -941,10 +1003,12 @@ class RagService:
                     }
                     results.append(doc_result)
                 
+                Logger.debug(f"log.test rag.vector.ok results={len(results)}")
                 return results
             
         except Exception as e:
             Logger.error(f"벡터 검색 실패: {e}")
+            Logger.debug(f"log.test rag.vector.fail err={str(e)}")
             return []
 
     @classmethod
@@ -954,6 +1018,7 @@ class RagService:
                            bm25_weight: float,
                            vector_weight: float) -> List[Dict[str, Any]]:
         """BM25와 벡터 검색 결과 점수 합성"""
+        Logger.debug(f"log.test rag.fuse.enter bm25={len(bm25_results)} vector={len(vector_results)} bw={bm25_weight} vw={vector_weight}")
         
         # 결과를 ID로 매핑
         bm25_map = {r["id"]: r for r in bm25_results}
@@ -994,7 +1059,7 @@ class RagService:
         
         # 점수 순으로 정렬
         combined.sort(key=lambda x: x["score"], reverse=True)
-        
+        Logger.debug(f"log.test rag.fuse.ok combined={len(combined)}")
         return combined
 
     @classmethod
@@ -1002,7 +1067,9 @@ class RagService:
         """BM25 점수를 0-1 범위로 정규화"""
         # 간단한 sigmoid 정규화 (실제로는 데이터에 맞게 조정 필요)
         import math
-        return 1 / (1 + math.exp(-score / 10))
+        value = 1 / (1 + math.exp(-score / 10))
+        Logger.debug(f"log.test rag.normalize score_in={score:.3f} score_out={value:.3f}")
+        return value
 
     @classmethod
     def _update_search_stats(cls, search_time: float):
@@ -1023,22 +1090,33 @@ class RagService:
     @classmethod
     def get_stats(cls) -> Dict[str, Any]:
         """성능 통계 반환"""
-        return {
+        Logger.debug("log.test rag.get_stats.enter")
+        out = {
             **cls._stats,
             "initialized": cls._initialized,
             "search_available": cls._search_available,
             "vector_available": cls._vector_available,
             "hybrid_capable": cls._search_available and cls._vector_available
         }
+        Logger.debug(f"log.test rag.get_stats.ok initialized={out['initialized']} hybrid={out['hybrid_capable']}")
+        return out
+
+    @classmethod
+    def get_config(cls) -> Optional[RagConfig]:
+        """현재 활성화된 RAG 설정 반환"""
+        return getattr(cls, "_config", None)
 
     @classmethod
     async def health_check(cls) -> Dict[str, Any]:
         """서비스 상태 확인"""
+        Logger.debug("log.test rag.health.enter")
         if not cls._initialized:
-            return {
+            out = {
                 "status": "not_initialized",
                 "message": "RAG 서비스가 초기화되지 않음"
             }
+            Logger.debug("log.test rag.health.not_initialized")
+            return out
         
         # 의존 서비스 상태 재확인
         try:
@@ -1055,7 +1133,7 @@ class RagService:
             else:
                 status = "critical"
             
-            return {
+            out = {
                 "status": status,
                 "initialized": cls._initialized,
                 "dependencies": {
@@ -1069,9 +1147,12 @@ class RagService:
                 },
                 "stats": cls.get_stats()
             }
+            Logger.debug(f"log.test rag.health.ok status={status}")
+            return out
             
         except Exception as e:
             Logger.error(f"RAG 서비스 상태 확인 실패: {e}")
+            Logger.debug(f"log.test rag.health.fail err={str(e)}")
             return {
                 "status": "error",
                 "message": f"상태 확인 중 오류: {e}"
@@ -1081,6 +1162,7 @@ class RagService:
     async def shutdown(cls) -> bool:
         """서비스 종료 (111 패턴)"""
         try:
+            Logger.debug("log.test rag.shutdown.enter")
             if not cls._initialized:
                 Logger.info("RAG 서비스가 초기화되지 않아 종료 스킵")
                 return True
@@ -1112,8 +1194,10 @@ class RagService:
             cls._reset_stats()
             
             Logger.info("✅ RAG 서비스 종료 완료")
+            Logger.debug("log.test rag.shutdown.ok")
             return True
             
         except Exception as e:
             Logger.error(f"❌ RAG 서비스 종료 실패: {e}")
+            Logger.debug(f"log.test rag.shutdown.fail err={str(e)}")
             return False

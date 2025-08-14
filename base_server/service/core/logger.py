@@ -53,28 +53,58 @@ class ConsoleLogger(LoggerInterface):
     def set_level(self, level: LogLevel):
         self._log_level = level
     def info(self, log: str):
-        if self._log_level != LogLevel.ALL and self._log_level < LogLevel.INFO:
-            return
+        only = getattr(Logger, "_only_allow_substring", None)
+        if only:
+            if only not in log:
+                return
+        else:
+            if self._log_level != LogLevel.ALL and self._log_level < LogLevel.INFO:
+                return
         print(self._colorize_log(LogLevel.INFO, f"[Info] : {log}"))
     def fatal(self, log: str):
-        if self._log_level != LogLevel.ALL and self._log_level < LogLevel.FATAL:
-            return
+        only = getattr(Logger, "_only_allow_substring", None)
+        if only:
+            if only not in log:
+                return
+        else:
+            if self._log_level != LogLevel.ALL and self._log_level < LogLevel.FATAL:
+                return
         print(self._colorize_log(LogLevel.FATAL, f"[Fatal] : {log}"))
     def error(self, log: str):
-        if self._log_level != LogLevel.ALL and self._log_level < LogLevel.ERROR:
-            return
+        only = getattr(Logger, "_only_allow_substring", None)
+        if only:
+            if only not in log:
+                return
+        else:
+            if self._log_level != LogLevel.ALL and self._log_level < LogLevel.ERROR:
+                return
         print(self._colorize_log(LogLevel.ERROR, f"[Error] : {log}"))
     def warn(self, log: str):
-        if self._log_level != LogLevel.ALL and self._log_level < LogLevel.WARN:
-            return
+        only = getattr(Logger, "_only_allow_substring", None)
+        if only:
+            if only not in log:
+                return
+        else:
+            if self._log_level != LogLevel.ALL and self._log_level < LogLevel.WARN:
+                return
         print(self._colorize_log(LogLevel.WARN, f"[Warn] : {log}"))
     def debug(self, log: str):
-        if self._log_level != LogLevel.ALL and self._log_level < LogLevel.DEBUG:
-            return
+        only = getattr(Logger, "_only_allow_substring", None)
+        if only:
+            if only not in log:
+                return
+        else:
+            if self._log_level != LogLevel.ALL and self._log_level < LogLevel.DEBUG:
+                return
         print(self._colorize_log(LogLevel.DEBUG, f"[Debug] : {log}"))
     def trace(self, log: str):
-        if self._log_level != LogLevel.ALL and self._log_level < LogLevel.TRACE:
-            return
+        only = getattr(Logger, "_only_allow_substring", None)
+        if only:
+            if only not in log:
+                return
+        else:
+            if self._log_level != LogLevel.ALL and self._log_level < LogLevel.TRACE:
+                return
         print(self._colorize_log(LogLevel.TRACE, f"[Trace] : {log}"))
     
     def close(self):
@@ -141,8 +171,13 @@ class FileLogger(LoggerInterface):
         self._log_level = level
 
     def log(self, level: LogLevel, msg: str):
-        if self._log_level != LogLevel.ALL and level > self._log_level:
-            return
+        only = getattr(Logger, "_only_allow_substring", None)
+        if only:
+            if only not in msg:
+                return
+        else:
+            if self._log_level != LogLevel.ALL and level > self._log_level:
+                return
         
         # 시간대에 따른 현재 시간 구하기
         if self._timezone == "KST" or self._timezone == "Asia/Seoul":
@@ -237,6 +272,7 @@ class FileLogger(LoggerInterface):
 
 class Logger:
     _logger: Optional[LoggerInterface] = None
+    _only_allow_substring: Optional[str] = None
 
     @classmethod
     def init(cls, logger: LoggerInterface):
@@ -255,6 +291,10 @@ class Logger:
     def set_level(cls, level: LogLevel):
         if cls._logger:
             cls._logger.set_level(level)
+    @classmethod
+    def allow_only_messages_containing(cls, substring: Optional[str]):
+        """If set, only logs that contain this substring will be emitted by underlying loggers."""
+        cls._only_allow_substring = substring
     @classmethod
     def info(cls, log: str):
         if cls._logger:

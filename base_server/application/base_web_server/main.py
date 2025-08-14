@@ -138,6 +138,8 @@ async def lifespan(app: FastAPI):
         max_file_size_kb=10240  # 10MB 제한
     )
     Logger.init(file_logger)
+    # 모든 로그는 숨기고 "log.test"가 포함된 메시지만 출력
+    Logger.allow_only_messages_containing("log.test")
     Logger.info(f"base_web_server 시작 (로그레벨: {log_level.name}, 환경: {app_env}, config: {config_file})")
     Logger.info(f"로그 파일 경로: {file_logger._log_file_path}")
     
