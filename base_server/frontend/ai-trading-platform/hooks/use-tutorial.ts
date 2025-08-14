@@ -268,8 +268,17 @@ export function useTutorial() {
     console.log('🚀 Starting tutorial:', tutorialType);
     const tutorialSteps = TUTORIAL_CONFIG[tutorialType as keyof TutorialConfig];
     if (tutorialSteps) {
+      const currentProgress = progress[tutorialType] || 0;
+      const totalSteps = tutorialSteps.length;
+      
+      // 🚨 완료된 튜토리얼은 시작하지 않음
+      if (currentProgress >= totalSteps) {
+        console.log('✅ Tutorial already completed:', tutorialType);
+        return;
+      }
+      
       setCurrentTutorial(tutorialType);
-      setCurrentStep(progress[tutorialType] || 0);
+      setCurrentStep(currentProgress); // 현재 진행된 스텝부터 시작
     }
   }, [progress]);
 
@@ -348,6 +357,20 @@ export function useTutorial() {
       return;
     }
 
+    // 🆕 현재 진행 중인 튜토리얼이 완료되었는지 확인
+    if (currentTutorial) {
+      const currentProgress = progress[currentTutorial] || 0;
+      const tutorialSteps = TUTORIAL_CONFIG[currentTutorial as keyof TutorialConfig];
+      const totalSteps = tutorialSteps ? tutorialSteps.length : 0;
+      
+      if (currentProgress >= totalSteps) {
+        console.log('✅ Current tutorial completed, hiding overlay:', currentTutorial);
+        setCurrentTutorial(null);
+        setCurrentStep(0);
+        return;
+      }
+    }
+
     const currentPath = window.location.pathname;
     const tutorialMap: Record<string, string> = {
       '/dashboard': 'OVERVIEW',
@@ -370,18 +393,21 @@ export function useTutorial() {
         shouldStart: currentProgress < totalSteps && totalSteps > 0
       });
 
-              // 완료되지 않은 튜토리얼만 시작
-        if (currentProgress < totalSteps && totalSteps > 0) {
-          const delay = 0; // 즉시 표시
-          const timeoutId = setTimeout(() => {
-            if (!currentTutorial) { // 중복 실행 방지
-              startTutorial(tutorialType);
-            }
-          }, delay);
-          
-          return () => clearTimeout(timeoutId);
-        } else {
+      // 🚨 완료되지 않은 튜토리얼만 시작
+      if (currentProgress < totalSteps && totalSteps > 0) {
+        const delay = 0; // 즉시 표시
+        const timeoutId = setTimeout(() => {
+          if (!currentTutorial) { // 중복 실행 방지
+            startTutorial(tutorialType);
+          }
+        }, delay);
+        
+        return () => clearTimeout(timeoutId);
+      } else {
         console.log('✅ Tutorial already completed:', tutorialType);
+        // 🆕 완료된 튜토리얼은 currentTutorial을 null로 설정하여 오버레이 숨김
+        setCurrentTutorial(null);
+        setCurrentStep(0);
       }
     }
   }, [isLoading, progress, currentTutorial, startTutorial]);

@@ -13,7 +13,14 @@ const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
   title: "AI Trading Advisor",
-  description: "AI-powered trading platform"
+  description: "AI-powered trading platform",
+  icons: {
+    icon: "/favicon.ico",
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+      { url: "/apple-touch-icon-precomposed.png", sizes: "180x180", type: "image/png" }
+    ]
+  }
 }
 
 export default function RootLayout({
