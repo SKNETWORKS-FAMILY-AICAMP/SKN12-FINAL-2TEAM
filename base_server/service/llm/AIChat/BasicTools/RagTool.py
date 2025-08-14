@@ -599,7 +599,7 @@ class RagTool(BaseFinanceTool):
 
                 # 항목은 제목/출처/(옵션)날짜를 줄바꿈으로 구성하고, 항목 간에는 빈 줄 추가
                 formatted_lines.append(title)
-                formatted_lines.append(f"출처 : {source}")
+                formatted_lines.append(f"(출처 : {source})")
                 if date:
                     formatted_lines.append(f"날짜 : {date}")
                 formatted_lines.append("")
