@@ -586,15 +586,49 @@ class RagTool(BaseFinanceTool):
                 # 흔한 메타데이터 꼬리 제거
                 text = re.sub(r"(\\?\"metadata\\?\":.*)$", "", text)
                 text = re.sub(r"(Published on:.*)$", "", text, flags=re.IGNORECASE)
+                # 크롤러가 덧붙인 상세 메타 키들 잘라내기 (Date/URL/Content Type/Task ID/Collected At 이후는 제거)
+                text = re.split(r"\b(Date:|URL:|Content Type:|Task ID:|Collected At:)", text)[0]
+                # 설명성 문장 제거
+                text = re.sub(r"This is a financial news article about.*", "", text, flags=re.IGNORECASE)
                 # 공백 축소 및 양끝 따옴표 제거
                 text = re.sub(r"\s+", " ", text).strip().strip("'\"")
                 return text
+
+            # 품질 필터: 제목 없음/No title, 비정상 소스(s3://...), 내용이 지나치게 짧은 문서는 제외
+            filtered_docs: List[Dict[str, Any]] = []
+            for d in documents:
+                md = d.get("metadata", {})
+                title_candidate = (md.get("title_en") or d.get("title") or "").strip()
+                source_candidate = (d.get("source") or md.get("source") or "").strip()
+                content_candidate = (d.get("content") or "").strip()
+                if not title_candidate or title_candidate.lower() == "no title":
+                    continue
+                if source_candidate.startswith("s3://"):
+                    # 가능하면 URL에서 도메인 추출해서 대체
+                    url_val = (md.get("url") or "").strip()
+                    if url_val.startswith("http"):
+                        try:
+                            from urllib.parse import urlparse
+                            netloc = urlparse(url_val).netloc
+                            if netloc:
+                                d["source"] = netloc
+                        except Exception:
+                            pass
+                    else:
+                        # 소스가 비정상이면 제외
+                        continue
+                if len(content_candidate) < 5:
+                    continue
+                filtered_docs.append(d)
+
+            documents = filtered_docs
 
             for doc in documents:
                 md = doc.get("metadata", {})
                 raw_title = md.get("title_en") or (doc.get("title") or "")
                 title = _clean_text(raw_title)
-                source = (doc.get("source") or md.get("source") or "").strip() or "Unknown"
+                raw_source = (doc.get("source") or md.get("source") or "")
+                source = _clean_text(raw_source) or "Unknown"
                 date = (md.get("date") or md.get("published_at") or "").strip()
 
                 # 항목은 제목/출처/(옵션)날짜를 줄바꿈으로 구성하고, 항목 간에는 빈 줄 추가
