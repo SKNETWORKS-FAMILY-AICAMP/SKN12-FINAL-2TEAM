@@ -34,6 +34,7 @@ export default function DashboardPageClient() {
 
   // API가 설정되지 않았으면 다른 훅들을 실행하지 않음
   const { initWs, addSymbol, getStock, subscribeStore } = useNasdaqStocks();
+  /* ────────── 튜토리얼 훅 ────────── */
   const {
     currentTutorial, currentStep, currentStepInfo,
     nextStep, previousStep, skipTutorial,

@@ -292,27 +292,34 @@ export function useTutorial() {
 
     console.log('📝 Completing step:', currentTutorial, nextStepNumber, 'of', totalSteps);
 
-    // 프론트엔드 상태 즉시 업데이트
+    // 🚀 프론트엔드 상태 즉시 업데이트 (사용자 경험 향상)
+    if (nextStepNumber >= totalSteps) {
+      // 튜토리얼 완료
+      console.log('✅ Tutorial completed:', currentTutorial);
+      setCurrentTutorial(null);
+      setCurrentStep(0);
+    } else {
+      // 다음 스텝으로 즉시 이동
+      setCurrentStep(nextStepNumber);
+    }
+
+    // 프론트엔드 진행 상태 즉시 업데이트
     setProgress(prev => {
       const newProgress = { ...prev, [currentTutorial]: Math.max(prev[currentTutorial] || 0, nextStepNumber) };
       console.log('Updated frontend progress:', newProgress);
       return newProgress;
     });
 
-    // 백엔드에 저장
-    const success = await completeStep(currentTutorial, nextStepNumber);
-
-    if (success) {
-      if (nextStepNumber >= totalSteps) {
-        // 튜토리얼 완료
-        console.log('✅ Tutorial completed:', currentTutorial);
-        setCurrentTutorial(null);
-        setCurrentStep(0);
+    // 백엔드에 저장 (백그라운드에서 처리, 에러가 있어도 프론트엔드는 정상 작동)
+    completeStep(currentTutorial, nextStepNumber).then(success => {
+      if (success) {
+        console.log('✅ Backend save successful for step:', nextStepNumber);
       } else {
-        // 다음 스텝으로 이동
-        setCurrentStep(nextStepNumber);
+        console.warn('⚠️ Backend save failed for step:', nextStepNumber, 'but frontend continues');
       }
-    }
+    }).catch(error => {
+      console.error('❌ Backend save error for step:', nextStepNumber, error);
+    });
   }, [currentTutorial, currentStep, completeStep]);
 
   // 이전 스텝으로 이동
