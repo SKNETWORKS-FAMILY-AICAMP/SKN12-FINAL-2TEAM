@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import path from 'path';
 
 /** @type {import('next'). NextConfig} */
 const nextConfig = {
@@ -23,6 +24,12 @@ const nextConfig = {
   },
   // 웹팩 설정
   webpack: (config, { dev, isServer }) => {
+    // TypeScript alias 설정 (@ → 현재 디렉토리)
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@': path.resolve('.')
+    };
+    
     if (dev && !isServer) {
       // 개발 환경에서 HMR 최적화 (Next.js 기본 설정만 사용)
       config.watchOptions = {
