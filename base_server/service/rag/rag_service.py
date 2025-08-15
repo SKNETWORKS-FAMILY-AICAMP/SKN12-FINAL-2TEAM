@@ -778,8 +778,8 @@ class RagService:
                       query: str, 
                       top_k: Optional[int] = None, 
                       hybrid: bool = True,
-                      bm25_weight: float = 0.5,
-                      vector_weight: float = 0.5) -> List[Dict[str, Any]]:
+                      bm25_weight: float = 0.2,
+                      vector_weight: float = 0.2) -> List[Dict[str, Any]]:
         """
         하이브리드 검색 - BM25와 벡터 검색 결과 조합
         
@@ -878,69 +878,131 @@ class RagService:
 
     @classmethod
     async def _bm25_search_only(cls, query: str, k: int) -> List[Dict[str, Any]]:
-        """BM25 키워드 검색만 실행 - 크롤러 구조에 맞춤"""
+        """BM25 키워드 검색만 실행 - 크롤러 구조 및 OpenSearch 응답 형식 모두 지원"""
         try:
             Logger.debug(f"log.test rag.bm25.enter q='{query}' k={k}")
             from service.search.search_service import SearchService
-            
-            # 크롤러에서 저장한 OpenSearch 구조에 맞춤
+
+            # BM25 쿼리 작성
             search_query = {
                 "query": {
                     "multi_match": {
                         "query": query,
-                        "fields": ["title", "ticker", "source"],  # 크롤러 구조
+                        "fields": ["title", "ticker", "source"],
                         "type": "best_fields"
                     }
                 },
                 "size": k
             }
-            
-            # 크롤러가 실제로 사용하는 인덱스 이름으로 수정
+
+            # 검색 실행
             response = await SearchService.search("yahoo_finance_news", search_query)
-            
             if not response:
                 return []
-            
-            results = []
-            for hit in response.get("hits", {}).get("hits", []):
-                source_data = hit["_source"]
-                
-                # 크롤러 구조에서 title과 source 추출
-                title = source_data.get("title", "No title")
-                source = source_data.get("source", "unknown")
-                
-                # 크롤러 구조에 맞춰 메타데이터 구성
-                metadata = {
-                    "title": title,
-                    "source": source,
-                    "ticker": source_data.get("ticker", ""),
-                    "date": source_data.get("date", ""),
-                    "link": source_data.get("link", ""),
-                    "content_type": source_data.get("content_type", ""),
-                    "task_id": source_data.get("task_id", ""),
-                    "collected_at": source_data.get("collected_at", ""),
-                    "created_at": source_data.get("created_at", "")
-                }
-                
-                # 크롤러에서는 title이 실제 뉴스 제목이므로 content로 사용
-                content = title
-                
-                result = {
-                    "id": hit["_id"],
-                    "content": content,
-                    "metadata": metadata,
-                    "score": hit["_score"],
-                    "search_type": "bm25"
-                }
-                results.append(result)
-            
-            Logger.debug(f"log.test rag.bm25.ok results={len(results)}")
-            return results
-            
+
+            Logger.debug(f"BM25 검색 결과: {response}")
+
+            results: list[dict] = []
+
+            # 1) wrapper: response.response.hits.hits
+            hits = (((response.get("response") or {}).get("hits") or {}).get("hits"))
+            if isinstance(hits, list) and hits:
+                for hit in hits:
+                    src = hit.get("_source") or {}
+                    title = src.get("title") or "No title"
+                    source = src.get("source") or "unknown"
+
+                    metadata = {
+                        "title": title,
+                        "source": source,
+                        "ticker": src.get("ticker", ""),
+                        "date": src.get("date", ""),
+                        "link": src.get("link") or "",
+                        "content_type": src.get("content_type", ""),
+                        "task_id": src.get("task_id", ""),
+                        "collected_at": src.get("collected_at", ""),
+                        "created_at": src.get("created_at", "")
+                    }
+
+                    content = src.get("content") or title
+                    results.append({
+                        "id": hit.get("_id"),
+                        "content": content,
+                        "metadata": metadata,
+                        "score": hit.get("_score"),
+                        "search_type": "bm25"
+                    })
+                Logger.debug(f"log.test rag.bm25.ok results={len(results)}")
+                return results
+
+            # 2) documents 배열만 있는 경우
+            docs = response.get("documents")
+            if isinstance(docs, list) and docs:
+                for doc in docs:
+                    title = doc.get("title") or "No title"
+                    source = doc.get("source") or "unknown"
+
+                    metadata = {
+                        "title": title,
+                        "source": source,
+                        "ticker": doc.get("ticker", ""),
+                        "date": doc.get("date", ""),
+                        "link": doc.get("link") or "",
+                        "content_type": doc.get("content_type", ""),
+                        "task_id": doc.get("task_id", ""),
+                        "collected_at": doc.get("collected_at", ""),
+                        "created_at": doc.get("created_at", "")
+                    }
+
+                    content = doc.get("content") or title
+                    results.append({
+                        "id": doc.get("id") or doc.get("task_id") or title,
+                        "content": content,
+                        "metadata": metadata,
+                        "score": doc.get("score"),
+                        "search_type": "bm25"
+                    })
+                Logger.debug(f"log.test rag.bm25.ok results={len(results)}")
+                return results
+
+            # 3) OpenSearch 원본(top-level hits)
+            hits_top = (response.get("hits") or {}).get("hits")
+            if isinstance(hits_top, list) and hits_top:
+                for hit in hits_top:
+                    src = hit.get("_source") or {}
+                    title = src.get("title") or "No title"
+                    source = src.get("source") or "unknown"
+
+                    metadata = {
+                        "title": title,
+                        "source": source,
+                        "ticker": src.get("ticker", ""),
+                        "date": src.get("date", ""),
+                        "link": src.get("link") or "",
+                        "content_type": src.get("content_type", ""),
+                        "task_id": src.get("task_id", ""),
+                        "collected_at": src.get("collected_at", ""),
+                        "created_at": src.get("created_at", "")
+                    }
+
+                    content = src.get("content") or title
+                    results.append({
+                        "id": hit.get("_id"),
+                        "content": content,
+                        "metadata": metadata,
+                        "score": hit.get("_score"),
+                        "search_type": "bm25"
+                    })
+                return results
+
+            Logger.warning("BM25 응답에서 hits/documents를 찾지 못했습니다.")
+            return []
+
         except Exception as e:
             Logger.error(f"BM25 검색 실패: {e}")
             Logger.debug(f"log.test rag.bm25.fail err={str(e)}")
             return []
+
 
     @classmethod
     async def _vector_search_only(cls, query: str, k: int) -> List[Dict[str, Any]]:

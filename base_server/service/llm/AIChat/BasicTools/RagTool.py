@@ -488,7 +488,9 @@ class RagTool(BaseFinanceTool):
 
             # 결과 정규화 및 임계값 필터링
             documents = []
+            print("결과 확인하기 시작!")
             if results:
+                print(f"결과가 있습니다.{results}")
                 for idx, r in enumerate(results):
                     md = r.get("metadata", {})
                     score = float(r.get("score", 0.0))
