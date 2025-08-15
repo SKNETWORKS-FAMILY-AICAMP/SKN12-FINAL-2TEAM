@@ -1,80 +1,39 @@
-import 'dotenv/config';
-import path from 'path';
+// next.config.mjs
+import 'dotenv/config'
 
-/** @type {import('next'). NextConfig} */
+// 환경변수로 호스트 통일 (프론트 개발자안 유지)
+const HOSTNAME = process.env.HOSTNAME ?? '127.0.0.1'
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? `http://${HOSTNAME}:8000`
+
+/** @type {import('next').NextConfig} */
 const nextConfig = {
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  images: {
-    unoptimized: true,
-  },
-  // RSC 최적화 설정 (Next.js 15 호환)
+  reactStrictMode: true,
+
+  // ✅ 프론트 개발자안 유지: Fast Refresh / RSC 최적화 경로
   experimental: {
-    optimizePackageImports: [],
+    optimizePackageImports: ['@/components', '@/lib', '@/providers'],
   },
-  // 서버 외부 패키지 설정
-  serverExternalPackages: [],
-  // 개발 서버 설정
-  devIndicators: {
-    position: 'bottom-right',
-  },
-  // 웹팩 설정
-  webpack: (config, { dev, isServer }) => {
-    // TypeScript alias 설정 (@ → 현재 디렉토리)
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      '@': path.resolve('.')
-    };
-    
-    if (dev && !isServer) {
-      // 개발 환경에서 HMR 최적화 (Next.js 기본 설정만 사용)
-      config.watchOptions = {
-        poll: 1000,
-        aggregateTimeout: 300,
-      };
-    }
-    return config;
-  },
-  async headers() {
-    return [
-      {
-        source: '/api/:path*',
-        headers: [
-          {
-            key: 'Access-Control-Allow-Origin',
-            value: '*',
-          },
-          {
-            key: 'Access-Control-Allow-Methods',
-            value: 'GET, POST, PUT, DELETE, OPTIONS',
-          },
-          {
-            key: 'Access-Control-Allow-Headers',
-            value: 'Content-Type, Authorization, X-Requested-With',
-          },
-          {
-            key: 'Access-Control-Allow-Credentials',
-            value: 'true',
-          },
-        ],
-      },
-    ];
-  },
+
+  // ✅ 도커/환경별 프록시 주소를 환경변수 하나로 제어 (프론트 개발자안 유지)
   async rewrites() {
-    console.log("[NEXT.JS] API 프록시 설정 로드됨");
-    return [
-      // 모든 API 요청을 백엔드로 프록시
-      {
-        source: '/api/:path*',
-        destination: 'http://localhost:8000/api/:path*',
-      },
-    ];
+    return [{ source: '/api/:path*', destination: `${API_BASE}/api/:path*` }]
   },
-  // scroll-behavior 경고 해결
+
+  // ✅ 전역 CORS 헤더 금지 (프론트 개발자안 유지)
+  async headers() {
+    return [] // 필요하면 API 서버에서만 CORS 허용
+  },
+
+  // ✅ devServer/HMR 튜닝 금지 (프론트 개발자안 유지)
+  webpack(config) {
+    return config
+  },
+
+  // ⬇️ 도커 빌드 안정성/운영 편의 추가 (프론트 개발자안과 충돌 없음)
+  eslint: { ignoreDuringBuilds: true },
+  typescript: { ignoreBuildErrors: true },
+  images: { unoptimized: true },
+  serverExternalPackages: [],
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production',
   },

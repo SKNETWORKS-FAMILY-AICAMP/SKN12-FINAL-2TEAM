@@ -9,15 +9,15 @@
 }
 
 body {
-    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: 
+    font-family: var(--font-sans), 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    /* 커스텀 배경색은 주석 처리하여 shadcn CSS 변수 우선순위 확보 */
+    /* background: 
         radial-gradient(circle at 20% 80%, rgba(0, 100, 200, 0.1) 0%, transparent 50%),
         radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.05) 0%, transparent 50%),
         radial-gradient(circle at 40% 40%, rgba(0, 50, 150, 0.08) 0%, transparent 50%),
         linear-gradient(135deg, #0a0a0a 0%, #111111 25%, #0d0d0d 50%, #121212 75%, #0a0a0a 100%);
     background-size: 100% 100%, 100% 100%, 100% 100%, 100% 100%;
-    background-attachment: fixed;
-    color: #ffffff;
+    background-attachment: fixed; */
     line-height: 1.6;
     overflow-x: hidden;
     position: relative;
@@ -718,6 +718,7 @@ html {
 @layer base {
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-sans), 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
 }
 

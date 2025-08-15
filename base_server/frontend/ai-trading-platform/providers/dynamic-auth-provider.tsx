@@ -11,7 +11,14 @@ interface AuthProviderProps {
 export const DynamicAuthProvider = dynamic<AuthProviderProps>(
   () => import("@/providers/auth-provider").then(mod => mod.AuthProvider),
   {
-    ssr: false,
-    loading: () => <div className="h-screen w-full flex justify-center items-center"><p>Loading authentication...</p></div>,
+    ssr: true,
+    loading: () => (
+      <div className="h-screen w-full flex justify-center items-center bg-background">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-foreground">Loading authentication...</p>
+        </div>
+      </div>
+    ),
   },
 ) 
