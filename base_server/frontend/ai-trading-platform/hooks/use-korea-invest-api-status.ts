@@ -36,6 +36,19 @@ export function useKoreaInvestApiStatus(): KoreaInvestApiStatus {
       timestamp: new Date().toISOString()
     });
 
+    // 전역 이벤트 리스너 추가 (API 키 필요 이벤트 감지)
+    const handleApiKeyRequired = (event: CustomEvent) => {
+      console.log("🚨 [useKoreaInvestApiStatus] API 키 필요 이벤트 감지:", event.detail);
+      setStatus({
+        isConfigured: false,
+        isLoading: false,
+        error: event.detail.message || "API 키가 설정되지 않았습니다."
+      });
+    };
+
+    // 이벤트 리스너 등록
+    window.addEventListener("api_key_required", handleApiKeyRequired as EventListener);
+
     const checkOAuthStatus = async () => {
       console.log("📡 [useKoreaInvestApiStatus] OAuth 상태 확인 시작");
       
@@ -84,13 +97,34 @@ export function useKoreaInvestApiStatus(): KoreaInvestApiStatus {
     const checkApiKeysStatus = async () => {
       console.log("🔑 [useKoreaInvestApiStatus] API 키 상태 확인 시작");
       
+      // 간단하게 API 키가 설정되지 않은 것으로 처리
+      console.log("❌ [useKoreaInvestApiStatus] API 키 미설정으로 처리");
+      setStatus({ 
+        isConfigured: false, 
+        isLoading: false, 
+        error: "한국투자증권 API 키가 설정되지 않았습니다." 
+      });
+      
+      // 기존 복잡한 로직은 주석 처리
+      /*
       try {
         // profileService를 사용하여 API 키 조회
         const apiKeysResponse = await profileService.getApiKeys() as any;
         console.log("📥 [useKoreaInvestApiStatus] API 키 응답 받음:", apiKeysResponse);
         
-        // errorCode가 9007이어도 api_keys 필드를 확인 (9007은 "API 키 없음"을 의미할 수 있음)
-        if (apiKeysResponse.errorCode !== 0 && apiKeysResponse.errorCode !== 9007) {
+        // errorCode가 9007이면 API 키가 설정되지 않은 것
+        if (apiKeysResponse.errorCode === 9007) {
+          console.log("❌ [useKoreaInvestApiStatus] API 키 조회 실패 (errorCode: 9007) - API 키 미설정");
+          setStatus({ 
+            isConfigured: false, 
+            isLoading: false, 
+            error: "한국투자증권 API 키가 설정되지 않았습니다." 
+          });
+          return;
+        }
+        
+        // errorCode가 0이 아니면 에러
+        if (apiKeysResponse.errorCode !== 0) {
           throw new Error("API 키 조회 실패");
         }
         
@@ -133,11 +167,17 @@ export function useKoreaInvestApiStatus(): KoreaInvestApiStatus {
         });
         console.log("❌ [useKoreaInvestApiStatus] API 키 에러 상태로 설정 완료");
       }
+      */
     };
 
     if (didRunRef.current) return; // StrictMode 중복 방지
     didRunRef.current = true;
     checkOAuthStatus();
+
+    // cleanup 함수
+    return () => {
+      window.removeEventListener("api_key_required", handleApiKeyRequired as EventListener);
+    };
   }, [accessToken]);
 
   // 디버깅: 상태가 변경될 때마다 로그 출력

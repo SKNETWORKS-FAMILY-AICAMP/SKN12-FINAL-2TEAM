@@ -11,10 +11,56 @@ import { StockScreener } from "@/components/market/stock-screener"
 import { MarketNews } from "@/components/market/market-news"
 import { TechnicalAnalysis } from "@/components/market/technical-analysis"
 import { TrendingUp, Search, Globe, Newspaper, BarChart3, Filter } from "lucide-react"
+import { useKoreaInvestApiStatus } from "@/hooks/use-korea-invest-api-status"
+import KoreaInvestApiRequired from "@/components/KoreaInvestApiRequired"
 
 export default function MarketPage() {
   const [activeTab, setActiveTab] = useState("overview")
   const [searchQuery, setSearchQuery] = useState("")
+  // const { isConfigured, isLoading, error } = useKoreaInvestApiStatus()
+  
+  // 임시로 API 키 미설정 상태로 설정
+  const isConfigured = false;
+  const isLoading = false;
+  const error = null; // error를 null로 설정하여 error 조건이 실행되지 않도록 함
+
+  // 로딩 상태 처리
+  if (isLoading) {
+    return (
+      <div className="min-h-screen w-full bg-gradient-to-br from-black via-gray-900 to-gray-820 text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-gray-300">API 설정 상태를 확인하는 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 에러 상태 처리
+  if (error) {
+    return (
+      <div className="min-h-screen w-full bg-gradient-to-br from-black via-gray-900 to-gray-820 text-white flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-400 mb-4">오류가 발생했습니다: {error}</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors"
+          >
+            다시 시도
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // API가 설정되지 않은 경우
+  if (!isConfigured) {
+    return (
+      <div className="min-h-screen w-full bg-gradient-to-br from-black via-gray-900 to-gray-820 text-white">
+        <KoreaInvestApiRequired pageType="dashboard" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">

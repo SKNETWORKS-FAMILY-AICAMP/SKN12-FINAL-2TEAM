@@ -21,7 +21,21 @@ const PORTF = ["005930", "000660", "051910"];
 
 export default function DashboardPageClient() {
   const { accessTokenReady } = useAuth();
-  const { isConfigured, isLoading, error } = useKoreaInvestApiStatus();
+  // const { isConfigured, isLoading, error } = useKoreaInvestApiStatus();
+  
+  // 임시로 API 키 미설정 상태로 설정
+  const isConfigured = false;
+  const isLoading = false;
+  const error = null; // error를 null로 설정하여 error 조건이 실행되지 않도록 함
+
+  // 디버깅: 현재 상태 출력
+  console.log("🔍 [DashboardPageClient] 디버깅 정보:", {
+    isConfigured,
+    isLoading,
+    error,
+    isConfiguredType: typeof isConfigured,
+    isConfiguredValue: isConfigured
+  });
 
   // API가 설정되지 않았으면 다른 훅들을 실행하지 않음
   const { initWs, addSymbol, getStock, subscribeStore } = useNasdaqStocks();
@@ -106,6 +120,7 @@ export default function DashboardPageClient() {
 
   // 한국투자증권 API 설정이 안 되어 있다면 설명 페이지 표시
   if (isLoading) {
+    console.log("🔍 [DashboardPageClient] isLoading 조건 실행됨");
     return (
       <div className="min-h-screen w-full bg-gradient-to-br from-black via-gray-900 to-gray-820 text-white flex items-center justify-center">
         <div className="text-center">
@@ -117,6 +132,7 @@ export default function DashboardPageClient() {
   }
 
   if (error) {
+    console.log("🔍 [DashboardPageClient] error 조건 실행됨");
     return (
       <div className="min-h-screen w-full bg-gradient-to-br from-black via-gray-900 to-gray-820 text-white flex items-center justify-center">
         <div className="text-center">
@@ -133,12 +149,15 @@ export default function DashboardPageClient() {
   }
 
   if (!isConfigured) {
+    console.log("🔍 [DashboardPageClient] !isConfigured 조건 실행됨 - KoreaInvestApiRequired 렌더링");
     return (
       <div className="w-full bg-gradient-to-br from-black via-gray-900 to-gray-820 text-white">
         <KoreaInvestApiRequired pageType="dashboard" />
       </div>
     );
   }
+
+  console.log("🔍 [DashboardPageClient] 정상 대시보드 렌더링");
 
   /* ────────── UI ────────── */
   return (

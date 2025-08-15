@@ -15,7 +15,12 @@ import KoreaInvestApiRequired from "@/components/KoreaInvestApiRequired";
 export default function PortfolioPage() {
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { isConfigured, isLoading, error } = useKoreaInvestApiStatus();
+  // const { isConfigured, isLoading, error } = useKoreaInvestApiStatus();
+  
+  // 임시로 API 키 미설정 상태로 설정
+  const isConfigured = false;
+  const isLoading = false;
+  const error = null; // error를 null로 설정하여 error 조건이 실행되지 않도록 함
   
   // API가 설정되지 않았으면 다른 훅들을 실행하지 않음
   const {

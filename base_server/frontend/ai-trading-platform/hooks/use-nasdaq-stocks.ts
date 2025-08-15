@@ -200,6 +200,27 @@ async function fetchRestPrice(sym: string) {
     const errCode = Number(d?.errorCode ?? 0);
     if (Number.isFinite(errCode) && errCode !== 0) {
       console.error("[REST] 업무 실패", d);
+      
+      // API 키 관련 에러(9007)인 경우 전역 상태 업데이트
+      if (errCode === 9007) {
+        console.warn("[REST] API 키 설정 필요 (errorCode: 9007)");
+        
+        // 전역 이벤트 발생으로 API 키 설정 상태 업데이트
+        if (typeof window !== "undefined") {
+          // API 키 설정 필요 이벤트 발생
+          window.dispatchEvent(new CustomEvent("api_key_required", { 
+            detail: { 
+              errorCode: 9007, 
+              message: "API 키가 설정되지 않았습니다. 설정 페이지에서 API 키를 등록해주세요." 
+            } 
+          }));
+          
+          // StockInfoStore 초기화 (API 키 없이는 데이터를 표시할 수 없음)
+          StockInfoStore.clear();
+          console.log("[REST] API 키 없음으로 인한 스토어 초기화 완료");
+        }
+      }
+      
       return;
     }
 
