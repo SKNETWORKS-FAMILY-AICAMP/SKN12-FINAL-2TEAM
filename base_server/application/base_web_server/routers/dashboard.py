@@ -81,24 +81,17 @@ async def dashboard_oauth(
     """OAuth 인증"""
     print(f"📥 OAuth body received: {request.model_dump_json()}")
 
-    # 바디에서 accessToken 사용
-    payload = request.model_dump()
-    access_token = payload.get("accessToken")
-
-    print(f"🔑 accessToken: {access_token}")
-
-    # IP 추출
     ip = req.headers.get("X-Forwarded-For")
     if not ip:
         ip = req.client.host
     else:
-        ip = ip.split(",")[0]
+        ip = ip.split(", ")[0]
 
     return await TemplateService.run_user(
         req.method,
         req.url.path,
         ip,
-        json.dumps(payload, ensure_ascii=False),
+        request.model_dump_json(),
         dashboard_protocol.dashboard_oauth_req_controller
     )
 
@@ -111,24 +104,17 @@ async def dashboard_price_us(
     """미국 나스닥 종가 조회"""
     print(f"📥 미국 종가 요청: {request.model_dump_json()}")
 
-    # 바디에서 accessToken 사용
-    payload = request.model_dump()
-    access_token = payload.get("accessToken")
-
-    print(f"🔑 accessToken: {access_token}")
-
-    # IP 추출
     ip = req.headers.get("X-Forwarded-For")
     if not ip:
         ip = req.client.host
     else:
-        ip = ip.split(",")[0]
+        ip = ip.split(", ")[0]
 
     return await TemplateService.run_user(
         req.method,
         req.url.path,
         ip,
-        json.dumps(payload, ensure_ascii=False),
+        request.model_dump_json(),
         dashboard_protocol.dashboard_price_us_req_controller
     )
 
@@ -142,23 +128,16 @@ async def stock_recommendation(
     print(f"📥 주식 추천 요청: {request.model_dump_json()}")
     print(f"🎯 시장: {request.market}, 전략: {request.strategy}")
 
-    # 바디에서 accessToken 사용
-    payload = request.model_dump()
-    access_token = payload.get("accessToken")
-
-    print(f"🔑 accessToken: {access_token}")
-
-    # IP 추출
     ip = req.headers.get("X-Forwarded-For")
     if not ip:
         ip = req.client.host
     else:
-        ip = ip.split(",")[0]
+        ip = ip.split(", ")[0]
 
     return await TemplateService.run_user(
         req.method,
         req.url.path,
         ip,
-        json.dumps(payload, ensure_ascii=False),
+        request.model_dump_json(),
         dashboard_protocol.stock_recommendation_req_controller
     )

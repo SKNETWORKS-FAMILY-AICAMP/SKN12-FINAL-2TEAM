@@ -62,8 +62,9 @@ class SecuritiesLoginResponse(BaseResponse):
 
 class PriceRequest(BaseRequest):
     accessToken: str = ""  # 사용자 accessToken
-    appkey: str         # 한국투자증권 AppKey
+    appkey: Optional[str] = None         # 한국투자증권 AppKey (옵션)
     ticker: str         # 조회할 종목 코드 (예: "005930")
+    kisToken: Optional[str] = None       # KIS 토큰 (옵션)
 
 class PriceResponse(BaseResponse):
     ticker: str
@@ -85,5 +86,5 @@ class StockRecommendationRequest(BaseRequest):
 class StockRecommendationResponse(BaseResponse):
     """주식 종목 추천 응답"""
     result: str
-    recommendations: List[Dict[str, Any]] = []
+    recommendations: List[Dict[str, Any]] = []  # [{date,ticker,reason,report,color?}]
     message: str = ""

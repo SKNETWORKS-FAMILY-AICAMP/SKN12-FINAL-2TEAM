@@ -14,30 +14,28 @@ type Props = {
 };
 
 export default function TickerItem({ symbol, autoSubscribe = true, intervalMs = 1000, subscribeDelayMs = 0 }: Props) {
-  const { addSymbol } = useNasdaqStocks();
+  const { addSymbol, requestPrice, subscribeStore } = useNasdaqStocks();
   const [data, setData] = useState(() => StockInfoStore.get(symbol)); // 초기 스냅샷
 
-  // 1) (선택) 심볼 한 번 구독
+  // 1) (선택) 심볼 한 번 구독 + 초기 REST 요청을 전역 큐에 등록(0.5초 간격 직렬 처리)
   useEffect(() => {
     if (!autoSubscribe) return;
     const id = window.setTimeout(() => {
       addSymbol(symbol);
+      requestPrice(symbol);
     }, Math.max(0, subscribeDelayMs));
     return () => window.clearTimeout(id);
-  }, [symbol, autoSubscribe, addSymbol, subscribeDelayMs]);
+  }, [symbol, autoSubscribe, addSymbol, requestPrice, subscribeDelayMs]);
 
-  // 2) 1초마다 전역 스토어에서 폴링
+  // 2) 이벤트 기반 업데이트로 전환 (폴링 제거)
   useEffect(() => {
     if (typeof window === "undefined") return;
-    // 즉시 1회 갱신
     setData(StockInfoStore.get(symbol));
-
-    const id = setInterval(() => {
+    const unsub = subscribeStore(() => {
       setData(StockInfoStore.get(symbol));
-    }, Math.max(250, intervalMs)); // 최소 250ms 안전장치
-
-    return () => clearInterval(id);
-  }, [symbol, intervalMs]);
+    });
+    return () => { if (typeof unsub === "function") unsub(); };
+  }, [symbol, subscribeStore]);
 
   // 렌더 로깅(원하면 유지)
   console.log(
@@ -69,7 +67,7 @@ export default function TickerItem({ symbol, autoSubscribe = true, intervalMs = 
     : pctNum < 0 ? "text-blue-400"
     : "text-gray-400";
 
-  const sign = !data ? "" : pctNum > 0 ? "▲" : pctNum < 0 ? "▼" : "-";
+  const sign = !data ? "" : pctNum >= 0 ? "▲" : pctNum < 0 ? "▼" : "-";
 
   return (
     <div className="ticker-item">

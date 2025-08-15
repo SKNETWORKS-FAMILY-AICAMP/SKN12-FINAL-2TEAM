@@ -1,7 +1,10 @@
-from datetime import datetime
+from datetime import datetime, timezone
+import traceback
 
 import aiohttp
+from typing import Any
 from template.base.base_template import BaseTemplate
+from template.base.template_config import AppConfig
 from template.dashboard.common.dashboard_serialize import (
     DashboardMainRequest, DashboardMainResponse,
     DashboardAlertsRequest, DashboardAlertsResponse,
@@ -13,10 +16,22 @@ from template.dashboard.common.dashboard_serialize import (
 from template.dashboard.common.dashboard_model import AssetSummary, StockHolding, MarketAlert, MarketOverview
 from service.service_container import ServiceContainer
 from service.core.logger import Logger
+from service.llm.AIChat.BasicTools.NewsTool import NewsTool
+from service.llm.AIChat.BasicTools.MarketDataTool import MarketDataTool
+import os, re, json, asyncio, uuid, time
 
 class DashboardTemplateImpl(BaseTemplate):
     def __init__(self):
         super().__init__()
+        self.app_config: AppConfig | None = None
+
+    def init(self, config: AppConfig):
+        # 템플릿 초기화 시 전체 앱 설정 보관
+        try:
+            self.app_config = config
+            Logger.info("DashboardTemplateImpl initialized with AppConfig")
+        except Exception as e:
+            Logger.warn(f"DashboardTemplateImpl init: failed to set app_config: {e}")
 
     async def on_dashboard_main_req(self, client_session, request: DashboardMainRequest):
         """대시보드 메인 데이터 요청 처리"""
@@ -498,7 +513,7 @@ class DashboardTemplateImpl(BaseTemplate):
                     )
 
         except Exception as e:
-            Logger.error(f"🔥 시세 조회 예외 발생: {e}", exc_info=True)
+            Logger.error(f"🔥 시세 조회 예외 발생: {e}\n{traceback.format_exc()}")
             return PriceResponse(
                 result="fail",
                 message=f"서버 오류: {str(e)}",
@@ -512,104 +527,557 @@ class DashboardTemplateImpl(BaseTemplate):
             )
 
     async def on_stock_recommendation_req(self, client_session, request: StockRecommendationRequest):
-        """주식 종목 추천 요청 처리 (매개변수 2개만 사용)"""
-        Logger.info(f"📥 주식 추천 요청: {request.model_dump_json()}")
-        Logger.info(f"🎯 시장: {request.market}, 전략: {request.strategy}")
+        """AIChat 의존 없이 동작하는 종목 추천 파이프라인 (뉴스/거시/재무 직접 호출)
 
-        response = StockRecommendationResponse()
+        단계:
+        1) 스타일별 후보 티커 목록 준비(기본 내장, 필요 시 환경/요청에 따라 확장)
+        2) 각 티커 최신 뉴스(GNews) 수집
+        3) 거시지표(FRED: S&P500, NASDAQ, VIX) 수집 및 요약
+        4) (옵션) FMP 재무지표 일부 조회해 힌트로 활용
+        5) 단독 LLM(ChatOpenAI)로 상위 3개 선별→최종 1개 선정(없으면 휴리스틱)
+        6) {date,ticker,reason,report} 형식으로 반환
+        """
+        # ── DEBUG helpers ───────────────────────────────────────────
+        TRACE_ID = getattr(request, "trace_id", None) or uuid.uuid4().hex[:8]
+        DEBUG = bool(getattr(request, "debug", False) or os.getenv("DEBUG_STOCK_REC", "0") == "1")
+        MAX_LOG = int(os.getenv("STOCK_REC_MAX_LOG_CHARS", "1200"))
+
+        def clip(s: str, n: int = MAX_LOG) -> str:
+            if not isinstance(s, str):
+                try:
+                    s = str(s)
+                except Exception:
+                    return "<non-str>"
+            return s if len(s) <= n else f"{s[:n]} … <clipped {len(s)-n} chars>"
+
+        _SECRET_PAT = re.compile(r"(sk-[A-Za-z0-9]{10,}|api[_-]?key\s*=\s*['\"][^'\"]+['\"])", flags=re.IGNORECASE)
+
+        def redact(s: str) -> str:
+            return _SECRET_PAT.sub("***REDACTED***", s or "")
+
+        def dbg(msg: str, **kw):
+            if DEBUG:
+                extra = f" | {kw}" if kw else ""
+                Logger.debug(f"[stock-rec][{TRACE_ID}] {msg}{extra}")
+
+        def step_timer():
+            t0 = time.perf_counter()
+            return lambda name: (name, time.perf_counter() - t0)
+
+        Logger.info(f"📥 주식 추천 요청(standalone): {request.model_dump_json()}")
+
+        response = StockRecommendationResponse(result="pending", recommendations=[], message="")
         response.sequence = request.sequence
 
+        tick = step_timer()
+        timings = {}
+
         try:
-            account_db_key = client_session.session.account_db_key
-            shard_id = client_session.session.shard_id
-            
-            db_service = ServiceContainer.get_database_service()
-            
-            # 1. 주식 종목 추천 데이터 조회 (예시 데이터)
-            # 실제로는 fp_get_stock_recommendations 프로시저가 필요
-            recommendations = []
-            
-            if request.market == "KOSPI":
-                if request.strategy == "MOMENTUM":
-                    recommendations = [
-                        {
-                            "symbol": "005930",
-                            "name": "삼성전자",
-                            "price": 75000,
-                            "change_pct": 2.5,
-                            "reason": "모멘텀 상승, 기술적 지표 양호"
-                        },
-                        {
-                            "symbol": "000660",
-                            "name": "SK하이닉스",
-                            "price": 145000,
-                            "change_pct": 1.8,
-                            "reason": "반도체 업종 회복세"
-                        }
-                    ]
-                elif request.strategy == "VALUE":
-                    recommendations = [
-                        {
-                            "symbol": "051910",
-                            "name": "LG화학",
-                            "price": 520000,
-                            "change_pct": -0.5,
-                            "reason": "저평가, 배당률 우수"
-                        }
-                    ]
-                elif request.strategy == "GROWTH":
-                    recommendations = [
-                        {
-                            "symbol": "207940",
-                            "name": "삼성바이오로직스",
-                            "price": 850000,
-                            "change_pct": 3.2,
-                            "reason": "바이오 신약 파이프라인 확대"
-                        }
-                    ]
-            
-            elif request.market == "KOSDAQ":
-                if request.strategy == "MOMENTUM":
-                    recommendations = [
-                        {
-                            "symbol": "035420",
-                            "name": "NAVER",
-                            "price": 185000,
-                            "change_pct": 1.5,
-                            "reason": "AI 기술 개발 가속화"
-                        }
-                    ]
-            
-            elif request.market == "NASDAQ":
-                if request.strategy == "MOMENTUM":
-                    recommendations = [
-                        {
-                            "symbol": "AAPL",
-                            "name": "Apple Inc.",
-                            "price": 175.50,
-                            "change_pct": 1.2,
-                            "reason": "iPhone 15 시리즈 판매 호조"
-                        },
-                        {
-                            "symbol": "MSFT",
-                            "name": "Microsoft Corporation",
-                            "price": 380.25,
-                            "change_pct": 0.8,
-                            "reason": "클라우드 서비스 성장"
-                        }
-                    ]
-            
+            # AppConfig 우선 → 환경변수 폴백 방식으로 API 키 확보 및 LLM 직접 구성
+            def get_key(name: str) -> str:
+                try:
+                    if self.app_config and getattr(self.app_config, "llmConfig", None):
+                        val = self.app_config.llmConfig.API_Key.get(name)
+                        if val:
+                            return val
+                except Exception:
+                    pass
+                return os.getenv(name, "")
+
+            llm = None
+            try:
+                from langchain_openai import ChatOpenAI  # type: ignore
+                # 기본값
+                openai_key: str | None = os.getenv("OPENAI_API_KEY") or None
+                openai_model: str | None = os.getenv("OPENAI_MODEL") or None
+                base_url: str | None = None
+                temperature = 0.2
+                timeout = 30
+
+                # AppConfig 기반 설정 우선
+                if self.app_config and getattr(self.app_config, "llmConfig", None):
+                    try:
+                        prov_id = self.app_config.llmConfig.default_provider
+                        prov = self.app_config.llmConfig.providers.get(prov_id)
+                        if prov:
+                            openai_key = openai_key or prov.api_key
+                            openai_model = "gpt-4o-mini"
+                            base_url = getattr(prov, "base_url", None) or base_url
+                            if isinstance(prov.temperature, (int, float)) and prov.temperature is not None:
+                                temperature = float(prov.temperature)
+                            if isinstance(prov.timeout, int) and prov.timeout is not None:
+                                timeout = int(prov.timeout)
+                    except Exception:
+                        pass
+
+                # 최종 키 확인 후 LLM 생성 (파라미터명은 기존 서비스 구현과 동일하게 openai_api_key 사용)
+                if openai_key:
+                    if base_url:
+                        llm = ChatOpenAI(model=openai_model or "gpt-4o-mini", temperature=temperature, timeout=timeout, openai_api_key=openai_key, base_url=base_url)
+                    else:
+                        llm = ChatOpenAI(model=openai_model or "gpt-4o-mini", temperature=temperature, timeout=timeout, openai_api_key=openai_key)
+            except Exception:
+                llm = None
+
+            NEWSAPI_KEY = get_key("NEWSAPI_KEY")
+            FMP_API_KEY = get_key("FMP_API_KEY")
+            FRED_API_KEY = get_key("FRED_API_KEY")
+
+            market = (request.market or "NASDAQ").upper()
+            today = datetime.now(timezone.utc).date().isoformat()
+
+            # ── 1) 후보 티커 (LLM으로 카테고리별 10개 생성) ───────────
+            styles = ["CONSERVATIVE", "GROWTH", "VALUE"]
+            prompts = ["주식 시장을 분석하는 전문 애널리스트입니다. 저는 변동성이 낮고 꾸준한 수익을 기대할 수 있는 안정적인(Conservative) 투자","혁신 기술과 미래 산업 트렌드를 분석하는 전문 벤처 캐피탈리스트입니다. 저는 단기적인 변동성을 감수하더라도 높은 자본 수익률을 목표로 하는 성장주(Growth Stock)에 투자","워렌 버핏의 투자 철학을 따르는 가치 투자 전문가입니다. 저는 현재 기업의 내재 가치에 비해 저평가되어 있는 가치주(Value Stock)를 발굴하여 장기적인 관점에서 투자"]
+            style_to_tickers: dict[str, list[str]] = {}
+
+            # 심볼 검증: AAPL, MSFT, BRK.B 등 허용
+            _SYMBOL_RE = re.compile(r'^[A-Z]{1,5}(?:\.[A-Z]{1,2})?$')
+            # "tickers": [ ... ] 블록을 넓게 잡아 추출
+            _TICKERS_BLOCK_RE = re.compile(r'"tickers"\s*:\s*\[(.*?)\]', re.S | re.I)
+
+            def _strip_code_fences(s: str) -> str:
+                # ```json ... ``` 혹은 ``` ... ``` 제거
+                m = re.findall(r"```(?:json)?\s*(.*?)\s*```", s, flags=re.S | re.I)
+                return m[0] if m else s
+
+            def _try_json(s: str):
+                try:
+                    return json.loads(s)
+                except Exception:
+                    return None
+
+            def parse_ticker_list(raw: Any) -> list[str]:
+                """
+                LLM 응답이 문자열/딕셔너리/메시지객체(out.content 보유) 등 어떤 형태든
+                tickers를 최대 10개까지 정제해 반환.
+                """
+                # 0) 메시지 객체에서 content 우선 추출
+                if hasattr(raw, "content"):
+                    raw = getattr(raw, "content") or raw
+                # 1) 딕셔너리면 바로 접근
+                if isinstance(raw, dict):
+                    arr = raw.get("tickers")
+                    return _normalize_tickers(arr)
+
+                # 2) 문자열로 캐스팅
+                s = str(raw)
+
+                # 3) 코드펜스 제거 후 JSON 시도
+                s_clean = _strip_code_fences(s).strip()
+                obj = _try_json(s_clean)
+                if isinstance(obj, dict) and isinstance(obj.get("tickers"), list):
+                    return _normalize_tickers(obj["tickers"])
+
+                # 4) 원문 전체를 JSON으로도 시도 (일부 모델이 코드펜스 없이 순수 JSON을 줄 때)
+                obj2 = _try_json(s)
+                if isinstance(obj2, dict) and isinstance(obj2.get("tickers"), list):
+                    return _normalize_tickers(obj2["tickers"])
+
+                # 5) 정규식으로 "tickers":[ ... ] 블록에서 후보 추출
+                m = _TICKERS_BLOCK_RE.search(s)
+                if m:
+                    inside = m.group(1).upper()
+                    # 따옴표 유무/쉼표/공백 섞여도 심볼 패턴으로 걸러냄
+                    candidates = re.findall(r'[A-Z]{1,5}(?:\.[A-Z]{1,2})?', inside)
+                    if candidates:
+                        return _normalize_tickers(candidates)
+
+                # 6) 마지막 안전망: 본문 전체에서 심볼 패턴 스캔
+                candidates = re.findall(r'[A-Z]{1,5}(?:\.[A-Z]{1,2})?', s.upper())
+                return _normalize_tickers(candidates)
+
+            def _normalize_tickers(arr, limit: int = 10) -> list[str]:
+                if not isinstance(arr, list):
+                    return []
+                out: list[str] = []
+                seen = set()
+                for t in arr:
+                    if not isinstance(t, str):
+                        continue
+                    sym = t.strip().upper()
+                    if not sym or not _SYMBOL_RE.fullmatch(sym):
+                        continue
+                    if sym in seen:
+                        continue
+                    seen.add(sym)
+                    out.append(sym)
+                    if len(out) >= limit:
+                        break
+                return out
+
+
+            for style, prompt in zip(styles, prompts):
+                tickers: list[str] = []
+                # 1-a) OpenAI Responses API + web_search_preview 우선 시도
+                try:
+                    from openai import OpenAI  # type: ignore
+                    # OpenAI 키/엔드포인트 재구성 (AppConfig 우선 → env 폴백)
+                    openai_key_cfg = os.getenv("OPENAI_API_KEY") or None
+                    openai_model_cfg = os.getenv("OPENAI_SEARCH_MODEL") or None
+                    base_url_cfg: str | None = None
+                    if self.app_config and getattr(self.app_config, "llmConfig", None):
+                        prov_id = self.app_config.llmConfig.default_provider
+                        prov = self.app_config.llmConfig.providers.get(prov_id)
+                        if prov:
+                            openai_key_cfg = openai_key_cfg or prov.api_key
+                            base_url_cfg = getattr(prov, "base_url", None) or base_url_cfg
+                    # 검색 지원 모델 기본값
+                    search_model = openai_model_cfg or os.getenv("OPENAI_MODEL_SEARCH_DEFAULT", "gpt-4.1")
+                    if openai_key_cfg:
+                        client = OpenAI(api_key=openai_key_cfg, base_url=base_url_cfg)
+                        prompt_tickers_ws = (
+                            f"You are a professional equity analyst. Using up-to-date web search, "
+                            f"select 10 promising US {market} tickers for the category {style}. "
+                            'Return strictly JSON only: {{"tickers":["AAPL", ...]}} with UPPERCASE tickers. '
+                            "Do not include any explanation. Consider liquidity and recency."
+                        )
+                        ws = client.responses.create(
+                            model=search_model,
+                            tools=[{"type": "web_search_preview"}],
+                            tool_choice={"type": "web_search_preview"},
+                            input=prompt_tickers_ws,
+                        )
+                        # 안전 출력 추출
+                        raw = getattr(ws, "output_text", None)
+                        if not raw:
+                            try:
+                                # fallback: responses.output -> first message
+                                outputs = getattr(ws, "output", [])
+                                if outputs:
+                                    for item in outputs:
+                                        if getattr(item, "type", "") == "message":
+                                            contents = getattr(item, "content", [])
+                                            for c in contents:
+                                                if getattr(c, "type", "") == "output_text":
+                                                    raw = getattr(c, "text", None)
+                                                    if raw:
+                                                        break
+                                            if raw:
+                                                break
+                            except Exception:
+                                raw = None
+                        if isinstance(raw, str) and raw.strip():
+                            tickers = parse_ticker_list(raw)
+                except Exception:
+                    pass
+
+                # 1-b) LangChain LLM 폴백
+                if not tickers and llm is not None:
+                    try:
+                        prompt_tickers = (
+                            f"다음 카테고리({style})에 적합한 미국 나스닥에 유망 티커 10개를 선택. "
+                            f"{prompt}하기 좋은 주식 시장을 분석하고, 유망 티커 10개를 선택하고 "
+                            '오직 JSON으로만 응답하라. 형식: {{"tickers":["AAPL", ...]}}'
+                        )
+                        print(f"llm이 시도 한다.")
+                        out = llm.invoke(prompt_tickers)
+                        print(f"llm이 이렇게 말함. : -- {out}")
+                        tickers = parse_ticker_list(out)
+                    except Exception:
+                        tickers = []
+
+                # LLM 실패/미사용 시 간단 폴백(최소 동작 보장)
+                if not tickers:
+                    fallback: dict[str, list[str]] = {
+                        "CONSERVATIVE": ["AAPL", "MSFT", "GOOGL", "AVGO", "COST", "PEP", "KO", "JNJ", "PG", "V"],
+                        "GROWTH": ["NVDA", "TSLA", "AMD", "SMCI", "PLTR", "SHOP", "MDB", "CRWD", "SNOW", "NET"],
+                        "VALUE": ["AMZN", "META", "NFLX", "ADBE", "INTC", "ORCL", "CSCO", "IBM", "QCOM", "TXN"],
+                    }
+                    print("LLM 실패/미사용 시 간단 폴백")
+                    tickers = fallback.get(style, [])[:10]
+
+                style_to_tickers[style] = tickers
+            timings["step1_candidates"] = tick("step1_candidates")[1]
+            tick = step_timer()
+
+            # ── helpers: 외부호출 ─────────────────────────────────
+            async def fetch_gnews(query: str, k: int = 5) -> list[dict]:
+                if not NEWSAPI_KEY:
+                    return []
+                url = "https://gnews.io/api/v4/search"
+                params = {"q": query, "lang": "en", "token": NEWSAPI_KEY, "max": k}
+                try:
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(url, params=params, timeout=10) as resp:
+                            if resp.status != 200:
+                                return []
+                            data = await resp.json()
+                            articles = data.get("articles", [])
+                            out = []
+                            for a in articles:
+                                out.append({
+                                    "title": a.get("title", ""),
+                                    "url": a.get("url", ""),
+                                    "date": (a.get("publishedAt", "") or "")[:10],
+                                })
+                            return out
+                except Exception:
+                    return []
+
+            async def fetch_fred_latest(series_id: str) -> float:
+                if not FRED_API_KEY:
+                    return 0.0
+                url = "https://api.stlouisfed.org/fred/series/observations"
+                params = {
+                    "series_id": series_id,
+                    "api_key": FRED_API_KEY,
+                    "file_type": "json",
+                    "sort_order": "desc",
+                    "limit": 1,
+                }
+                try:
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(url, params=params, timeout=10) as resp:
+                            if resp.status != 200:
+                                return 0.0
+                            data = await resp.json()
+                            obs = (data.get("observations") or [])
+                            if not obs:
+                                return 0.0
+                            v = obs[0].get("value")
+                            try:
+                                return float(v)
+                            except Exception:
+                                return 0.0
+                except Exception:
+                    return 0.0
+
+            async def fetch_fmp_metrics(ticker: str) -> dict:
+                if not FMP_API_KEY:
+                    return {}
+                base = "https://financialmodelingprep.com/api/v3"
+                params = {"apikey": FMP_API_KEY, "period": "annual", "limit": 4}
+                endpoints = [
+                    (f"{base}/key-metrics/{ticker}", {}),
+                    (f"{base}/ratios/{ticker}", {}),
+                    (f"{base}/income-statement/{ticker}", {}),
+                ]
+                out: dict[str, Any] = {}
+                try:
+                    async with aiohttp.ClientSession() as session:
+                        for url, extra in endpoints:
+                            p = params.copy(); p.update(extra)
+                            async with session.get(url, params=p, timeout=10) as resp:
+                                if resp.status != 200:
+                                    continue
+                                try:
+                                    out[url.rsplit("/", 1)[-1]] = await resp.json()
+                                except Exception:
+                                    pass
+                except Exception:
+                    pass
+                return out
+
+            # ── 2) 뉴스 수집 ───────────────────────────────────────
+            ticker_news: dict[str, list[dict]] = {}
+            flat_tickers = [t for arr in style_to_tickers.values() for t in arr]
+            dbg("news_fetch_start", total_symbols=len(flat_tickers))
+            t_news = step_timer()
+            news_results = await asyncio.gather(*[fetch_gnews(t, 5) for t in flat_tickers], return_exceptions=True)
+            timings["step2_news_fetch"] = t_news("news_fetch")[1]
+            idx = 0
+            for style in styles:
+                for t in style_to_tickers.get(style, []):
+                    res = news_results[idx]; idx += 1
+                    if isinstance(res, Exception):
+                        ticker_news[t] = []
+                    else:
+                        ticker_news[t] = res or []
+
+            # ── 3) 거시지표 수집(FRED) ─────────────────────────────
+            t_macro = step_timer()
+            sp500, nasdaq, vix = await asyncio.gather(
+                fetch_fred_latest("SP500"),
+                fetch_fred_latest("NASDAQCOM"),
+                fetch_fred_latest("VIXCLS"),
+            )
+            macro_brief = "\n".join([
+                f"S&P 500: {sp500:.2f}" if sp500 else "S&P 500: N/A",
+                f"NASDAQ: {nasdaq:.2f}" if nasdaq else "NASDAQ: N/A",
+                f"VIX: {vix:.2f}" if vix else "VIX: N/A",
+            ])
+            timings["step3_macro_fetch"] = t_macro("macro_fetch")[1]
+            tick = step_timer()
+
+            # ── 4) (옵션) 재무 메트릭 일부 조회(병렬, 실패 허용) ─────
+            t_fin = step_timer()
+            fin_map: dict[str, dict] = {}
+            if FMP_API_KEY:
+                fin_results = await asyncio.gather(*[fetch_fmp_metrics(t) for t in flat_tickers], return_exceptions=True)
+                j = 0
+                for t in flat_tickers:
+                    r = fin_results[j]; j += 1
+                    if not isinstance(r, Exception):
+                        fin_map[t] = r
+            timings["step4_financials_fetch"] = t_fin("fin_fetch")[1]
+            tick = step_timer()
+
+            # ── 5) 상위 3개 선별 → 최종 1개 ────────────────────────
+            def build_news_lines(tk: str) -> str:
+                items = ticker_news.get(tk, [])[:5]
+                return "; ".join([i.get("title", "") for i in items if i.get("title")])
+
+            def heuristic_pick_top3(cands: list[str]) -> list[dict]:
+                # 매우 단순한 휴리스틱: 뉴스 제목 길이/가짓수 기반 가중치
+                scored = []
+                for tkr in cands:
+                    titles = [n.get("title", "") for n in ticker_news.get(tkr, [])]
+                    score = sum(min(len(s), 120) for s in titles[:5])
+                    scored.append((score, tkr))
+                scored.sort(reverse=True)
+                return [{"ticker": t, "reason": "최근 뉴스 노출/활동량이 상대적으로 높음"} for _, t in scored[:3]]
+
+            def safe_json_loads(text: str):
+                if text is None:
+                    return None
+                try:
+                    return json.loads(text)
+                except Exception:
+                    start = text.find("{"); end = text.rfind("}")
+                    if start != -1 and end != -1 and end > start:
+                        try:
+                            return json.loads(text[start:end+1])
+                        except Exception:
+                            return None
+                    return None
+
+            def is_valid_hex_color(value: str) -> bool:
+                try:
+                    return bool(re.fullmatch(r"#([0-9A-Fa-f]{6})", str(value)))
+                except Exception:
+                    return False
+
+            def pick_brand_color(ticker: str) -> str:
+                t = (ticker or "").upper()
+                brand = {
+                    "AAPL": "#0EA5E9",  # Apple blue-ish
+                    "MSFT": "#2563EB",
+                    "GOOGL": "#EA4335",
+                    "GOOG": "#EA4335",
+                    "AVGO": "#DC2626",
+                    "COST": "#1D4ED8",
+                    "NVDA": "#22C55E",
+                    "TSLA": "#EF4444",
+                    "AMD": "#F97316",
+                    "SMCI": "#3B82F6",
+                    "PLTR": "#64748B",
+                    "AMZN": "#F59E0B",
+                    "META": "#2563EB",
+                    "NFLX": "#DC2626",
+                    "ADBE": "#EF4444",
+                    "INTC": "#1E3A8A",
+                }
+                return brand.get(t, "#1f2937")
+
+            style_top3: dict[str, list[dict]] = {}
+            for style in styles:
+                cands = style_to_tickers.get(style, [])
+                if not cands:
+                    style_top3[style] = []
+                    continue
+                if llm is None:
+                    style_top3[style] = heuristic_pick_top3(cands)
+                    continue
+
+                news_snippets = [f"- {t}: {build_news_lines(t)}" for t in cands]
+                prompt = (
+                    "아래 후보 티커와 최신 뉴스 제목을 참고하여 카테고리 {style} 관점에서 상위 3개를 고르고, "
+                    "각 선택 이유를 한 줄로 설명하라. 오직 JSON 배열로만 응답. 형식: "
+                    '[{{"ticker":"TSLA","reason":"..."}}, ...]'
+                ).format(style=style)
+                full = f"{prompt}\n\n" + "\n".join(news_snippets)
+                try:
+                    out = llm.invoke(full)
+                    raw = getattr(out, "content", "") if out is not None else ""
+                    parsed = safe_json_loads(raw) or []
+                    top3: list[dict] = []
+                    if isinstance(parsed, list):
+                        for it in parsed:
+                            if isinstance(it, dict) and it.get("ticker"):
+                                top3.append({
+                                    "ticker": str(it["ticker"]).upper(),
+                                    "reason": str(it.get("reason", "")).strip(),
+                                })
+                            if len(top3) == 3:
+                                break
+                    if not top3:
+                        top3 = heuristic_pick_top3(cands)
+                    style_top3[style] = top3[:3]
+                except Exception:
+                    style_top3[style] = heuristic_pick_top3(cands)
+
+            timings["step5_pick_top3"] = tick("pick_top3")[1]
+            tick = step_timer()
+
+            finals: list[dict] = []
+            for style in styles:
+                triples = style_top3.get(style, [])
+                if not triples:
+                    continue
+                if llm is None:
+                    pick = triples[0]
+                    finals.append({
+                        "date": today,
+                        "ticker": pick["ticker"],
+                        "reason": pick.get("reason", ""),
+                        "report": "거시지표와 최근 뉴스 노출을 참고한 단순 추천입니다.",
+                        "color": pick_brand_color(pick["ticker"]),
+                    })
+                    continue
+
+                triple_text = "\n".join([f"- {x['ticker']}: {x.get('reason','')}" for x in triples])
+                prompt = (
+                    "다음 3개 후보 중에서 {style} 관점에서 최종 1개 티커를 고르고, "
+                    "선정 사유(2~3문장)와 간단한 애널리스트 레포트(마크다운) 요약(8~12문장)을 한국어로 작성하라. "
+                    "거시 지표를 참고하라. 오직 JSON으로만 응답하되, 해당 기업과 어울리는 대표 색상을 포함해서 다음 형식으로만 응답: "
+                    '{{"ticker":"TSLA","reason":"...","report":"...","color":"#000000"}}'
+                ).format(style=style)
+                user_block = f"[거시 요약]\n{macro_brief}\n\n[후보]\n{triple_text}"
+                full = f"{prompt}\n\n{user_block}"
+                try:
+                    out = llm.invoke(full)
+                    raw = getattr(out, "content", "") if out is not None else ""
+                    data3 = safe_json_loads(raw) or {}
+                    ticker = str(data3.get("ticker") or (triples[0]["ticker"] if triples else "AAPL")).upper()
+                    reason = str(data3.get("reason") or (triples[0].get("reason") if triples else "기본 추천")).strip()
+                    report = str(data3.get("report") or "최근 뉴스와 거시지표를 바탕으로 간이 추천입니다.").strip()
+                    raw_color = data3.get("color")
+                    color = raw_color if isinstance(raw_color, str) and is_valid_hex_color(raw_color) else pick_brand_color(ticker)
+                    finals.append({"date": today, "ticker": ticker, "reason": reason, "report": report, "color": color})
+                except Exception:
+                    pick = triples[0]
+                    finals.append({
+                        "date": today,
+                        "ticker": pick["ticker"],
+                        "reason": pick.get("reason", ""),
+                        "report": "거시지표와 최근 뉴스 노출을 참고한 단순 추천입니다.",
+                        "color": pick_brand_color(pick["ticker"]),
+                    })
+
+            # 응답 구성
             response.result = "success"
-            response.recommendations = recommendations
-            response.message = f"{request.market} 시장 {request.strategy} 전략 추천 완료"
+            response.recommendations = finals
+            response.message = f"{market} 시장 단독 AI 추천 완료"
             response.errorCode = 0
-            
-            Logger.info(f"✅ 주식 추천 완료: {len(recommendations)}개 종목")
-            
+
+            timings["step6_final"] = tick("final")[1]
+            total_ms = sum(v for v in timings.values())
+            try:
+                timings_ms = {k: round(v * 1000, 1) for k, v in timings.items()}
+                Logger.info(
+                    f"✅ Standalone 추천 완료[{TRACE_ID}] styles={len(styles)} picks={len(finals)} "
+                    f"timings(ms)={timings_ms} total_ms={round(total_ms * 1000, 1)}"
+                )
+            except Exception:
+                Logger.info(
+                    f"✅ Standalone 추천 완료[{TRACE_ID}] picks={len(finals)} total_ms={round(total_ms * 1000, 1)}"
+                )
+
         except Exception as e:
+            Logger.error(f"🔥 Standalone 추천 파이프라인 오류[{TRACE_ID}]: {e}\n{traceback.format_exc()}")
             response.result = "fail"
             response.message = f"서버 오류: {str(e)}"
             response.errorCode = 1000
-            Logger.error(f"🔥 주식 추천 오류: {e}")
-        
+
         return response

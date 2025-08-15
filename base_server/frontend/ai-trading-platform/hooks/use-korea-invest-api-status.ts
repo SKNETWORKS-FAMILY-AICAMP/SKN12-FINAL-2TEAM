@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { profileService } from "@/lib/api/profile";
 
 interface KoreaInvestApiStatus {
@@ -24,6 +24,7 @@ export function useKoreaInvestApiStatus(): KoreaInvestApiStatus {
 
   // 디버깅: 훅이 호출될 때마다 로그 출력
   const accessToken = getAccessToken();
+  const didRunRef = useRef(false);
   console.log("🔍 [useKoreaInvestApiStatus] 훅 호출됨", {
     accessToken: accessToken ? `${accessToken.substring(0, 10)}...` : null,
     currentStatus: status
@@ -50,59 +51,23 @@ export function useKoreaInvestApiStatus(): KoreaInvestApiStatus {
         }
         
         console.log("✅ [useKoreaInvestApiStatus] accessToken 확인됨, OAuth 호출 시작");
-        
-        // OAuth 인증 상태 직접 확인
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/dashboard/oauth`, {
-          method: "POST",
-          credentials: "omit",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({
-            accessToken: accessToken, // accessToken을 body에 포함
-            sequence: Date.now(), // 현재 시간을 sequence로 사용
-          }),
-        });
-        
-        console.log("📥 [useKoreaInvestApiStatus] OAuth 응답 받음", {
-          status: response.status,
-          ok: response.ok,
-          bodyUsed: response.bodyUsed,
-          url: response.url
-        });
-        
-        if (!response.ok) {
-          console.error("❌ [useKoreaInvestApiStatus] OAuth 응답이 성공이 아님", response.status);
-          throw new Error("OAuth 인증 확인 실패");
-        }
-        
-        // HTTP 상태 코드가 200이어도 실제 응답 데이터를 확인해야 함
+        // Next 라우트(직렬화/inFlight) 사용 → 백엔드 중복 호출 방지
         try {
-          console.log("📖 [useKoreaInvestApiStatus] Response body 읽기 시도");
-          const data = await response.json();
-          console.log("📊 [useKoreaInvestApiStatus] OAuth 응답 데이터:", data);
-          
-          // 실제 응답 데이터에서 성공 여부 확인
-          if (data.errorCode === 0 && data.result === 'success') {
-            console.log("🎉 [useKoreaInvestApiStatus] OAuth 성공 확인 (응답 데이터), isConfigured: true로 설정");
-            setStatus({
-              isConfigured: true,
-              isLoading: false,
-              error: null,
-            });
-            console.log("✅ [useKoreaInvestApiStatus] 상태 업데이트 완료: isConfigured = true");
+          const res = await fetch('/api/dashboard/oauth/authenticate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ accessToken })
+          });
+          console.log("📥 [useKoreaInvestApiStatus] authenticate 응답", { status: res.status, ok: res.ok });
+          if (res.ok) {
+            setStatus({ isConfigured: true, isLoading: false, error: null });
             return;
-          } else {
-            console.log("⚠️ [useKoreaInvestApiStatus] OAuth 실패, API 키 상태 확인으로 폴백");
-            // OAuth 실패 시 API 키 상태 확인 (기존 방식)
-            await checkApiKeysStatus();
           }
-        } catch (jsonError) {
-          console.log("📝 [useKoreaInvestApiStatus] Response body 읽기 실패, API 키 상태 확인으로 폴백", jsonError);
-          // JSON 읽기 실패 시 API 키 상태 확인
-          await checkApiKeysStatus();
+        } catch (e) {
+          console.log("⚠️ [useKoreaInvestApiStatus] authenticate 실패 → API 키 상태 확인 폴백", e);
         }
+        // authenticate 실패 시 기존 API 키 상태 확인
+        await checkApiKeysStatus();
         
       } catch (error) {
         console.error("💥 [useKoreaInvestApiStatus] 한국투자증권 API 상태 확인 실패:", error);
@@ -170,6 +135,8 @@ export function useKoreaInvestApiStatus(): KoreaInvestApiStatus {
       }
     };
 
+    if (didRunRef.current) return; // StrictMode 중복 방지
+    didRunRef.current = true;
     checkOAuthStatus();
   }, [accessToken]);
 

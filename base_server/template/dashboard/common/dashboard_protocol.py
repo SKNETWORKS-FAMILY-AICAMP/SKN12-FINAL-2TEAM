@@ -1,5 +1,6 @@
 from .dashboard_serialize import (
-    DashboardMainRequest, DashboardAlertsRequest, DashboardPerformanceRequest, PriceRequest, SecuritiesLoginRequest
+    DashboardMainRequest, DashboardAlertsRequest, DashboardPerformanceRequest, PriceRequest, SecuritiesLoginRequest,
+    StockRecommendationRequest, StockRecommendationResponse
 )
 
 class DashboardProtocol:
@@ -10,6 +11,7 @@ class DashboardProtocol:
         self.on_dashboard_performance_req_callback = None
         self.on_dashboard_oauth_req_callback = None
         self.on_dashboard_price_us_req_callback = None
+        self.on_stock_recommendation_req_callback = None
 
     async def dashboard_main_req_controller(self, session, msg: bytes, length: int):
         request = DashboardMainRequest.model_validate_json(msg)
@@ -42,3 +44,10 @@ class DashboardProtocol:
         if self.on_dashboard_price_us_req_callback:
             return await self.on_dashboard_price_us_req_callback(session, request)
         raise NotImplementedError('on_dashboard_price_us_req_callback is not set')
+
+    async def stock_recommendation_req_controller(self, session, msg: bytes, length: int):
+        # 주식 종목 추천 요청 처리 (매개변수 2개만 사용)
+        request = StockRecommendationRequest.model_validate_json(msg)
+        if self.on_stock_recommendation_req_callback:
+            return await self.on_stock_recommendation_req_callback(session, request)
+        raise NotImplementedError('on_stock_recommendation_req_callback is not set')

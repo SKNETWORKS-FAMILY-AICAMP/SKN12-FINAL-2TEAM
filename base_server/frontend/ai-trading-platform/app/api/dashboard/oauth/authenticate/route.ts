@@ -57,29 +57,37 @@ export async function POST(request: NextRequest) {
         }),
       })
 
-      /* 4-1) HTTP 오류 */
+      /* 4-1) HTTP 오류 → 캐시 폴백 (예외로 500 발생 방지) */
       if (!res.ok) {
-        console.error("[OAuth] backend HTTP error", res.status)
-        throw new Error("backend http error")
+        const errText = await res.text().catch(() => "")
+        console.error("[OAuth] backend HTTP error", res.status, errText)
+        // 캐시가 살아 있으면 그대로 사용, 아니면 종료 (상위에서 캐시 반환)
+        return
       }
 
-      /* 4-2) 본문 파싱 후 업무 코드 검사 */
-      const data = await res.json()
-      const ss = JSON.parse(data)
+      /* 4-2) 본문 파싱 후 업무 코드 검사 (문자/객체 모두 안전 파싱) */
+      const rawText = await res.text()
+      let ss: any
+      try { ss = JSON.parse(rawText) } catch { ss = rawText }
+      if (typeof ss === 'string') {
+        try { ss = JSON.parse(ss) } catch { ss = {} }
+      }
       console.log("[OAuth] backend response:", ss)
 
       if (ss.errorCode !== 0 || ss.result === "fail") {
         console.warn("[OAuth] backend biz fail", ss.errorCode, ss.message)
-
-        /* 캐시가 살아 있으면 그것을 그대로 사용 */
+        // 캐시가 살아 있으면 그것을 그대로 사용
         if (cachedToken && Date.now() < cachedUntil) return
-
-        throw new Error(`backend biz error ${ss.errorCode}`)
+        // 최소한 app_key 기반으로라도 클라이언트가 진행할 수 있게 폴백 저장
+        cachedToken  = ss.access_token ?? ss.app_key ?? null
+        cachedAppKey = ss.app_key ?? ss.access_token ?? null
+        cachedUntil  = Date.now() + 10 * 60 * 1000 // 10분 폴백 TTL
+        return
       }
 
       /* 4-3) 정상 ⇒ 캐시 갱신 */
-      cachedToken  = ss.access_token
-      cachedAppKey = ss.app_key ?? ss.access_token
+      cachedToken  = ss.access_token ?? null
+      cachedAppKey = ss.app_key ?? ss.access_token ?? null
       cachedUntil  = Date.now() + 55 * 60 * 1000   // 55 min TTL
       console.log("[OAuth] 발급 성공·캐시 저장")
     })()

@@ -24,6 +24,34 @@ let cachedAppKey : string | null = null;
 let cachedUntil  = 0;
 let inFlight: Promise<void> | null = null;
 
+// REST 요청 버스트 방지용 큐 디스패처 (0.5초 간격으로 1개씩 처리)
+const REST_DISPATCH_INTERVAL_MS = 500;
+const REST_MIN_INTERVAL_MS = 800; // 같은 심볼 최소 재요청 간격
+const restQueue: string[] = [];
+let restTimer: ReturnType<typeof setTimeout> | null = null;
+const restPending = new Set<string>();
+const restLastAt = new Map<string, number>();
+function enqueueRestPrice(sym: string, delayMs: number = 0) {
+  // 중복 enqueue 방지
+  if (restPending.has(sym)) return; // 이미 처리중
+  const last = restLastAt.get(sym) ?? 0;
+  if (Date.now() - last < REST_MIN_INTERVAL_MS) return; // 너무 최근에 호출됨
+  if (!restQueue.includes(sym)) restQueue.push(sym);
+  if (restTimer) return;
+  const dispatch = async () => {
+    if (restQueue.length === 0) { restTimer = null; return; }
+    const next = restQueue.shift()!;
+    restPending.add(next);
+    try { await fetchRestPrice(next); } catch {/* ignore */}
+    finally {
+      restPending.delete(next);
+      restLastAt.set(next, Date.now());
+    }
+    restTimer = setTimeout(dispatch, REST_DISPATCH_INTERVAL_MS);
+  };
+  restTimer = setTimeout(dispatch, Math.max(0, delayMs));
+}
+
 const mask = (v?: string | null, keep = 4) =>
   !v ? "" : (v.length <= keep ? "*".repeat(v.length) : v.slice(0, keep) + "*".repeat(v.length - keep));
 
@@ -150,12 +178,22 @@ async function fetchRestPrice(sym: string) {
     console.debug("[REST] HTTP 상태코드:", res.status);
     if (!res.ok) {
       const errText = await res.text();
-      console.error("[REST] HTTP 오류", { status: res.status, body: errText });
+      console.log("[REST] HTTP 오류", { status: res.status, body: errText });
+      // 한국투자 증권 초당 거래건수 초과 (EGW00201) → 지터 재시도
+      if (errText && errText.includes("EGW00201")) {
+        const jitter = 500 + Math.floor(Math.random() * 700);
+        enqueueRestPrice(sym, jitter);
+      }
       return;
     }
 
-    const a: any = await res.json();
-    const d: any = JSON.parse(a ?? "{}");
+    // 응답이 객체/문자열 양쪽으로 올 수 있어 텍스트로 받은 뒤 2단계 파싱
+    const rawText = await res.text();
+    let d: any;
+    try { d = JSON.parse(rawText); } catch { d = rawText; }
+    if (typeof d === "string") {
+      try { d = JSON.parse(d); } catch { d = {}; }
+    }
     console.log("[REST] 응답(JSON):", d);
 
     // ✅ errorCode 문자열/숫자 모두 대응
@@ -331,9 +369,9 @@ class NasdaqWebSocketManager {
       const symbols = Array.from(this.queue);
       this.queue.clear();
 
-      // 즉시 REST 보정
+      // 즉시 REST 보정: 전역 큐로 흘려서 0.5초 간격 처리
       if (cachedToken && cachedAppKey && symbols.length) {
-        await Promise.all([...symbols].map((sym) => fetchRestPrice(sym)));
+        symbols.forEach((sym) => enqueueRestPrice(sym, 0));
       }
 
       // 장중에만 재연결(간단 버전)
@@ -447,10 +485,10 @@ export function useNasdaqStocks() {
 
   const addSymbol = useCallback((sym: string) => {
     mgr.subscribe(sym);
-    // 1초 후 REST 보정
+    // 1초 후 REST 보정 (버스트 방지 큐)
     setTimeout(() => {
       if (!StockInfoStore.has(sym)) {
-        void fetchRestPrice(sym);
+        enqueueRestPrice(sym, 0);
       }
     }, 1000);
   }, []);
@@ -462,5 +500,14 @@ export function useNasdaqStocks() {
     return () => window.removeEventListener("stock_update", handler as EventListener);
   }, []);
 
-  return { initWs, addSymbol, getStock, subscribeStore };
+  // 여러 컴포넌트에서 호출 가능한 REST 스케줄 요청 API
+  const requestPrice = useCallback((sym: string, delayMs: number = 0) => {
+    enqueueRestPrice(sym, delayMs);
+  }, []);
+
+  const requestPrices = useCallback((symbols: string[], stepMs: number = 0) => {
+    symbols.forEach((s, i) => enqueueRestPrice(s, i * stepMs));
+  }, []);
+
+  return { initWs, addSymbol, getStock, subscribeStore, requestPrice, requestPrices };
 }
