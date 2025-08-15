@@ -73,7 +73,9 @@ export function useKoreaInvestApiStatus(): KoreaInvestApiStatus {
           });
           console.log("📥 [useKoreaInvestApiStatus] authenticate 응답", { status: res.status, ok: res.ok });
           if (res.ok) {
-            setStatus({ isConfigured: true, isLoading: false, error: null });
+            // OAuth 인증 성공 후 실제 API 키 설정 상태 확인
+            console.log("✅ [useKoreaInvestApiStatus] OAuth 인증 성공, API 키 상태 확인 시작");
+            await checkApiKeysStatus();
             return;
           }
         } catch (e) {
@@ -97,16 +99,6 @@ export function useKoreaInvestApiStatus(): KoreaInvestApiStatus {
     const checkApiKeysStatus = async () => {
       console.log("🔑 [useKoreaInvestApiStatus] API 키 상태 확인 시작");
       
-      // 간단하게 API 키가 설정되지 않은 것으로 처리
-      console.log("❌ [useKoreaInvestApiStatus] API 키 미설정으로 처리");
-      setStatus({ 
-        isConfigured: false, 
-        isLoading: false, 
-        error: "한국투자증권 API 키가 설정되지 않았습니다." 
-      });
-      
-      // 기존 복잡한 로직은 주석 처리
-      /*
       try {
         // profileService를 사용하여 API 키 조회
         const apiKeysResponse = await profileService.getApiKeys() as any;
@@ -167,7 +159,6 @@ export function useKoreaInvestApiStatus(): KoreaInvestApiStatus {
         });
         console.log("❌ [useKoreaInvestApiStatus] API 키 에러 상태로 설정 완료");
       }
-      */
     };
 
     if (didRunRef.current) return; // StrictMode 중복 방지

@@ -21,13 +21,8 @@ const PORTF = ["005930", "000660", "051910"];
 
 export default function DashboardPageClient() {
   const { accessTokenReady } = useAuth();
-  // const { isConfigured, isLoading, error } = useKoreaInvestApiStatus();
+  const { isConfigured, isLoading, error } = useKoreaInvestApiStatus();
   
-  // 임시로 API 키 미설정 상태로 설정
-  const isConfigured = false;
-  const isLoading = false;
-  const error = null; // error를 null로 설정하여 error 조건이 실행되지 않도록 함
-
   // 디버깅: 현재 상태 출력
   console.log("🔍 [DashboardPageClient] 디버깅 정보:", {
     isConfigured,
@@ -119,6 +114,15 @@ export default function DashboardPageClient() {
   // } = useTutorial();
 
   // 한국투자증권 API 설정이 안 되어 있다면 설명 페이지 표시
+  if (!isConfigured) {
+    console.log("🔍 [DashboardPageClient] !isConfigured 조건 실행됨 - KoreaInvestApiRequired 렌더링");
+    return (
+      <div className="w-full bg-gradient-to-br from-black via-gray-900 to-gray-820 text-white">
+        <KoreaInvestApiRequired pageType="dashboard" />
+      </div>
+    );
+  }
+
   if (isLoading) {
     console.log("🔍 [DashboardPageClient] isLoading 조건 실행됨");
     return (
@@ -144,15 +148,6 @@ export default function DashboardPageClient() {
             다시 시도
           </button>
         </div>
-      </div>
-    );
-  }
-
-  if (!isConfigured) {
-    console.log("🔍 [DashboardPageClient] !isConfigured 조건 실행됨 - KoreaInvestApiRequired 렌더링");
-    return (
-      <div className="w-full bg-gradient-to-br from-black via-gray-900 to-gray-820 text-white">
-        <KoreaInvestApiRequired pageType="dashboard" />
       </div>
     );
   }

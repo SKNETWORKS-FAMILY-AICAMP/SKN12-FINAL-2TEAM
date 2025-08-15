@@ -17,12 +17,16 @@ import KoreaInvestApiRequired from "@/components/KoreaInvestApiRequired"
 export default function MarketPage() {
   const [activeTab, setActiveTab] = useState("overview")
   const [searchQuery, setSearchQuery] = useState("")
-  // const { isConfigured, isLoading, error } = useKoreaInvestApiStatus()
+  const { isConfigured, isLoading, error } = useKoreaInvestApiStatus()
   
-  // 임시로 API 키 미설정 상태로 설정
-  const isConfigured = false;
-  const isLoading = false;
-  const error = null; // error를 null로 설정하여 error 조건이 실행되지 않도록 함
+  // API가 설정되지 않은 경우
+  if (!isConfigured) {
+    return (
+      <div className="min-h-screen w-full bg-gradient-to-br from-black via-gray-900 to-gray-820 text-white">
+        <KoreaInvestApiRequired pageType="dashboard" />
+      </div>
+    );
+  }
 
   // 로딩 상태 처리
   if (isLoading) {
@@ -49,15 +53,6 @@ export default function MarketPage() {
             다시 시도
           </button>
         </div>
-      </div>
-    );
-  }
-
-  // API가 설정되지 않은 경우
-  if (!isConfigured) {
-    return (
-      <div className="min-h-screen w-full bg-gradient-to-br from-black via-gray-900 to-gray-820 text-white">
-        <KoreaInvestApiRequired pageType="dashboard" />
       </div>
     );
   }

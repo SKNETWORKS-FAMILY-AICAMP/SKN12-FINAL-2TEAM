@@ -15,12 +15,7 @@ import KoreaInvestApiRequired from "@/components/KoreaInvestApiRequired";
 export default function PortfolioPage() {
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  // const { isConfigured, isLoading, error } = useKoreaInvestApiStatus();
-  
-  // 임시로 API 키 미설정 상태로 설정
-  const isConfigured = false;
-  const isLoading = false;
-  const error = null; // error를 null로 설정하여 error 조건이 실행되지 않도록 함
+  const { isConfigured, isLoading, error } = useKoreaInvestApiStatus();
   
   // API가 설정되지 않았으면 다른 훅들을 실행하지 않음
   const {
@@ -145,6 +140,20 @@ export default function PortfolioPage() {
   }, [isConfigured]);
 
   // 한국투자증권 API 설정이 안 되어 있다면 설명 페이지 표시
+  if (!isConfigured) {
+    return (
+      <div className="min-h-screen w-full bg-gradient-to-br from-black via-gray-900 to-gray-820 text-white">
+        <Header onSidebarOpen={() => setSidebarOpen(true)} />
+        <AppSidebar 
+          open={sidebarOpen} 
+          onClose={() => setSidebarOpen(false)} 
+          onNavigate={handleNavigate}
+        />
+        <KoreaInvestApiRequired pageType="portfolio" />
+      </div>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen w-full bg-gradient-to-br from-black via-gray-900 to-gray-820 text-white flex items-center justify-center">
@@ -168,20 +177,6 @@ export default function PortfolioPage() {
             다시 시도
           </button>
         </div>
-      </div>
-    );
-  }
-
-  if (!isConfigured) {
-    return (
-      <div className="min-h-screen w-full bg-gradient-to-br from-black via-gray-900 to-gray-820 text-white">
-        <Header onSidebarOpen={() => setSidebarOpen(true)} />
-        <AppSidebar 
-          open={sidebarOpen} 
-          onClose={() => setSidebarOpen(false)} 
-          onNavigate={handleNavigate}
-        />
-        <KoreaInvestApiRequired pageType="portfolio" />
       </div>
     );
   }
