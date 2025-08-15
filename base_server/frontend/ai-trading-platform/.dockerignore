@@ -1,0 +1,11 @@
+﻿node_modules
+.next
+.env.development
+*.log
+.DS_Store
+.git
+.gitignore
+README.md
+.vscode
+coverage
+.nyc_output

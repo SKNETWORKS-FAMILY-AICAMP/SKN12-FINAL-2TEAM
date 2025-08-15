@@ -15,14 +15,14 @@
 FROM python:3.11-slim
 
 # 기본 환경 설정
-ENV PYTHONUNBUFFERED=1          # Python 출력을 실시간으로 표시
-ENV PYTHONDONTWRITEBYTECODE=1   # .pyc 파일 생성 방지 (컨테이너에서 불필요)
-ENV TZ=Asia/Seoul               # 한국 시간대 설정
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV TZ=Asia/Seoul
 
 # 필수 시스템 패키지 설치
 RUN apt-get update && apt-get install -y \
-    curl \                      # 헬스체크용
-    mysql-client \              # DB 연결 확인용
+    curl \
+    default-mysql-client \
     && rm -rf /var/lib/apt/lists/*
 
 # 작업 디렉토리 설정
@@ -36,6 +36,9 @@ RUN pip install --upgrade pip && \
 # 전체 애플리케이션 코드 복사
 COPY . .
 
+# Python path 설정
+ENV PYTHONPATH=/app:$PYTHONPATH
+
 # 🔒 보안: .dockerignore에서 민감한 파일들을 빌드 컨텍스트에서 제외
 # - 설정 파일 (*.json): DB 패스워드, API 키 등 민감 정보 
 # - 문서 파일 (docs/, *.md): 시스템 구조 노출 방지
@@ -46,8 +49,8 @@ COPY . .
 RUN mkdir -p /app/logs
 
 # 포트 노출 선언 (실제 바인딩은 docker run -p 옵션에서)
-EXPOSE 8000    # Base Web Server용
-EXPOSE 8001    # Model Server용
+EXPOSE 8000
+EXPOSE 8001
 
 # 헬스체크 설정 (Base Web Server 기준)
 HEALTHCHECK --interval=30s --timeout=30s --start-period=10s --retries=3 \
@@ -55,7 +58,7 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=10s --retries=3 \
 
 # 🚀 기본 실행 명령어 (Base Web Server)
 # 컨테이너가 시작될 때 기본적으로 실행될 명령어
-CMD ["uvicorn", "application.base_web_server.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "uvicorn", "application.base_web_server.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 # =============================================================================
 # 🚀 사용법 - 하나의 이미지로 두 서버 실행

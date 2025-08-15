@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  # Backend API Server (Docker Hub에서 다운로드)
+  backend:
+    image: ${DOCKERHUB_USERNAME}/ai-trading-backend:local
+    container_name: trading-backend-hub
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_ENV=LOCAL
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # Backend 설정 파일 마운팅 (01 문서 방식)
+      - "C:/SKN12-FINAL-2TEAM/base_server/application/base_web_server/base_web_server-config_local.json:/app/application/base_web_server/base_web_server-config_local.json:ro"
+      # 로그 디렉토리 마운팅
+      - "C:/docker-logs:/app/logs"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - trading-network
+
+  # Frontend Next.js Server (Docker Hub에서 다운로드)
+  frontend:
+    image: ${DOCKERHUB_USERNAME}/ai-trading-frontend:local
+    container_name: trading-frontend-hub
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    volumes:
+      # Frontend 설정 파일 마운팅 (Backend 방식 따라함)
+      - "C:/docker-frontend-configs/.env:/app/.env:ro"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - trading-network
+
+networks:
+  trading-network:
+    driver: bridge
+
+# =============================================================================
+# 🚀 사용법 (Docker Hub 이미지 사용)
+# =============================================================================
+#
+# 1️⃣ 환경변수 설정:
+#    set DOCKERHUB_USERNAME=your-username
+#    
+# 2️⃣ 또는 .env 파일 생성:
+#    echo "DOCKERHUB_USERNAME=your-username" > .env
+#
+# 3️⃣ 실행:
+#    docker-compose -f docker-compose.hub.yml up -d
+#
+# 4️⃣ 확인:
+#    http://localhost:8000  # Backend API
+#    http://localhost:3000  # Frontend UI
+#
+# 5️⃣ 정리:
+#    docker-compose -f docker-compose.hub.yml down
+#
+# =============================================================================
