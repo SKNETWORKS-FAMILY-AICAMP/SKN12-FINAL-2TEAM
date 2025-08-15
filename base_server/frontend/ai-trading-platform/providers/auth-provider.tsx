@@ -57,7 +57,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = async () => {
     authManager.clearSession()
     setUser(null)
-    // 페이지를 새로고침하거나 로그인 페이지로 리다이렉트
+    // 부드러운 페이지 전환으로 로그인 페이지로 이동
     window.location.href = "/auth/login"
   }
 
