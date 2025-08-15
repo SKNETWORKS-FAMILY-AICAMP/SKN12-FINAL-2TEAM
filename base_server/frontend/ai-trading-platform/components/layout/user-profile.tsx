@@ -20,7 +20,7 @@ export function UserProfile() {
   const router = useRouter();
   const handleLogout = async () => {
     await logout();
-    window.location.href = "/";
+    router.push("/");
   };
   return (
     <DropdownMenu>
