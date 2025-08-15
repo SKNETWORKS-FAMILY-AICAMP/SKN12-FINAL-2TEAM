@@ -1,6 +1,6 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { Inter } from "next/font/google"
+import { Noto_Sans_KR } from "next/font/google"
 import "../styles/globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
@@ -8,8 +8,13 @@ import { StoreProvider } from "@/providers/store-provider"
 import { WebSocketProvider } from "@/providers/websocket-provider"
 import { DynamicAuthProvider } from "@/providers/dynamic-auth-provider"
 import { RouteProgressBar } from "@/components/layout/route-progress-bar"
+import { cn } from "@/lib/utils"
 
-const inter = Inter({ subsets: ["latin"] })
+const notoSans = Noto_Sans_KR({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-sans",
+})
 
 export const metadata: Metadata = {
   title: "AI Trading Advisor",
@@ -23,14 +28,16 @@ export const metadata: Metadata = {
   }
 }
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+// Fast Refresh를 위한 명시적 컴포넌트 정의
+function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ko" suppressHydrationWarning data-scroll-behavior="smooth">
-      <body className={inter.className}>
+    <html lang="ko" suppressHydrationWarning>
+      <body
+        className={cn(
+          "min-h-screen bg-background font-sans antialiased",
+          notoSans.variable
+        )}
+      >
         <StoreProvider>
           <DynamicAuthProvider>
             <WebSocketProvider>
@@ -50,4 +57,6 @@ export default function RootLayout({
       </body>
     </html>
   )
-} 
+}
+
+export default RootLayout 

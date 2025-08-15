@@ -63,9 +63,9 @@ export default function LoginPage() {
 
         const completed = data?.profile_completed || data?.data?.profile_completed;
         if (completed) {
-          window.location.href = "/dashboard";
+          router.push("/dashboard");
         } else {
-          window.location.href = "/auth/api-keys";
+          router.push("/auth/api-keys");
         }
         return;
       } else {

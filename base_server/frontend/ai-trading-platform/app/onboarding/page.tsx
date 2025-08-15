@@ -65,7 +65,7 @@ export default function OnboardingPage() {
     if (typeof window !== "undefined") {
       const accessToken = localStorage.getItem("accessToken");
       if (!accessToken) {
-        window.location.href = "/auth/login";
+        router.push("/auth/login");
       }
     }
   }, []);
@@ -151,8 +151,8 @@ export default function OnboardingPage() {
       // 성공 조건: errorCode가 0이고 profile이 존재하거나, profile이 존재하는 경우
       if (errorCode === 0 || profile) {
         console.log("[온보딩] 프로필 설정 성공, 대시보드로 이동");
-        // 강제로 리다이렉트
-        window.location.href = "/dashboard";
+        // 부드러운 페이지 전환
+        router.push("/dashboard");
       } else {
         const errorMessage = message || parsedRes?.data?.message || "프로필 설정에 실패했습니다.";
         setError(errorMessage);

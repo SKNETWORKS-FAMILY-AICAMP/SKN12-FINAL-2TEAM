@@ -21,7 +21,7 @@ export default function ApiKeysPage() {
     if (typeof window !== "undefined") {
       const accessToken = localStorage.getItem("accessToken");
       if (!accessToken) {
-        window.location.href = "/auth/login";
+        router.push("/auth/login");
       }
     }
   }, []);
@@ -131,7 +131,7 @@ export default function ApiKeysPage() {
 
   const handleSkip = () => {
     // 건너뛰기 시 온보딩으로 이동
-    window.location.href = "/onboarding";
+    router.push("/onboarding");
   };
 
   return (
