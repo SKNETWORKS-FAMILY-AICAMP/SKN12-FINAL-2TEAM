@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from service.rag.rag_config import RagConfig
 from service.rag.rag_vectordb_client import RagVectorDbClient, RagVectorDbConfig
 from service.core.logger import Logger
+import uuid
 
 class RagService:
     """
@@ -826,6 +827,13 @@ class RagService:
             search_time = time.time() - start_time
             cls._update_search_stats(search_time)
             
+            # 🔥 최종 결과에 대한 추가 중복 제거
+            if results:
+                original_count = len(results)
+                results = cls._remove_duplicates(results)
+                if len(results) < original_count:
+                    Logger.info(f"최종 중복 제거: {original_count}개 → {len(results)}개")
+            
             Logger.info(f"✅ 검색 완료: {len(results)}개 결과 ({search_time:.3f}초)")
             Logger.debug(f"log.test rag.retrieve.ok results={len(results)} time={search_time:.3f}")
             # 결과 일부 상세 표시 (상위 5개)
@@ -1121,8 +1129,66 @@ class RagService:
         
         # 점수 순으로 정렬
         combined.sort(key=lambda x: x["score"], reverse=True)
-        Logger.debug(f"log.test rag.fuse.ok combined={len(combined)}")
-        return combined
+        
+        # 🔥 중복 제거 로직 추가
+        unique_results = cls._remove_duplicates(combined)
+        
+        Logger.debug(f"log.test rag.fuse.ok combined={len(combined)} unique={len(unique_results)}")
+        return unique_results
+
+    @classmethod
+    def _remove_duplicates(cls, results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """검색 결과에서 중복 제거 - 제목, 출처, 날짜 기반"""
+        if not results:
+            return []
+        
+        seen_contents = set()
+        unique_results = []
+        duplicate_count = 0
+        
+        for result in results:
+            try:
+                # 메타데이터에서 제목, 출처, 날짜 추출
+                metadata = result.get("metadata", {})
+                title = metadata.get("title", "").strip()
+                source = metadata.get("source", "").strip()
+                date = metadata.get("date", "").strip()
+                
+                # 제목이 없는 경우 content에서 추출 시도
+                if not title:
+                    content = result.get("content", "")
+                    if content:
+                        # content의 첫 100자를 제목으로 사용
+                        title = content[:100].strip()
+                
+                # 중복 체크 키 생성 (제목 + 출처 + 날짜)
+                if title and source and date:
+                    content_key = f"{title}_{source}_{date}"
+                elif title and source:
+                    content_key = f"{title}_{source}"
+                elif title:
+                    content_key = title
+                else:
+                    # 식별할 수 없는 경우 ID 사용
+                    content_key = result.get("id", str(uuid.uuid4()))
+                
+                # 중복 체크
+                if content_key not in seen_contents:
+                    seen_contents.add(content_key)
+                    unique_results.append(result)
+                else:
+                    duplicate_count += 1
+                    Logger.debug(f"중복 문서 제거: {title[:50]}... (출처: {source})")
+                    
+            except Exception as e:
+                Logger.warn(f"중복 제거 중 오류 발생: {e}")
+                # 오류 발생 시 해당 문서는 포함
+                unique_results.append(result)
+        
+        if duplicate_count > 0:
+            Logger.info(f"중복 제거 완료: {len(results)}개 → {len(unique_results)}개 (제거: {duplicate_count}개)")
+        
+        return unique_results
 
     @classmethod
     def _normalize_bm25_score(cls, score: float) -> float:
