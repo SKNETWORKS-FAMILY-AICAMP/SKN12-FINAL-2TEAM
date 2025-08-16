@@ -43,8 +43,8 @@ function RootLayout({ children }: { children: React.ReactNode }) {
             <WebSocketProvider>
               <ThemeProvider
                 attribute="class"
-                defaultTheme="system"
-                enableSystem
+                defaultTheme="dark"
+                enableSystem={false}
                 disableTransitionOnChange
               >
                 <RouteProgressBar />
