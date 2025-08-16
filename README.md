@@ -85,9 +85,6 @@ AI가 *데이터 수집 → 신호 생성 → 리스크 통제 → 주문 실행
 
 ## 🧭 Architecture Diagrams
 
-당장 PNG가 없어도 Mermaid 다이어그램은 깃허브에서 바로 렌더된다.  
-PNG로 저장하려면 아래 "Export to PNG" 참고.
-
 ### 1) System Overview
 
 ```mermaid
@@ -357,3 +354,4 @@ MIT License
 [![Issues](https://img.shields.io/github/issues/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-2TEAM)](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-2TEAM/issues)
 
 </div>
+
