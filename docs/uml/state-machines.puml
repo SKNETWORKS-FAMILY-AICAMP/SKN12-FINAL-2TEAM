@@ -1,0 +1,49 @@
+@startuml
+skinparam backgroundColor white
+skinparam state {
+  BackgroundColor white
+  BorderColor black
+  FontColor black
+}
+
+title 상태 머신 다이어그램 모음
+
+' TypingMessage 상태 머신
+state TypingMessage {
+  [*] --> Idle
+  Idle --> Typing : setText(text)
+  Typing --> Typing : setInterval 18ms (append chars)
+  Typing --> Done : idx >= len
+  Done --> Idle : setText("")
+  Typing --> Idle : unmount/cleanup(clearInterval)
+}
+
+' WS 연결 재시도 상태 머신
+state WebSocket {
+  [*] --> Connecting
+  Connecting --> Open : onOpen
+  Connecting --> Backoff : onError
+  Open --> Backoff : onClose
+  Backoff --> Connecting : timer(exp backoff)
+}
+
+' 인증 세션 상태 머신
+state AuthSession {
+  [*] --> Anonymous
+  Anonymous --> Authenticated : login(token)
+  Authenticated --> Anonymous : logout/expire
+  Authenticated --> Refreshing : t-Δ before exp
+  Refreshing --> Authenticated : refresh OK
+  Refreshing --> Anonymous : refresh FAIL
+}
+
+' 튜토리얼 진행 상태 머신
+state Tutorial {
+  [*] --> NotStarted
+  NotStarted --> InProgress : startTutorial()
+  InProgress --> StepComplete : completeStep()
+  StepComplete --> InProgress : nextStep()
+  InProgress --> Completed : allStepsComplete()
+  Completed --> NotStarted : resetTutorial()
+}
+@enduml

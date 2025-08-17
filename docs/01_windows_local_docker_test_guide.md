@@ -20,7 +20,7 @@
 ```bash
 # 현재 상태 확인
 docker ps                           # 실행 중인 컨테이너
-docker images | findstr ai-trading  # 빌드된 이미지
+docker images | findstr ai-trading-backend  # 빌드된 이미지
 ```
 
 **선택지:**
@@ -30,8 +30,8 @@ docker images | findstr ai-trading  # 빌드된 이미지
 #### 🔄 처음부터 다시 시작하기
 ```bash
 # 기존 컨테이너와 이미지 제거
-docker rm -f trading-web-server-test 2>nul
-docker rmi ai-trading-platform:test 2>nul
+docker rm -f trading-backend-test 2>nul
+docker rmi ai-trading-backend:local 2>nul
 
 # Step 1부터 다시 시작
 ```
@@ -224,8 +224,8 @@ copy application\base_web_server\base_web_server-config_debug.json C:\docker-con
 # base_server 디렉토리에서 실행
 cd C:\SKN12-FINAL-2TEAM\base_server
 
-# 이미지 빌드 (5-10분 소요)
-docker build -t ai-trading-platform:test .
+# 이미지 빌드 (5-10분 소요) - 02 Docker Compose와 동일한 이미지명
+docker build -t ai-trading-backend:local .
 ```
 
 ### 빌드 프로세스 이해
@@ -245,10 +245,10 @@ docker build -t ai-trading-platform:test .
 
 ```bash
 # 생성된 이미지 확인
-docker images | findstr ai-trading-platform
+docker images | findstr ai-trading-backend
 
 # 결과 예시:
-# ai-trading-platform   test    abc123def    2 minutes ago    1.73GB
+# ai-trading-backend   local    abc123def    2 minutes ago    1.73GB
 ```
 
 ---
@@ -271,16 +271,16 @@ docker images | findstr ai-trading-platform
 
 ```bash
 # 기존 컨테이너가 있다면 제거
-docker rm -f trading-web-server-test 2>nul
+docker rm -f trading-backend-test 2>nul
 
 # 컨테이너 실행
 docker run -d \
-  --name trading-web-server-test \
+  --name trading-backend-test \
   -p 8000:8000 \
   -e APP_ENV=LOCAL \
   -v "C:/SKN12-FINAL-2TEAM/base_server/application/base_web_server/base_web_server-config_local.json:/app/application/base_web_server/base_web_server-config_local.json:ro" \
   -v "C:/docker-logs:/app/logs" \
-  ai-trading-platform:test
+  ai-trading-backend:local
 ```
 
 ### 명령어 상세 설명
@@ -306,14 +306,14 @@ docker ps
 
 # 예상 결과:
 # CONTAINER ID   IMAGE                      STATUS                   PORTS
-# abc123def456   ai-trading-platform:test   Up 30 seconds (healthy)  0.0.0.0:8000->8000/tcp
+# abc123def456   ai-trading-backend:local   Up 30 seconds (healthy)  0.0.0.0:8000->8000/tcp
 ```
 
 ### 2️⃣ 로그 확인
 
 ```bash
 # 실시간 로그 모니터링
-docker logs -f trading-web-server-test
+docker logs -f trading-backend-test
 
 # 성공 시 예상 로그:
 # ✅ Redis 전체 정리 성공
@@ -389,7 +389,7 @@ websocketConfig, emailConfig, smsConfig, notificationConfig
 **체크 방법**:
 ```bash
 docker ps -a  # 종료된 컨테이너도 표시
-docker logs trading-web-server-test  # 에러 로그 확인
+docker logs trading-backend-test  # 에러 로그 확인
 ```
 
 **일반적인 원인**:
@@ -405,14 +405,14 @@ docker logs trading-web-server-test  # 에러 로그 확인
 
 ```bash
 # 컨테이너 중지 및 삭제
-docker stop trading-web-server-test
-docker rm trading-web-server-test
+docker stop trading-backend-test
+docker rm trading-backend-test
 
 # 또는 강제 삭제 (실행 중이어도)
-docker rm -f trading-web-server-test
+docker rm -f trading-backend-test
 
 # 이미지 삭제 (필요시)
-docker rmi ai-trading-platform:test
+docker rmi ai-trading-backend:local
 
 # 전체 정리 (주의!)
 docker system prune -a  # 모든 미사용 리소스 제거

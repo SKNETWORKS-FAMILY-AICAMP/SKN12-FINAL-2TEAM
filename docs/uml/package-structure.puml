@@ -1,0 +1,49 @@
+@startuml
+package "app/ (App Router)" as APP {
+  [layout.tsx]
+  [page.tsx]
+  package "(auth)/" as AUTH
+  package "dashboard/" as DASH
+  package "chat/" as CHAT
+  package "portfolio/" as PORT
+  package "market/" as MKT
+  package "autotrade/" as AT
+  package "settings/" as SET
+  package "tutorial/" as TUT
+  package "onboarding/" as ONB
+  package "reports/" as REP
+  package "notifications/" as NOT
+  package "realtime/" as RT
+  package "websocket-test/" as WST
+  package "error-test/" as ET
+}
+
+package "components/" as C {
+  package ui
+  package dashboard
+  package chat
+  package portfolio
+  package market
+  package autotrade
+  package layout
+  package tutorial
+  package landing
+  package reports
+}
+
+package "hooks/" as H
+package "lib/" as L
+package "providers/" as P
+package "types/" as T
+
+APP --> C
+APP --> H
+APP --> L
+APP --> P
+C --> H
+C --> L
+C --> T
+H --> L
+P --> L
+L --> T
+@enduml

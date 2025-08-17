@@ -6,7 +6,8 @@ services:
     build:
       context: ./base_server
       dockerfile: Dockerfile
-    container_name: trading-backend-local
+    image: ai-trading-backend:local
+    container_name: trading-backend-test
     ports:
       - "8000:8000"
     environment:
@@ -30,7 +31,8 @@ services:
     build:
       context: ./base_server/frontend/ai-trading-platform
       dockerfile: Dockerfile
-    container_name: trading-frontend-local
+    image: ai-trading-frontend:local
+    container_name: trading-frontend-test
     ports:
       - "3000:3000"
     environment:
@@ -39,8 +41,7 @@ services:
       # Frontend 설정 파일 마운팅 (Backend 방식 따라함)
       - "C:/docker-frontend-configs/.env:/app/.env:ro"
     depends_on:
-      backend:
-        condition: service_healthy
+      - backend
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
       interval: 30s

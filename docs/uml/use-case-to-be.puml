@@ -1,0 +1,47 @@
+@startuml
+left to right direction
+actor User
+rectangle Frontend as FE {
+  usecase UC_Login as "로그인/세션확립"
+  usecase UC_ViewDashboard as "대시보드 실시간 보기"
+  usecase UC_ChatAI as "AI 챗봇 대화(SSE)"
+  usecase UC_ManagePortfolio as "포트폴리오 조회/편집"
+  usecase UC_Autotrade as "자동매매 전략 구성"
+  usecase UC_Settings as "사용자 설정"
+  usecase UC_Tutorial as "온보딩 튜토리얼"
+  usecase UC_MarketData as "시장 데이터 조회"
+  
+  usecase UC_OfflineMode as "오프라인 모드" <<planned>>
+  usecase UC_PWA as "PWA 설치" <<planned>>
+  usecase UC_AdvancedAnalytics as "고급 분석" <<planned>>
+  usecase UC_SocialTrading as "소셜 트레이딩" <<planned>>
+}
+
+User --> UC_Login
+User --> UC_ViewDashboard
+User --> UC_ChatAI
+User --> UC_ManagePortfolio
+User --> UC_Autotrade
+User --> UC_Settings
+User --> UC_Tutorial
+User --> UC_MarketData
+User --> UC_OfflineMode
+User --> UC_PWA
+User --> UC_AdvancedAnalytics
+User --> UC_SocialTrading
+
+UC_Login --> (Auth Service)
+UC_ViewDashboard --> (Market WS Broker)
+UC_ChatAI --> (Chat SSE Gateway)
+UC_ManagePortfolio --> (Portfolio API)
+UC_Autotrade --> (Trade Engine API)
+UC_Settings --> (Portfolio API)
+UC_MarketData --> (Market WS Broker)
+UC_Tutorial --> (Tutorial API)
+
+legend right
+  __실선__: 현재 구현 (As-Is)
+  ..점선..: 향후 계획 (To-Be)
+  <<planned>>: 개선 예정 항목
+endlegend
+@enduml

@@ -1,0 +1,19 @@
+@startuml
+actor User
+participant ChatPage as UI
+participant ChatStore as CS
+participant Api as ChatAPI
+participant SSE as EventSource
+
+User -> UI: 입력 제출(prompt)
+UI -> CS: appendUser(prompt)
+UI -> ChatAPI: POST /api/chat/start
+ChatAPI --> UI: {streamUrl}
+UI -> SSE: open(streamUrl)
+SSE --> UI: onmessage(delta)
+UI -> CS: appendAssistant(delta)
+UI -> TypingMessage: render(delta)  // setInterval 18ms 기반, 문자 단위 처리
+... 반복 ...
+SSE --> UI: [DONE]
+UI -> SSE: close()
+@enduml
