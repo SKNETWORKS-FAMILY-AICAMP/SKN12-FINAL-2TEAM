@@ -1,0 +1,309 @@
+# =============================================================================
+# AI Trading Platform - Docker Compose with Build Support
+# =============================================================================
+# 
+# 🎯 특징:
+# - Docker 이미지를 빌드하면서 실행
+# - Backend/Frontend 분리 배포 지원
+# - 로컬/개발/프로덕션 환경 모두 지원
+# - 선택적 서비스 실행 가능
+#
+# 📋 사용법:
+# 1. 전체 빌드: docker-compose -f docker-compose.build.yml up --build
+# 2. Backend만: docker-compose -f docker-compose.build.yml up --build backend
+# 3. Frontend만: docker-compose -f docker-compose.build.yml up --build frontend
+
+version: '3.8'
+
+services:
+  # =============================================================================
+  # Backend API Server (FastAPI)
+  # =============================================================================
+  backend:
+    build:
+      context: ./base_server
+      dockerfile: Dockerfile
+      args:
+        - BUILD_DATE=${BUILD_DATE:-$(date -u +"%Y-%m-%dT%H:%M:%SZ")}
+        - VCS_REF=${VCS_REF:-unknown}
+        - BUILD_NUMBER=${BUILD_NUMBER:-local}
+    image: ${DOCKER_IMAGE_BACKEND:-ashone91/trading-backend}:${TAG:-latest}
+    container_name: trading-backend-build
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    environment:
+      - APP_ENV=${APP_ENV:-LOCAL}
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=${LOG_LEVEL:-Debug}
+      - TZ=Asia/Seoul
+    volumes:
+      # 설정 파일 (환경별로 다른 설정 사용)
+      - ${CONFIG_PATH:-./base_server/application/base_web_server/base_web_server-config_local.json}:/app/application/base_web_server/base_web_server-config.json:ro
+      - ${LOG_PATH:-./logs}:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - trading-network
+    depends_on:
+      redis:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+
+  # =============================================================================
+  # Frontend Server (Next.js)
+  # =============================================================================
+  frontend:
+    build:
+      context: ./base_server/frontend/ai-trading-platform
+      dockerfile: Dockerfile
+      args:
+        - NODE_ENV=${NODE_ENV:-production}
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        - NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL:-ws://localhost:8000}
+    image: ${DOCKER_IMAGE_FRONTEND:-ashone91/trading-frontend}:${TAG:-latest}
+    container_name: trading-frontend-build
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://backend:8000}
+      - NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL:-ws://backend:8000}
+      - NEXT_PUBLIC_API_TIMEOUT=${NEXT_PUBLIC_API_TIMEOUT:-10000}
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    depends_on:
+      - backend
+    networks:
+      - trading-network
+
+  # =============================================================================
+  # Model Server (ML/AI) - Optional
+  # =============================================================================
+  model-server:
+    build:
+      context: ./base_server
+      dockerfile: Dockerfile
+    image: ${DOCKER_IMAGE_BACKEND:-ashone91/trading-backend}:${TAG:-latest}
+    container_name: trading-model-server-build
+    ports:
+      - "${MODEL_PORT:-8001}:8001"
+    environment:
+      - APP_ENV=${APP_ENV:-LOCAL}
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=${LOG_LEVEL:-Debug}
+      - TZ=Asia/Seoul
+    volumes:
+      - ${MODEL_CONFIG_PATH:-./base_server/application/model_server}:/app/application/model_server:ro
+      - ${LOG_PATH:-./logs}:/app/logs
+    command: ["python", "-m", "uvicorn", "application.model_server.main:app", "--host", "0.0.0.0", "--port", "8001"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - trading-network
+    profiles:
+      - model # 선택적 실행 (--profile model 옵션 필요)
+
+  # =============================================================================
+  # Redis Cache Server
+  # =============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: trading-redis-build
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    command: >
+      redis-server 
+      --requirepass ${REDIS_PASSWORD:-dkdlqmsbwlstmdptmvkWkd1234!}
+      --bind 0.0.0.0
+      --port 6379
+      --tcp-backlog 511
+      --timeout 0
+      --tcp-keepalive 300
+      --daemonize no
+      --supervised no
+      --loglevel notice
+      --databases 16
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+      --rdbcompression yes
+      --rdbchecksum yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-dkdlqmsbwlstmdptmvkWkd1234!}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - trading-network
+
+  # =============================================================================
+  # MySQL Database Server
+  # =============================================================================
+  mysql:
+    image: mysql:8.0
+    container_name: trading-mysql-build
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-dkdlqmsbwlstmdptmvkWkd1234!}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-finance_global}
+      - MYSQL_USER=${MYSQL_USER:-trading}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-dkdlqmsbwlstmdptmvkWkd1234!}
+      - TZ=Asia/Seoul
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ${DB_SCRIPTS_PATH:-./base_server/db_scripts}:/docker-entrypoint-initdb.d:ro
+    command: >
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --innodb-buffer-pool-size=256M
+      --max-connections=200
+      --bind-address=0.0.0.0
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-dkdlqmsbwlstmdptmvkWkd1234!}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - trading-network
+
+# =============================================================================
+# Networks & Volumes
+# =============================================================================
+networks:
+  trading-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  redis-data:
+    driver: local
+  mysql-data:
+    driver: local
+
+# =============================================================================
+# 🚀 사용법 가이드
+# =============================================================================
+#
+# 1️⃣ 환경 변수 파일 생성 (.env):
+#    # Docker 이미지 설정
+#    DOCKER_IMAGE_BACKEND=ashone91/trading-backend
+#    DOCKER_IMAGE_FRONTEND=ashone91/trading-frontend
+#    TAG=latest
+#    
+#    # 서비스 포트
+#    BACKEND_PORT=8000
+#    FRONTEND_PORT=3000
+#    MODEL_PORT=8001
+#    REDIS_PORT=6379
+#    MYSQL_PORT=3306
+#    
+#    # 환경 설정
+#    APP_ENV=LOCAL
+#    NODE_ENV=production
+#    LOG_LEVEL=Debug
+#    
+#    # API 설정
+#    NEXT_PUBLIC_API_URL=http://localhost:8000
+#    NEXT_PUBLIC_WS_URL=ws://localhost:8000
+#    
+#    # 데이터베이스 설정
+#    MYSQL_ROOT_PASSWORD=dkdlqmsbwlstmdptmvkWkd1234!
+#    MYSQL_DATABASE=finance_global
+#    MYSQL_USER=trading
+#    MYSQL_PASSWORD=dkdlqmsbwlstmdptmvkWkd1234!
+#    REDIS_PASSWORD=dkdlqmsbwlstmdptmvkWkd1234!
+#    
+#    # 파일 경로 (호스트 기준)
+#    CONFIG_PATH=./base_server/application/base_web_server/base_web_server-config_local.json
+#    LOG_PATH=./logs
+#    DB_SCRIPTS_PATH=./base_server/db_scripts
+#
+# 2️⃣ 전체 스택 빌드 및 실행:
+#    docker-compose -f docker-compose.build.yml up --build -d
+#
+# 3️⃣ 개별 서비스 빌드 및 실행:
+#    # Backend만
+#    docker-compose -f docker-compose.build.yml up --build backend mysql redis
+#    
+#    # Frontend만  
+#    docker-compose -f docker-compose.build.yml up --build frontend
+#    
+#    # Model Server 포함
+#    docker-compose -f docker-compose.build.yml --profile model up --build
+#
+# 4️⃣ 분리 배포용 (Backend 서버):
+#    docker-compose -f docker-compose.build.yml up --build backend model-server mysql redis
+#
+# 5️⃣ 분리 배포용 (Frontend 서버):
+#    # 환경 변수에서 NEXT_PUBLIC_API_URL을 Backend 서버 IP로 설정
+#    NEXT_PUBLIC_API_URL=http://backend-server-ip:8000
+#    docker-compose -f docker-compose.build.yml up --build frontend
+#
+# 6️⃣ 이미지만 빌드 (실행하지 않음):
+#    docker-compose -f docker-compose.build.yml build
+#
+# 7️⃣ 빌드된 이미지 확인:
+#    docker images | grep trading
+#
+# 8️⃣ 서비스 상태 확인:
+#    docker-compose -f docker-compose.build.yml ps
+#    docker-compose -f docker-compose.build.yml logs -f
+#
+# 9️⃣ 정리:
+#    docker-compose -f docker-compose.build.yml down
+#    docker-compose -f docker-compose.build.yml down -v  # 볼륨 포함
+#
+# 🔟 프로덕션 빌드 (이미지 푸시):
+#    docker-compose -f docker-compose.build.yml build
+#    docker-compose -f docker-compose.build.yml push
+#
+# =============================================================================
+# 🎯 배포 시나리오별 사용법
+# =============================================================================
+#
+# 📋 시나리오 1: 로컬 개발 (모든 서비스 같은 머신)
+#    docker-compose -f docker-compose.build.yml up --build
+#
+# 📋 시나리오 2: Backend 서버 배포 (DB 포함)
+#    docker-compose -f docker-compose.build.yml up --build backend mysql redis
+#
+# 📋 시나리오 3: Frontend 서버 배포 (Backend는 외부)
+#    # .env에서 NEXT_PUBLIC_API_URL을 Backend 서버 IP로 변경
+#    docker-compose -f docker-compose.build.yml up --build frontend
+#
+# 📋 시나리오 4: AWS ELB + Auto Scaling 배포
+#    # 각 EC2에서 개별 서비스 실행
+#    # Backend EC2: backend + mysql + redis
+#    # Frontend EC2: frontend
+#
+# 📋 시나리오 5: Jenkins CI/CD 통합
+#    # Jenkinsfile에서 이 compose 파일 사용
+#    # 빌드 → 푸시 → 배포 자동화
+#
+# =============================================================================
