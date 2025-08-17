@@ -1,0 +1,23 @@
+@startuml
+actor User
+participant Browser
+participant AuthProvider as AP
+participant RouteGuard as RG
+participant ApiClient as API
+participant AuthService as AS
+
+User -> Browser: /dashboard 접근
+Browser -> RG: requireAuth()
+// RG -> AP: useAuth().accessTokenReady?  // <<planned>> RouteGuard 구현 후 활성화
+alt token 없음
+  RG -> Browser: redirect(/login)
+  User -> Browser: submit credentials
+  Browser -> AS: POST /auth/login
+  AS --> Browser: {token, refreshToken, exp}
+  Browser -> AP: setToken(token, refreshToken, exp)
+end
+// RG -> Browser: render(dashboard)  // <<planned>> RouteGuard 구현 후 활성화
+Browser -> Browser: render(dashboard)  // 현재는 직접 렌더링
+Browser -> API: GET /portfolio (Authorization: Bearer)
+API --> Browser: Portfolio JSON
+@enduml
