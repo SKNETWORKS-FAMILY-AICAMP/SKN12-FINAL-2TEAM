@@ -10,13 +10,13 @@ import { useKoreaInvestApiStatus } from "@/hooks/use-korea-invest-api-status";
 import WorldIndicesTicker         from "@/components/dashboard/WorldIndicesTicker";
 import RecommendStocksCards       from "@/components/dashboard/RecommendStocksCards";
 import { MarketOverviewCard }     from "@/components/dashboard/MarketOverviewCard";
-import { PortfolioBreakdownCard } from "@/components/dashboard/PortfolioBreakdownCard";
-import { AiSignal, AISignalCard } from "@/components/dashboard/AISignalCard";
+import { EconomicCalendarCard }   from "@/components/dashboard/EconomicCalendarCard";
+import { MarketRiskPremiumCard }  from "@/components/dashboard/MarketRiskPremiumCard";
 import { TutorialOverlay }        from "@/components/tutorial/tutorial-overlay";
 import KoreaInvestApiRequired     from "@/components/KoreaInvestApiRequired";
 
 /* ────────── 가시 종목 ────────── */
-const INDEX = ["QQQ", "TQQQ", "SOXL"];
+const INDEX = ["QQQ", "TQQQ", "ZM"];
 const PORTF = ["005930", "000660", "051910"];
 
 export default function DashboardPageClient() {
@@ -65,7 +65,7 @@ export default function DashboardPageClient() {
   // ── 시세 상태 ───────────────────────────
   const [marketData, setMarketData] = useState<any[]>([]);
   const [portfolioItems, setPortfolioItems] = useState<any[]>([]);
-  const [aiSignals] = useState<AiSignal[]>([
+  const [aiSignals] = useState<any[]>([
     { label:"삼성전자",      action:"매수", confidence:"92%", change:"+5.1%", reason:"기술적 돌파 + 실적 개선 기대" },
     { label:"LG에너지솔루션", action:"매도", confidence:"78%", change:"-5.6%", reason:"과매수 구간 + 수급 약화" },
   ]);
@@ -76,15 +76,21 @@ export default function DashboardPageClient() {
     if (!isConfigured) return;
     
     const recompute = () => {
+      // 실제 데이터가 있는 티커들만 필터링
+      const activeTickers = INDEX.filter(symbol => {
+        const stockInfo = getStock(symbol);
+        return stockInfo && stockInfo.price > 0;
+      });
+      
       setMarketData(
-        INDEX.map((s) => {
+        activeTickers.map((s) => {
           const info = getStock(s);
           return {
             label: s,
             value: info?.price ?? 0,
             change: info
-      ? `${info.changePct >= 0 ? "+" : ""}${(info.changePct ?? 0).toFixed(2)}%`
-      : "N/A",
+              ? `${info.changePct >= 0 ? "+" : ""}${(info.changePct ?? 0).toFixed(2)}%`
+              : "N/A",
           };
         })
       );
@@ -173,8 +179,8 @@ export default function DashboardPageClient() {
         <div className="w-full flex justify-center">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-2 max-w-7xl">
             <MarketOverviewCard     markets={marketData}   />
-            <PortfolioBreakdownCard items={portfolioItems} />
-            <AISignalCard           signals={aiSignals}    />
+            <EconomicCalendarCard />
+            <MarketRiskPremiumCard signals={aiSignals} />
           </div>
         </div>
       </main>

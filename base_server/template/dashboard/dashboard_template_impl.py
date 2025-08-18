@@ -1,8 +1,8 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import traceback
 
 import aiohttp
-from typing import Any
+from typing import Any, List
 from template.base.base_template import BaseTemplate
 from template.base.template_config import AppConfig
 from template.dashboard.common.dashboard_serialize import (
@@ -11,7 +11,9 @@ from template.dashboard.common.dashboard_serialize import (
     DashboardPerformanceRequest, DashboardPerformanceResponse,
     SecuritiesLoginRequest, SecuritiesLoginResponse,
     PriceRequest, PriceResponse,
-    StockRecommendationRequest, StockRecommendationResponse
+    StockRecommendationRequest, StockRecommendationResponse,
+    EconomicCalendarRequest, EconomicCalendarResponse,
+    MarketRiskPremiumRequest, MarketRiskPremiumResponse
 )
 from template.dashboard.common.dashboard_model import AssetSummary, StockHolding, MarketAlert, MarketOverview
 from service.service_container import ServiceContainer
@@ -705,14 +707,31 @@ class DashboardTemplateImpl(BaseTemplate):
                     if len(out) >= limit:
                         break
                 return out
+            def pick_unique(seq: list[str], k: int, banned: set[str] | None = None) -> list[str]:
+                """seq에서 앞에서부터 중복/금지(banned) 없이 최대 k개를 뽑아 반환."""
+                banned = banned or set()
+                out: list[str] = []
+                seen: set[str] = set()
+                for t in seq:
+                    u = (t or "").strip().upper()
+                    if not u or u in banned or u in seen:
+                        continue
+                    out.append(u)
+                    seen.add(u)
+                    if len(out) >= k:
+                        break
+                return out
 
+            # 루프 돌기 전에 한 줄 추가
+            used_tickers: set[str] = set()
+            TARGET_PER_STYLE = 10  # 기존처럼 10개를 상한으로 유지
 
             for style, prompt in zip(styles, prompts):
                 tickers: list[str] = []
-                # 1-a) OpenAI Responses API + web_search_preview 우선 시도
+
+                # ── 기존 1-a, 1-b, 폴백 로직 그대로 유지 ─────────────────────────────
                 try:
                     from openai import OpenAI  # type: ignore
-                    # OpenAI 키/엔드포인트 재구성 (AppConfig 우선 → env 폴백)
                     openai_key_cfg = os.getenv("OPENAI_API_KEY") or None
                     openai_model_cfg = os.getenv("OPENAI_SEARCH_MODEL") or None
                     base_url_cfg: str | None = None
@@ -722,14 +741,13 @@ class DashboardTemplateImpl(BaseTemplate):
                         if prov:
                             openai_key_cfg = openai_key_cfg or prov.api_key
                             base_url_cfg = getattr(prov, "base_url", None) or base_url_cfg
-                    # 검색 지원 모델 기본값
                     search_model = openai_model_cfg or os.getenv("OPENAI_MODEL_SEARCH_DEFAULT", "gpt-4.1")
                     if openai_key_cfg:
                         client = OpenAI(api_key=openai_key_cfg, base_url=base_url_cfg)
                         prompt_tickers_ws = (
                             f"You are a professional equity analyst. Using up-to-date web search, "
                             f"select 10 promising US {market} tickers for the category {style}. "
-                            'Return strictly JSON only: {{"tickers":["AAPL", ...]}} with UPPERCASE tickers. '
+                            'Return strictly JSON only: {"tickers":["AAPL", ...]} with UPPERCASE tickers. '
                             "Do not include any explanation. Consider liquidity and recency."
                         )
                         ws = client.responses.create(
@@ -738,11 +756,9 @@ class DashboardTemplateImpl(BaseTemplate):
                             tool_choice={"type": "web_search_preview"},
                             input=prompt_tickers_ws,
                         )
-                        # 안전 출력 추출
                         raw = getattr(ws, "output_text", None)
                         if not raw:
                             try:
-                                # fallback: responses.output -> first message
                                 outputs = getattr(ws, "output", [])
                                 if outputs:
                                     for item in outputs:
@@ -762,13 +778,12 @@ class DashboardTemplateImpl(BaseTemplate):
                 except Exception:
                     pass
 
-                # 1-b) LangChain LLM 폴백
                 if not tickers and llm is not None:
                     try:
                         prompt_tickers = (
                             f"다음 카테고리({style})에 적합한 미국 나스닥에 유망 티커 10개를 선택. "
                             f"{prompt}하기 좋은 주식 시장을 분석하고, 유망 티커 10개를 선택하고 "
-                            '오직 JSON으로만 응답하라. 형식: {{"tickers":["AAPL", ...]}}'
+                            '오직 JSON으로만 응답하라. 형식: {"tickers":["AAPL", ...]}'
                         )
                         print(f"llm이 시도 한다.")
                         out = llm.invoke(prompt_tickers)
@@ -777,17 +792,19 @@ class DashboardTemplateImpl(BaseTemplate):
                     except Exception:
                         tickers = []
 
-                # LLM 실패/미사용 시 간단 폴백(최소 동작 보장)
                 if not tickers:
                     fallback: dict[str, list[str]] = {
-                        "CONSERVATIVE": ["AAPL", "MSFT", "GOOGL", "AVGO", "COST", "PEP", "KO", "JNJ", "PG", "V"],
-                        "GROWTH": ["NVDA", "TSLA", "AMD", "SMCI", "PLTR", "SHOP", "MDB", "CRWD", "SNOW", "NET"],
-                        "VALUE": ["AMZN", "META", "NFLX", "ADBE", "INTC", "ORCL", "CSCO", "IBM", "QCOM", "TXN"],
+                        "CONSERVATIVE": ["AAPL","MSFT","GOOGL","AVGO","COST","PEP","KO","JNJ","PG","V"],
+                        "GROWTH": ["NVDA","TSLA","AMD","SMCI","PLTR","SHOP","MDB","CRWD","SNOW","NET"],
+                        "VALUE": ["AMZN","META","NFLX","ADBE","INTC","ORCL","CSCO","IBM","QCOM","TXN"],
                     }
                     print("LLM 실패/미사용 시 간단 폴백")
-                    tickers = fallback.get(style, [])[:10]
+                    tickers = fallback.get(style, [])[:TARGET_PER_STYLE]
 
-                style_to_tickers[style] = tickers
+                final_list = pick_unique(tickers, TARGET_PER_STYLE, banned=used_tickers)
+                style_to_tickers[style] = final_list
+                used_tickers.update(final_list)
+
             timings["step1_candidates"] = tick("step1_candidates")[1]
             tick = step_timer()
 
@@ -1081,3 +1098,402 @@ class DashboardTemplateImpl(BaseTemplate):
             response.errorCode = 1000
 
         return response
+
+    async def on_economic_calendar_req(self, client_session, request: EconomicCalendarRequest):
+        """경제 일정 요청 처리 (FMP API 사용)"""
+        Logger.info(f"📥 경제 일정 요청: {request.model_dump_json()}")
+
+        response = EconomicCalendarResponse()
+        response.sequence = request.sequence
+
+        try:
+            # 설정 파일에서 FMP API 키 가져오기
+            fmp_api_key = ""
+            Logger.info(f"🔍 app_config 확인: {self.app_config is not None}")
+            
+            if self.app_config:
+                Logger.info(f"🔍 app_config 속성들: {dir(self.app_config)}")
+                if hasattr(self.app_config, 'llmConfig'):
+                    Logger.info(f"🔍 llmConfig 확인: {self.app_config.llmConfig}")
+                    if hasattr(self.app_config.llmConfig, 'API_Key'):
+                        Logger.info(f"🔍 API_Key 확인: {self.app_config.llmConfig.API_Key}")
+                        fmp_api_key = self.app_config.llmConfig.API_Key.get("FMP_API_KEY", "")
+                        Logger.info(f"🔑 FMP API 키: {'있음' if fmp_api_key else '없음'} ({fmp_api_key[:10] if fmp_api_key else 'N/A'}...)")
+                    else:
+                        Logger.warn("⚠️ llmConfig에 API_Key 속성 없음")
+                else:
+                    Logger.warn("⚠️ app_config에 llmConfig 속성 없음")
+            else:
+                Logger.warn("⚠️ app_config가 None")
+
+            if not fmp_api_key:
+                # 환경변수에서 폴백 시도
+                import os
+                fmp_api_key = os.getenv("FMP_API_KEY", "")
+                Logger.info(f"🔍 환경변수에서 FMP API 키 조회: {'있음' if fmp_api_key else '없음'}")
+
+            if not fmp_api_key:
+                Logger.warn("❌ FMP API 키 없음 - 더미 데이터 반환")
+                response.result = "success"
+                response.events = self._get_dummy_events(request.days)
+                response.message = "FMP API 키가 설정되지 않아 더미 데이터를 반환합니다."
+                response.source = "더미 데이터"
+                response.errorCode = 0
+                return response
+
+            # FMP API 호출
+            events = await self._fetch_fmp_economic_calendar(fmp_api_key, request.days)
+            
+            response.result = "success"
+            response.events = events
+            response.message = "경제 일정 조회 성공"
+            response.source = "FMP API"
+            response.errorCode = 0
+
+        except Exception as e:
+            Logger.error(f"🔥 경제 일정 조회 오류: {e}")
+            response.result = "fail"
+            response.events = self._get_dummy_events(request.days)
+            response.message = f"API 오류로 인해 더미 데이터를 반환합니다: {str(e)}"
+            response.source = "더미 데이터 (오류 폴백)"
+            response.errorCode = 1000
+
+        return response
+
+    async def on_market_risk_premium_req(self, client_session, request: MarketRiskPremiumRequest):
+        """시장 위험 프리미엄 요청 처리 (FMP API 사용)"""
+        Logger.info(f"📥 시장 위험 프리미엄 요청: {request.model_dump_json()}")
+
+        response = MarketRiskPremiumResponse()
+        response.sequence = request.sequence
+
+        try:
+            # 설정 파일에서 FMP API 키 가져오기
+            fmp_api_key = ""
+            if self.app_config and hasattr(self.app_config, 'llmConfig') and hasattr(self.app_config.llmConfig, 'API_Key'):
+                fmp_api_key = self.app_config.llmConfig.API_Key.get("FMP_API_KEY", "")
+            
+            if not fmp_api_key:
+                # 환경변수에서 폴백 시도
+                import os
+                fmp_api_key = os.getenv("FMP_API_KEY", "")
+
+            if not fmp_api_key:
+                Logger.warn("❌ FMP API 키 없음 - 더미 데이터 반환")
+                response.result = "success"
+                response.premiums = self._get_dummy_market_risk_premiums(request.countries)
+                response.message = "FMP API 키가 설정되지 않아 더미 데이터를 반환합니다."
+                response.source = "더미 데이터"
+                response.errorCode = 0
+                return response
+
+            # FMP API 호출
+            premiums = await self._fetch_fmp_market_risk_premiums(fmp_api_key, request.countries)
+            
+            response.result = "success"
+            response.premiums = premiums
+            response.message = "시장 위험 프리미엄 조회 성공"
+            response.source = "FMP API"
+            response.lastUpdated = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            response.errorCode = 0
+
+        except Exception as e:
+            Logger.error(f"🔥 시장 위험 프리미엄 조회 오류: {e}")
+            response.result = "fail"
+            response.premiums = self._get_dummy_market_risk_premiums(request.countries)
+            response.message = f"API 오류로 인해 더미 데이터를 반환합니다: {str(e)}"
+            response.source = "더미 데이터 (오류 폴백)"
+            response.errorCode = 1000
+
+        return response
+
+    async def _fetch_fmp_economic_calendar(self, fmp_api_key: str, days: int) -> list:
+        """FMP API에서 경제 일정 데이터 가져오기 (캐싱 적용)"""
+        try:
+            # 캐시 키 생성 (날짜와 일수 기반)
+            cache_key = f"economic_calendar_{days}_{datetime.now().strftime('%Y-%m-%d')}"
+            
+            # 캐시된 데이터가 있고 10분 이내라면 반환
+            if hasattr(self, '_economic_calendar_cache'):
+                cached_data = self._economic_calendar_cache.get(cache_key)
+                if cached_data and (datetime.now() - cached_data['timestamp']).total_seconds() < 600:  # 10분
+                    Logger.info(f"💾 캐시된 경제 일정 데이터 사용 (경과: {(datetime.now() - cached_data['timestamp']).total_seconds():.0f}초)")
+                    return cached_data['data']
+            else:
+                self._economic_calendar_cache = {}
+
+            # 오늘부터 지정된 일수 후까지의 날짜 계산 (최대 90일)
+            today = datetime.now()
+            end_date = today.replace(day=today.day + min(days, 90))
+            
+            from_date = today.strftime("%Y-%m-%d")
+            to_date = end_date.strftime("%Y-%m-%d")
+
+            Logger.info(f"🌐 FMP API 호출 준비: from={from_date}, to={to_date}")
+
+            # FMP API 호출 (공식 예시와 동일한 엔드포인트 사용)
+            url = "https://financialmodelingprep.com/api/v3/economic_calendar"
+            params = {
+                "from": from_date,
+                "to": to_date,
+                "apikey": fmp_api_key
+            }
+
+            Logger.info(f"🌐 FMP API 호출: {url}")
+            Logger.info(f"📋 파라미터: {params}")
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params, timeout=30) as resp:
+                    Logger.info(f"📡 FMP API 응답 상태: {resp.status}")
+                    Logger.info(f"📡 FMP API 응답 헤더: {dict(resp.headers)}")
+                    
+                    if resp.status == 429:
+                        Logger.warn("⚠️ FMP API 레이트 리밋 도달 - 캐시된 데이터 또는 더미 데이터 반환")
+                        # 캐시된 데이터가 있으면 반환, 없으면 더미 데이터
+                        if hasattr(self, '_economic_calendar_cache') and self._economic_calendar_cache.get(cache_key):
+                            return self._economic_calendar_cache[cache_key]['data']
+                        return self._get_dummy_events(days)
+                    
+                    if resp.status != 200:
+                        error_text = await resp.text()
+                        Logger.error(f"🔴 FMP API 호출 실패: status={resp.status}, body={error_text}")
+                        raise Exception(f"FMP API 호출 실패: {resp.status}")
+                    
+                    data = await resp.json()
+                    Logger.info(f"📥 FMP API 응답 데이터 타입: {type(data)}")
+                    Logger.info(f"📥 FMP API 응답 데이터 길이: {len(data) if isinstance(data, list) else 'not list'}")
+                    
+                    if isinstance(data, list) and len(data) > 0:
+                        Logger.info(f"📥 FMP API 첫 번째 항목: {data[0]}")
+                    
+                    if not isinstance(data, list):
+                        Logger.warn("⚠️ FMP API 응답이 리스트가 아님 - 더미 데이터 반환")
+                        return self._get_dummy_events(days)
+                    
+                    # FMP API 응답을 우리 형식으로 변환 (정확한 필드명 사용)
+                    events = []
+                    for item in data:
+                        try:
+                            Logger.debug(f"🔍 FMP API 항목 파싱: {item}")
+                            
+                            # 날짜 파싱 - 다양한 형식 지원
+                            raw_date = item.get("date", "")
+                            Logger.debug(f"📅 원본 날짜: {raw_date}")
+                            
+                            event_date = None
+                            if raw_date:
+                                try:
+                                    # "2024-12-18 09:30:00" 형식
+                                    if " " in raw_date:
+                                        event_date = datetime.strptime(raw_date, "%Y-%m-%d %H:%M:%S")
+                                    # "2024-12-18" 형식
+                                    elif "-" in raw_date:
+                                        event_date = datetime.strptime(raw_date, "%Y-%m-%d")
+                                    else:
+                                        Logger.warn(f"⚠️ 알 수 없는 날짜 형식: {raw_date}")
+                                        continue
+                                except Exception as e:
+                                    Logger.warn(f"⚠️ 날짜 파싱 실패: {raw_date}, 에러: {e}")
+                                    continue
+                            
+                            if not event_date:
+                                Logger.warn(f"⚠️ 유효한 날짜 없음: {raw_date}")
+                                continue
+                            
+                            # 한국 시간으로 변환 (UTC+9)
+                            event_date = event_date.replace(tzinfo=None)  # timezone 정보 제거
+                            
+                            event = {
+                                "date": event_date.strftime("%m월 %d일"),
+                                "time": event_date.strftime("%H:%M"),
+                                "country": self._get_country_name(item.get("country", "")),
+                                "event": item.get("event", "경제 지표"),
+                                "impact": self._get_impact_level(item.get("impact", "")),
+                                "previous": str(item.get("previous", "N/A")),
+                                "forecast": str(item.get("estimate", "N/A")),  # estimate 필드 사용
+                                "actual": str(item.get("actual", "")) if item.get("actual") is not None else None,
+                                "currency": item.get("currency", ""),
+                                "change": str(item.get("change", "N/A")) if item.get("change") is not None else "N/A",
+                                "changePercentage": str(item.get("changePercentage", "N/A")) if item.get("changePercentage") is not None else "N/A"
+                            }
+                            
+                            Logger.debug(f"✅ 변환된 이벤트: {event}")
+                            events.append(event)
+                            
+                        except Exception as e:
+                            Logger.warn(f"⚠️ 이벤트 데이터 변환 실패: {e}, item={item}")
+                            continue
+
+                    Logger.info(f"✅ FMP API 데이터 변환 완료: {len(events)}개 이벤트")
+
+                    # 중요도 순으로 정렬 (High > Medium > Low)
+                    impact_order = {"High": 3, "Medium": 2, "Low": 1}
+                    events.sort(key=lambda x: impact_order.get(x["impact"], 0), reverse=True)
+                    
+                    # 최대 8개 이벤트만 반환
+                    limited_events = events[:8]
+                    Logger.info(f"🎯 최종 이벤트: {len(limited_events)}개 (정렬 및 제한 적용)")
+                    
+                    # 캐시에 저장
+                    self._economic_calendar_cache[cache_key] = {
+                        'data': limited_events,
+                        'timestamp': datetime.now()
+                    }
+                    Logger.info(f"💾 경제 일정 데이터 캐시 저장 완료")
+                    
+                    return limited_events
+
+        except Exception as e:
+            Logger.error(f"🔥 FMP API 호출 실패: {e}")
+            # 에러 발생 시 캐시된 데이터가 있으면 반환
+            if hasattr(self, '_economic_calendar_cache') and self._economic_calendar_cache.get(cache_key):
+                Logger.info(f"💾 에러 발생으로 캐시된 데이터 반환")
+                return self._economic_calendar_cache[cache_key]['data']
+            raise e
+
+    def _get_country_name(self, country_code: str) -> str:
+        """국가 코드를 한국어 국가명으로 변환"""
+        country_names = {
+            "US": "미국",
+            "JP": "일본", 
+            "CN": "중국",
+            "KR": "한국",
+            "EU": "유럽연합",
+            "GB": "영국",
+            "DE": "독일",
+            "FR": "프랑스",
+            "CA": "캐나다",
+            "AU": "호주"
+        }
+        return country_names.get(country_code, country_code)
+
+    def _get_impact_level(self, impact: str) -> str:
+        """FMP API의 impact 값을 우리 형식으로 변환"""
+        if not impact:
+            return "Low"
+        
+        impact_lower = impact.lower()
+        if "high" in impact_lower or "높음" in impact_lower:
+            return "High"
+        elif "medium" in impact_lower or "보통" in impact_lower:
+            return "Medium"
+        else:
+            return "Low"
+
+    def _get_dummy_events(self, days: int) -> list:
+        """더미 경제 일정 데이터 생성 (현재 날짜 기준)"""
+        today = datetime.now()
+        events = []
+        
+        # 주요 경제 지표들
+        indicators = [
+            {"name": "비농업 고용지표", "country": "미국", "impact": "High", "previous": "187K", "forecast": "180K"},
+            {"name": "ISM 제조업 지수", "country": "미국", "impact": "Medium", "previous": "49.0", "forecast": "49.5"},
+            {"name": "소비자 물가지수(CPI)", "country": "미국", "impact": "High", "previous": "3.2%", "forecast": "3.1%"},
+            {"name": "연방기금 금리", "country": "미국", "impact": "High", "previous": "5.50%", "forecast": "5.50%"},
+            {"name": "소매 판매", "country": "미국", "impact": "Medium", "previous": "0.3%", "forecast": "0.2%"},
+            {"name": "주택 판매", "country": "미국", "impact": "Low", "previous": "6.5M", "forecast": "6.6M"},
+            {"name": "GDP 성장률", "country": "미국", "impact": "High", "previous": "2.1%", "forecast": "2.0%"},
+            {"name": "기업 수익", "country": "미국", "impact": "Medium", "previous": "N/A", "forecast": "N/A"}
+        ]
+        
+        for i, indicator in enumerate(indicators[:8]):  # 최대 8개
+            # 오늘부터 i일 후
+            event_date = today + timedelta(days=i)
+            
+            event = {
+                "date": event_date.strftime("%m월 %d일"),
+                "time": "09:30" if i % 2 == 0 else "14:00",  # 번갈아가며 시간 설정
+                "country": indicator["country"],
+                "event": indicator["name"],
+                "impact": indicator["impact"],
+                "previous": indicator["previous"],
+                "forecast": indicator["forecast"],
+                "actual": None,  # 더미 데이터는 실제값 없음
+                "currency": "USD",
+                "change": "N/A",
+                "changePercentage": "N/A"
+            }
+            events.append(event)
+        
+        Logger.info(f"🎭 더미 경제 일정 데이터 생성: {len(events)}개 (현재 날짜 기준)")
+        return events
+
+    async def _fetch_fmp_market_risk_premiums(self, fmp_api_key: str, countries: List[str]) -> list:
+        """FMP API에서 시장 위험 프리미엄 데이터 가져오기"""
+        try:
+            Logger.info(f"🌐 FMP 시장 위험 프리미엄 API 호출 준비")
+
+            # FMP API 호출
+            url = "https://financialmodelingprep.com/stable/market-risk-premium"
+            params = {
+                "apikey": fmp_api_key
+            }
+
+            Logger.info(f"🌐 FMP API 호출: {url}")
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params, timeout=30) as resp:
+                    Logger.info(f"📡 FMP API 응답 상태: {resp.status}")
+                    
+                    if resp.status == 429:
+                        Logger.warn("⚠️ FMP API 레이트 리밋 도달 - 더미 데이터 반환")
+                        return self._get_dummy_market_risk_premiums(countries)
+                    
+                    if resp.status != 200:
+                        error_text = await resp.text()
+                        Logger.error(f"🔴 FMP API 호출 실패: status={resp.status}, body={error_text}")
+                        raise Exception(f"FMP API 호출 실패: {resp.status}")
+                    
+                    data = await resp.json()
+                    Logger.info(f"📥 FMP API 응답 데이터: {len(data) if isinstance(data, list) else 'not list'}개 항목")
+                    
+                    if not isinstance(data, list):
+                        Logger.warn("⚠️ FMP API 응답이 리스트가 아님 - 더미 데이터 반환")
+                        return self._get_dummy_market_risk_premiums(countries)
+                    
+                    # 요청된 국가들만 필터링
+                    filtered_premiums = []
+                    for item in data:
+                        country_code = item.get("country", "")
+                        if country_code in countries:
+                            premium = {
+                                "country": self._get_country_name(country_code),
+                                "countryCode": country_code,
+                                "continent": item.get("continent", ""),
+                                "countryRiskPremium": round(float(item.get("countryRiskPremium", 0)), 2),
+                                "totalEquityRiskPremium": round(float(item.get("totalEquityRiskPremium", 0)), 2)
+                            }
+                            filtered_premiums.append(premium)
+                    
+                    Logger.info(f"✅ FMP API 데이터 변환 완료: {len(filtered_premiums)}개 국가")
+                    return filtered_premiums
+
+        except Exception as e:
+            Logger.error(f"🔥 FMP API 호출 실패: {e}")
+            raise e
+
+    def _get_dummy_market_risk_premiums(self, countries: List[str]) -> list:
+        """더미 시장 위험 프리미엄 데이터 생성"""
+        dummy_data = {
+            "US": {"countryRiskPremium": 0.0, "totalEquityRiskPremium": 4.6},
+            "KR": {"countryRiskPremium": 1.2, "totalEquityRiskPremium": 5.8},
+            "JP": {"countryRiskPremium": 0.8, "totalEquityRiskPremium": 5.4},
+            "CN": {"countryRiskPremium": 1.5, "totalEquityRiskPremium": 6.1},
+            "EU": {"countryRiskPremium": 0.5, "totalEquityRiskPremium": 5.1}
+        }
+        
+        premiums = []
+        for country_code in countries:
+            if country_code in dummy_data:
+                premium = {
+                    "country": self._get_country_name(country_code),
+                    "countryCode": country_code,
+                    "continent": "Asia" if country_code in ["KR", "JP", "CN"] else "North America" if country_code == "US" else "Europe",
+                    "countryRiskPremium": dummy_data[country_code]["countryRiskPremium"],
+                    "totalEquityRiskPremium": dummy_data[country_code]["totalEquityRiskPremium"]
+                }
+                premiums.append(premium)
+        
+        Logger.info(f"🎭 더미 시장 위험 프리미엄 데이터 생성: {len(premiums)}개 국가")
+        return premiums

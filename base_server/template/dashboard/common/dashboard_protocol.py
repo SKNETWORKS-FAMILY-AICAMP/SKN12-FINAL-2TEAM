@@ -1,6 +1,6 @@
 from .dashboard_serialize import (
     DashboardMainRequest, DashboardAlertsRequest, DashboardPerformanceRequest, PriceRequest, SecuritiesLoginRequest,
-    StockRecommendationRequest, StockRecommendationResponse
+    StockRecommendationRequest, StockRecommendationResponse, EconomicCalendarRequest, EconomicCalendarResponse, MarketRiskPremiumRequest
 )
 
 class DashboardProtocol:
@@ -12,6 +12,8 @@ class DashboardProtocol:
         self.on_dashboard_oauth_req_callback = None
         self.on_dashboard_price_us_req_callback = None
         self.on_stock_recommendation_req_callback = None
+        self.on_economic_calendar_req_callback = None
+        self.on_market_risk_premium_req_callback = None
 
     async def dashboard_main_req_controller(self, session, msg: bytes, length: int):
         request = DashboardMainRequest.model_validate_json(msg)
@@ -51,3 +53,16 @@ class DashboardProtocol:
         if self.on_stock_recommendation_req_callback:
             return await self.on_stock_recommendation_req_callback(session, request)
         raise NotImplementedError('on_stock_recommendation_req_callback is not set')
+
+    async def economic_calendar_req_controller(self, session, msg: bytes, length: int):
+        # 경제 일정 요청 처리
+        request = EconomicCalendarRequest.model_validate_json(msg)
+        if self.on_economic_calendar_req_callback:
+            return await self.on_economic_calendar_req_callback(session, request)
+        raise NotImplementedError('on_economic_calendar_req_callback is not set')
+
+    async def market_risk_premium_req_controller(self, session, msg: bytes, length: int):
+        request = MarketRiskPremiumRequest.model_validate_json(msg)
+        if self.on_market_risk_premium_req_callback:
+            return await self.on_market_risk_premium_req_callback(session, request)
+        raise NotImplementedError('on_market_risk_premium_req_callback is not set')

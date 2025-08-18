@@ -56,9 +56,10 @@ class SecuritiesLoginRequest(BaseRequest):
     mode: str = "prod"
 
 class SecuritiesLoginResponse(BaseResponse):
-    result: str
-    message: str
-    app_key: str
+    """증권사 API 로그인 응답"""
+    result: str = "pending"
+    message: str = ""
+    app_key: str = ""
 
 class PriceRequest(BaseRequest):
     accessToken: str = ""  # 사용자 accessToken
@@ -67,12 +68,13 @@ class PriceRequest(BaseRequest):
     kisToken: Optional[str] = None       # KIS 토큰 (옵션)
 
 class PriceResponse(BaseResponse):
-    ticker: str
-    price: float
-    change: float
-    change_pct: float
-    volume: float
-    timestamp: str
+    """미국 나스닥 종가 응답"""
+    ticker: str = ""
+    price: float = 0.0
+    change: float = 0.0
+    change_pct: float = 0.0
+    volume: float = 0.0
+    timestamp: str = ""
 
 # =========================
 # 주식 종목 추천 요청/응답
@@ -85,6 +87,35 @@ class StockRecommendationRequest(BaseRequest):
 
 class StockRecommendationResponse(BaseResponse):
     """주식 종목 추천 응답"""
-    result: str
+    result: str = "pending"
     recommendations: List[Dict[str, Any]] = []  # [{date,ticker,reason,report,color?}]
     message: str = ""
+
+# =========================
+# 경제 일정 요청/응답
+# =========================
+class EconomicCalendarRequest(BaseRequest):
+    """경제 일정 요청"""
+    accessToken: str = ""  # 사용자 accessToken
+    days: int = 7          # 조회할 일수 (기본 7일)
+
+class EconomicCalendarResponse(BaseResponse):
+    """경제 일정 응답"""
+    result: str = "pending"
+    events: List[Dict[str, Any]] = []  # [{date,time,country,event,impact,previous,forecast,actual}]
+    message: str = ""
+    source: str = ""       # 데이터 소스 (FMP API, 더미 데이터 등)
+    dateRange: Dict[str, str] = {}  # {from, to}
+
+
+class MarketRiskPremiumRequest(BaseRequest):
+    accessToken: str = ""
+    countries: List[str] = ["US", "KR", "JP", "CN", "EU"]  # 기본 국가들
+
+
+class MarketRiskPremiumResponse(BaseResponse):
+    result: str = "pending"
+    premiums: List[Dict[str, Any]] = []
+    message: str = ""
+    source: str = ""
+    lastUpdated: str = ""
