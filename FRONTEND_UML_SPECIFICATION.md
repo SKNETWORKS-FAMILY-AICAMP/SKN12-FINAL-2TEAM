@@ -413,9 +413,10 @@ graph LR
 - **ServiceWorker**: 오프라인 지원, 푸시 알림
 - **IndexedDB Cache**: 대용량 데이터 로컬 저장
 - **Analytics Engine**: 사용자 행동 추적, 성능 모니터링
-```
 
 ---
+
+
 
 ## 4. 클래스 모델 (주요 도메인 & 클라이언트)
 
@@ -970,41 +971,41 @@ stateDiagram-v2
 
 ```mermaid
 graph TB
-    subgraph UD[User Device]
-        BR[Browser React 18]
+  subgraph UD["User Device"]
+    BR["Browser (React 18)"]
+  end
+
+  subgraph EDGE["Edge Runtime"]
+    APP["Next.js App Router - SSR/SSG"]
+    SSE_GW["SSE Gateway - Edge"]
+  end
+
+  subgraph NODE["Node Runtime"]
+    WS_GW["WebSocket Gateway"]
+  end
+
+  subgraph BE["Backend"]
+    subgraph APIs["APIs"]
+      AuthService["Auth Service"]
+      PortfolioAPI["Portfolio API"]
+      TradeEngine["Trade Engine API"]
+      TutorialAPI["Tutorial API"]
+      NotificationAPI["Notification API"]
     end
-    
-    subgraph EDGE[Edge Runtime]
-        APP[Next.js App Router SSR/SSG]
-        SSE_GW[SSE Gateway Edge]
+    subgraph Realtime["Realtime"]
+      MarketWS["Market WS Broker"]
+      ChatSSE["Chat SSE Gateway"]
     end
-    
-    subgraph NODE[Node Runtime]
-        WS_GW[WebSocket Gateway]
-    end
-    
-    subgraph BE[Backend]
-        subgraph APIs[APIs]
-            AuthService[Auth Service]
-            PortfolioAPI[Portfolio API]
-            TradeEngine[Trade Engine API]
-            TutorialAPI[Tutorial API]
-            NotificationAPI[Notification API]
-        end
-        
-        subgraph Realtime[Realtime]
-            MarketWS[Market WS Broker]
-            ChatSSE[Chat SSE Gateway]
-        end
-    end
-    
-    BR <--> APP : HTTP HTTPS
-    BR --> WS_GW : WebSocket Node only
-    BR --> SSE_GW : SSE Edge Node
-    APP --> APIs : REST
-    
-    classDef note fill:#fff8e1,stroke:#f4b400,stroke-width:2px
-    class WS_GW,SSE_GW note
+  end
+
+  %% Edges
+  BR -->|HTTP / HTTPS| APP
+  APP -->|HTTP / HTTPS| BR
+  BR -->|WebSocket - Node only| WS_GW
+  BR -->|SSE - Edge or Node| SSE_GW
+  APP -->|REST| APIs
+  WS_GW -.->|feeds| MarketWS
+  SSE_GW -.->|feeds| ChatSSE
 ```
 
 ---
