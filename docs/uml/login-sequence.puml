@@ -21,5 +21,4 @@ else token exists
   Browser -> API: GET /portfolio (Authorization: Bearer)
   API --> Browser: Portfolio JSON
 end
-
 @enduml
