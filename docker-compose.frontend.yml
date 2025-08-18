@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  frontend:
+    image: ashone91/trading-frontend:latest
+    container_name: trading-frontend-prod
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    volumes:
+      # Frontend 설정 파일 마운팅 (로컬 테스트 방식과 동일)
+      - "/opt/trading/frontend-config/.env:/app/.env:ro"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - trading-frontend-network
+
+networks:
+  trading-frontend-network:
+    driver: bridge
+
+# =============================================================================
+# 🚀 Frontend 서비스 사용법 (AWS EC2)
+# =============================================================================
+#
+# 1️⃣ 설정 파일 준비:
+#    sudo mkdir -p /opt/trading/frontend-config
+#    sudo chown -R ubuntu:ubuntu /opt/trading
+#    
+#    # Frontend 환경 설정 파일 생성
+#    sudo tee /opt/trading/frontend-config/.env > /dev/null << 'EOF'
+#    NEXT_PUBLIC_API_URL=https://bullant-kr.com
+#    NEXT_PUBLIC_WS_URL=wss://bullant-kr.com
+#    BACKEND_URL=https://bullant-kr.com
+#    NODE_ENV=production
+#    EOF
+#
+# 2️⃣ Frontend 서비스 실행:
+#    docker-compose -f docker-compose.frontend.yml pull
+#    docker-compose -f docker-compose.frontend.yml up -d
+#
+# 3️⃣ 상태 확인:
+#    docker-compose -f docker-compose.frontend.yml ps
+#    docker-compose -f docker-compose.frontend.yml logs -f frontend
+#
+# 4️⃣ 헬스체크:
+#    curl http://localhost:3000
+#
+# 5️⃣ 서비스 중지:
+#    docker-compose -f docker-compose.frontend.yml down
+#
+# =============================================================================

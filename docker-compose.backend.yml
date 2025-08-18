@@ -1,0 +1,101 @@
+version: '3.8'
+
+services:
+  backend:
+    image: ashone91/trading-backend:latest
+    container_name: trading-backend-prod
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_ENV=PROD
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # 설정 파일 볼륨 마운팅 (로컬 테스트 방식과 동일)
+      - "/opt/trading/configs/base_web_server-config.json:/app/application/base_web_server/base_web_server-config.json:ro"
+      # 로그 디렉토리 마운팅
+      - "/opt/trading/logs:/app/logs"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - trading-backend-network
+
+networks:
+  trading-backend-network:
+    driver: bridge
+
+# =============================================================================
+# 🚀 Backend 서비스 사용법 (AWS EC2)
+# =============================================================================
+#
+# 1️⃣ 설정 파일 준비:
+#    sudo mkdir -p /opt/trading/configs
+#    sudo mkdir -p /opt/trading/logs
+#    sudo chown -R ubuntu:ubuntu /opt/trading
+#    
+#    # Backend 설정 파일 생성 (PROD 환경)
+#    sudo tee /opt/trading/configs/base_web_server-config.json > /dev/null << 'EOF'
+#    {
+#      "templateConfig": {
+#        "appId": "finance_app",
+#        "env": "PROD",
+#        "skipAwsTests": true
+#      },
+#      "databaseConfig": {
+#        "type": "mysql",
+#        "host": "trading-mysql-db.cpkmaq4eqdte.ap-northeast-2.rds.amazonaws.com",
+#        "port": 3306,
+#        "user": "YOUR_DB_USERNAME",
+#        "password": "YOUR_DB_PASSWORD",
+#        "database": "finance_global",
+#        "shard_databases": ["finance_shard_1", "finance_shard_2"]
+#      },
+#      "cacheConfig": {
+#        "type": "redis",
+#        "host": "ec2-52-78-194-14.ap-northeast-2.compute.amazonaws.com",
+#        "port": 6379,
+#        "password": "YOUR_REDIS_PASSWORD",
+#        "session_expire_seconds": 3600
+#      },
+#      "llmConfig": {
+#        "default_provider": "openai",
+#        "providers": {
+#          "openai": {
+#            "api_key": "YOUR_OPENAI_API_KEY",
+#            "model": "gpt-4",
+#            "temperature": 0.7,
+#            "max_tokens": 2000
+#          }
+#        }
+#      },
+#      "serverConfig": {
+#        "host": "0.0.0.0",
+#        "port": 8000,
+#        "cors_origins": [
+#          "https://bullant-kr.com",
+#          "https://*.bullant-kr.com",
+#          "http://localhost:3000"
+#        ]
+#      }
+#    }
+#    EOF
+#
+# 2️⃣ Backend 서비스 실행:
+#    docker-compose -f docker-compose.backend.yml pull
+#    docker-compose -f docker-compose.backend.yml up -d
+#
+# 3️⃣ 상태 확인:
+#    docker-compose -f docker-compose.backend.yml ps
+#    docker-compose -f docker-compose.backend.yml logs -f backend
+#
+# 4️⃣ 헬스체크:
+#    curl http://localhost:8000/health
+#
+# 5️⃣ 서비스 중지:
+#    docker-compose -f docker-compose.backend.yml down
+#
+# =============================================================================
