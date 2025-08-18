@@ -32,7 +32,48 @@
   * *Portfolio API* (자산/거래/리밸런싱)
   * *Trade Engine API* (자동매매 설정/시그널)
 
-![유스케이스 다이어그램 (As-Is)](docs/uml/use-case-as-is.svg)
+```mermaid
+graph LR
+    User((User))
+    
+    subgraph Frontend[Frontend]
+        UC_Login[로그인/세션확립]
+        UC_ViewDashboard[대시보드 실시간 보기]
+        UC_ChatAI[AI 챗봇 대화(SSE)]
+        UC_ManagePortfolio[포트폴리오 조회/편집]
+        UC_Autotrade[자동매매 전략 구성]
+        UC_Settings[사용자 설정]
+        UC_Tutorial[온보딩 튜토리얼]
+        UC_MarketData[시장 데이터 조회]
+    end
+    
+    subgraph External[External Services]
+        AuthService[Auth Service]
+        MarketWS[Market WS Broker]
+        ChatSSE[Chat SSE Gateway]
+        PortfolioAPI[Portfolio API]
+        TradeEngine[Trade Engine API]
+        TutorialAPI[Tutorial API]
+    end
+    
+    User --> UC_Login
+    User --> UC_ViewDashboard
+    User --> UC_ChatAI
+    User --> UC_ManagePortfolio
+    User --> UC_Autotrade
+    User --> UC_Settings
+    User --> UC_Tutorial
+    User --> UC_MarketData
+    
+    UC_Login --> AuthService
+    UC_ViewDashboard --> MarketWS
+    UC_ChatAI --> ChatSSE
+    UC_ManagePortfolio --> PortfolioAPI
+    UC_Autotrade --> TradeEngine
+    UC_Settings --> PortfolioAPI
+    UC_MarketData --> MarketWS
+    UC_Tutorial --> TutorialAPI
+```
 
 **핵심 시나리오 요약 (As-Is)**
 
@@ -47,7 +88,59 @@
 
 ### 1.2 향후 개선 계획 (To-Be)
 
-![유스케이스 다이어그램 (To-Be)](docs/uml/use-case-to-be.svg)
+```mermaid
+graph LR
+    User((User))
+    
+    subgraph Frontend[Frontend]
+        UC_Login[로그인/세션확립]
+        UC_ViewDashboard[대시보드 실시간 보기]
+        UC_ChatAI[AI 챗봇 대화(SSE)]
+        UC_ManagePortfolio[포트폴리오 조회/편집]
+        UC_Autotrade[자동매매 전략 구성]
+        UC_Settings[사용자 설정]
+        UC_Tutorial[온보딩 튜토리얼]
+        UC_MarketData[시장 데이터 조회]
+        
+        UC_OfflineMode[오프라인 모드]:::planned
+        UC_PWA[PWA 설치]:::planned
+        UC_AdvancedAnalytics[고급 분석]:::planned
+        UC_SocialTrading[소셜 트레이딩]:::planned
+    end
+    
+    subgraph External[External Services]
+        AuthService[Auth Service]
+        MarketWS[Market WS Broker]
+        ChatSSE[Chat SSE Gateway]
+        PortfolioAPI[Portfolio API]
+        TradeEngine[Trade Engine API]
+        TutorialAPI[Tutorial API]
+    end
+    
+    User --> UC_Login
+    User --> UC_ViewDashboard
+    User --> UC_ChatAI
+    User --> UC_ManagePortfolio
+    User --> UC_Autotrade
+    User --> UC_Settings
+    User --> UC_Tutorial
+    User --> UC_MarketData
+    User --> UC_OfflineMode
+    User --> UC_PWA
+    User --> UC_AdvancedAnalytics
+    User --> UC_SocialTrading
+    
+    UC_Login --> AuthService
+    UC_ViewDashboard --> MarketWS
+    UC_ChatAI --> ChatSSE
+    UC_ManagePortfolio --> PortfolioAPI
+    UC_Autotrade --> TradeEngine
+    UC_Settings --> PortfolioAPI
+    UC_MarketData --> MarketWS
+    UC_Tutorial --> TutorialAPI
+    
+    classDef planned fill:#fff8e1,stroke:#f4b400,stroke-width:2px
+```
 
 **향후 개선 시나리오**
 
@@ -64,7 +157,56 @@
 
 소스 트리의 **의존 방향**과 층위를 명확히 한다. `components`는 `hooks/lib/providers/types`에 **의존**하되, 역의존을 금한다.
 
-![패키지 구조 다이어그램](docs/uml/package-structure.svg)
+```mermaid
+graph TD
+    subgraph App[app/ (App Router)]
+        Layout[layout.tsx]
+        Page[page.tsx]
+        Auth[auth/]
+        Dashboard[dashboard/]
+        Chat[chat/]
+        Portfolio[portfolio/]
+        Market[market/]
+        Autotrade[autotrade/]
+        Settings[settings/]
+        Tutorial[tutorial/]
+        Onboarding[onboarding/]
+        Reports[reports/]
+        Notifications[notifications/]
+        Realtime[realtime/]
+        WebSocketTest[websocket-test/]
+        ErrorTest[error-test/]
+    end
+    
+    subgraph Components[components/]
+        UI[ui/]
+        DashboardComp[dashboard/]
+        ChatComp[chat/]
+        PortfolioComp[portfolio/]
+        MarketComp[market/]
+        AutotradeComp[autotrade/]
+        LayoutComp[layout/]
+        TutorialComp[tutorial/]
+        Landing[landing/]
+        ReportsComp[reports/]
+    end
+    
+    Hooks[hooks/]
+    Lib[lib/]
+    Providers[providers/]
+    Types[types/]
+    
+    App --> Components
+    App --> Hooks
+    App --> Lib
+    App --> Providers
+    Components --> Hooks
+    Components --> Lib
+    Components --> Types
+    Hooks --> Lib
+    Providers --> Lib
+    Lib --> Types
+```
 
 **규율:** 상위 레이어는 하위 레이어로만 의존(단방향). `lib/`는 순수 유틸/클라이언트로 유지, React 의존 최소화.
 
@@ -72,80 +214,75 @@
 
 ### 2.2 향후 개선 구조 (To-Be)
 
-```plantuml
-@startuml
-package "app/ (App Router)" as APP {
-  [layout.tsx]
-  [page.tsx]
-  package "(auth)/" as AUTH
-  package "dashboard/" as DASH
-  package "chat/" as CHAT
-  package "portfolio/" as PORT
-  package "market/" as MKT
-  package "autotrade/" as AT
-  package "settings/" as SET
-  package "tutorial/" as TUT
-  package "onboarding/" as ONB
-  package "reports/" as REP
-  package "notifications/" as NOT
-  package "realtime/" as RT
-  package "websocket-test/" as WST
-  package "error-test/" as ET
-  
-  package "offline/" as OFFLINE <<planned>>
-  package "pwa/" as PWA <<planned>>
-  package "analytics/" as ANALYTICS <<planned>>
-  package "social/" as SOCIAL <<planned>>
-}
-
-package "components/" as C {
-  package ui
-  package dashboard
-  package chat
-  package portfolio
-  package market
-  package autotrade
-  package layout
-  package tutorial
-  package landing
-  package reports
-  
-  package offline <<planned>>
-  package pwa <<planned>>
-  package analytics <<planned>>
-  package social <<planned>>
-}
-
-package "hooks/" as H
-package "lib/" as L
-package "providers/" as P
-package "types/" as T
-
-package "workers/" as WORKERS <<planned>>
-package "cache/" as CACHE <<planned>>
-package "analytics/" as ANALYTICS_LIB <<planned>>
-
-APP --> C
-APP --> H
-APP --> L
-APP --> P
-C --> H
-C --> L
-C --> T
-H --> L
-P --> L
-L --> T
-
-APP ..> WORKERS <<planned>>
-APP ..> CACHE <<planned>>
-C ..> ANALYTICS_LIB <<planned>>
-
-legend right
-  __실선__: 현재 구현 (As-Is)
-  ..점선..: 향후 계획 (To-Be)
-  <<planned>>: 개선 예정 항목
-endlegend
-@enduml
+```mermaid
+graph TD
+    subgraph App[app/ (App Router)]
+        Layout[layout.tsx]
+        Page[page.tsx]
+        Auth[auth/]
+        Dashboard[dashboard/]
+        Chat[chat/]
+        Portfolio[portfolio/]
+        Market[market/]
+        Autotrade[autotrade/]
+        Settings[settings/]
+        Tutorial[tutorial/]
+        Onboarding[onboarding/]
+        Reports[reports/]
+        Notifications[notifications/]
+        Realtime[realtime/]
+        WebSocketTest[websocket-test/]
+        ErrorTest[error-test/]
+        
+        Offline[offline/]:::planned
+        PWA[pwa/]:::planned
+        Analytics[analytics/]:::planned
+        Social[social/]:::planned
+    end
+    
+    subgraph Components[components/]
+        UI[ui/]
+        DashboardComp[dashboard/]
+        ChatComp[chat/]
+        PortfolioComp[portfolio/]
+        MarketComp[market/]
+        AutotradeComp[autotrade/]
+        LayoutComp[layout/]
+        TutorialComp[tutorial/]
+        Landing[landing/]
+        ReportsComp[reports/]
+        
+        OfflineComp[offline/]:::planned
+        PWAComp[pwa/]:::planned
+        AnalyticsComp[analytics/]:::planned
+        SocialComp[social/]:::planned
+    end
+    
+    Hooks[hooks/]
+    Lib[lib/]
+    Providers[providers/]
+    Types[types/]
+    
+    Workers[workers/]:::planned
+    Cache[cache/]:::planned
+    AnalyticsLib[analytics/]:::planned
+    
+    App --> Components
+    App --> Hooks
+    App --> Lib
+    App --> Providers
+    Components --> Hooks
+    Components --> Lib
+    Components --> Types
+    Hooks --> Lib
+    Providers --> Lib
+    Lib --> Types
+    
+    App -.-> Workers:::planned
+    App -.-> Cache:::planned
+    Components -.-> AnalyticsLib:::planned
+    
+    classDef planned fill:#fff8e1,stroke:#f4b400,stroke-width:2px
 ```
 
 **향후 추가 예정 패키지**
@@ -163,67 +300,111 @@ endlegend
 
 페이지/경계 컴포넌트가 어떤 런타임 자원(SSE/WS/REST)에 붙는지 시각화.
 
-![컴포넌트 다이어그램](docs/uml/component-diagram.svg)
+```mermaid
+graph LR
+    subgraph NextJS[Next.js App (Edge/Node)]
+        Next[Next.js App]
+    end
+    
+    subgraph Browser[Browser (React 18)]
+        AuthCtx[Auth Context/Provider]
+        Zustand[Zustand Stores]
+        Axios[Axios Client]
+        WSClient[WS Client]
+        SSEClient[SSE Client]
+    end
+    
+    subgraph APIs[External APIs]
+        PortfolioAPI[Portfolio API]
+        TradeEngine[Trade Engine API]
+        AuthService[Auth Service]
+        MarketWS[Market WS Broker]
+        ChatSSE[Chat SSE Gateway]
+        TutorialAPI[Tutorial API]
+        NotificationAPI[Notification API]
+    end
+
+    %% 내부 연결(원하면 생략 가능)
+    AuthCtx --- Zustand
+
+    %% 브라우저 -> 외부
+    Axios --> PortfolioAPI
+    Axios --> TradeEngine
+    Axios --> AuthService
+    Axios --> TutorialAPI
+    Axios --> NotificationAPI
+    WSClient --> MarketWS
+    SSEClient --> ChatSSE
+
+    %% Next(서버) -> 외부
+    Next -.-> PortfolioAPI
+    Next -.-> TradeEngine
+    Next -.-> AuthService
+```
 
 ---
 
 ### 3.2 향후 개선 구조 (To-Be)
 
-```plantuml
-@startuml
-component "Next.js App (Edge/Node)" as NEXT
-component "Browser (React 18)" as B
-component "Auth Context/Provider" as AUTHC
-component "Zustand Stores" as ZS
-component "Axios Client" as AX
-component "WS Client" as WSC
-component "SSE Client" as SSEC
+```mermaid
+graph LR
+    subgraph NextJS[Next.js App (Edge/Node)]
+        Next[Next.js App]
+    end
+    
+    subgraph Browser[Browser (React 18)]
+        AuthCtx[Auth Context/Provider]
+        Zustand[Zustand Stores]
+        Axios[Axios Client]
+        WSClient[WS Client]
+        SSEClient[SSE Client]
+    end
+    
+    subgraph APIs[External APIs]
+        PortfolioAPI[Portfolio API]
+        TradeEngine[Trade Engine API]
+        AuthService[Auth Service]
+        MarketWS[Market WS Broker]
+        ChatSSE[Chat SSE Gateway]
+        TutorialAPI[Tutorial API]
+        NotificationAPI[Notification API]
+    end
+    
+    subgraph Planned[Planned Components]
+        SharedWorker[SharedWorker]
+        ServiceWorker[ServiceWorker]
+        IndexedDB[IndexedDB Cache]
+        AnalyticsEngine[Analytics Engine]
+    end
+    
+    %% 브라우저 내부
+    AuthCtx --- Zustand
+    
+    %% 브라우저 -> 외부
+    Axios --> PortfolioAPI
+    Axios --> TradeEngine
+    Axios --> AuthService
+    Axios --> TutorialAPI
+    Axios --> NotificationAPI
+    WSClient --> MarketWS
+    SSEClient --> ChatSSE
 
-component "Portfolio API" as PAPI
-component "Trade Engine API" as TEAPI
-component "Auth Service" as AS
-component "Market WS Broker" as MWS
-component "Chat SSE Gateway" as CGW
-component "Tutorial API" as TutAPI
-component "Notification API" as NAPI
+    %% 브라우저 -> 예정 컴포넌트(간선은 노드끼리)
+    WSClient -.-> SharedWorker
+    SSEClient -.-> SharedWorker
+    %% 예정 컴포넌트 -> 외부 (레이블만 사용, ::planned 제거)
+    SharedWorker -.-> MarketWS
+    SharedWorker -.-> ChatSSE
+    IndexedDB -.-> PortfolioAPI
 
-component "SharedWorker" as SW <<planned>>
-component "ServiceWorker" as SWR <<planned>>
-component "IndexedDB Cache" as IDB <<planned>>
-component "Analytics Engine" as AE <<planned>>
+    %% Next(서버) -> 외부
+    Next -.-> PortfolioAPI
+    Next -.-> TradeEngine
+    Next -.-> AuthService
 
-B -- AUTHC
-B -- ZS
-B -- AX
-B -- WSC
-B -- SSEC
-B ..> SW <<planned>>
-B ..> SWR <<planned>>
-B ..> IDB <<planned>>
-
-AX --> PAPI
-AX --> TEAPI
-AX --> AS
-AX --> TutAPI
-AX --> NAPI
-WSC --> MWS
-SSEC --> CGW
-
-SW ..> MWS : proxy WS <<planned>>
-SW ..> CGW : proxy SSE <<planned>>
-IDB ..> PAPI : cache <<planned>>
-B ..> AE : track <<planned>>
-
-NEXT ..> PAPI
-NEXT ..> TEAPI
-NEXT ..> AS
-
-legend right
-  __실선__: 현재 구현 (As-Is)
-  ..점선..: 향후 계획 (To-Be)
-  <<planned>>: 개선 예정 항목
-endlegend
-@enduml
+    %% 스타일
+    classDef planned fill:#fff8e1,stroke:#f4b400,stroke-width:2px
+    class SharedWorker,ServiceWorker,IndexedDB,AnalyticsEngine planned
 ```
 
 **향후 추가 예정 컴포넌트**
@@ -240,153 +421,174 @@ endlegend
 
 ### 4.1 인증/컨텍스트/가드
 
-```plantuml
-@startuml
-class AuthProvider {
-  - state: AuthState
-  - refreshLock: Promise<string> | null
-  + children: ReactNode
-  + refreshToken(): Promise<string>
-}
-class AuthState {
-  token: string
-  user: UserProfile
-  expiresAt: Date
-  refreshToken: string
-}
-class useAuth {
-  + accessTokenReady(): boolean
-  + getToken(): string
-  // refreshTokenIfNeeded(): Promise<string>  // <<planned>> 향후 구현 예정
-}
-// class RouteGuard {  // <<planned>> 향후 구현 예정
-//   + requireAuth(): JSX.Element
-// }
-
-AuthProvider -> AuthState
-useAuth --> AuthProvider
-// RouteGuard --> useAuth  // <<planned>> 향후 구현 예정
-@enduml
+```mermaid
+classDiagram
+    class AuthProvider {
+        -state: AuthState
+        -refreshLock: Promise~string~ | null
+        +children: ReactNode
+        +refreshToken(): Promise~string~
+    }
+    
+    class AuthState {
+        +token: string
+        +user: UserProfile
+        +expiresAt: Date
+        +refreshToken: string
+    }
+    
+    class useAuth {
+        +accessTokenReady(): boolean
+        +getToken(): string
+        +refreshTokenIfNeeded(): Promise~string~  %% planned
+    }
+    
+    class RouteGuard {
+        +requireAuth(): JSX.Element  %% planned
+    }
+    
+    AuthProvider --> AuthState
+    useAuth --> AuthProvider
+    RouteGuard --> useAuth
 ```
 
 ### 4.2 WS(시세) 스토어 & 클라이언트
 
-```plantuml
-@startuml
-class NasdaqStocksStore {
-  + initWs(): Promise<boolean>
-  + addSymbol(sym: string): void
-  + getStock(sym: string): Stock
-  + subscribeStore(listener): Unsubscribe
-  + setMissingSince(timestamp: number): void
-  + backfillPrices(prices: PriceTick[]): void
-}
-class Stock {
-  symbol: string
-  price: number
-  changePct: number
-  ts: number
-}
-class WSClient {
-  + connect(url): void
-  + send(msg): void
-  + onMessage(cb): void
-  + reconnect(backoff): void
-  + onClose(callback): void
-  + onError(callback): void
-}
-class PriceBuffer {
-  + addTick(tick: PriceTick): void
-  + flushBatch(): PriceTick[]
-  + clear(): void
-}
-
-NasdaqStocksStore --> WSClient
-NasdaqStocksStore o- Stock
-NasdaqStocksStore --> PriceBuffer
-@enduml
+```mermaid
+classDiagram
+    class NasdaqStocksStore {
+        +initWs(): Promise~boolean~
+        +addSymbol(sym: string): void
+        +getStock(sym: string): Stock
+        +subscribeStore(listener): Unsubscribe
+        +setMissingSince(timestamp: number): void
+        +backfillPrices(prices: PriceTick[]): void
+    }
+    
+    class Stock {
+        +symbol: string
+        +price: number
+        +changePct: number
+        +ts: number
+    }
+    
+    class WSClient {
+        +connect(url): void
+        +send(msg): void
+        +onMessage(cb): void
+        +reconnect(backoff): void
+        +onClose(callback): void
+        +onError(callback): void
+    }
+    
+    class PriceBuffer {
+        +addTick(tick: PriceTick): void
+        +flushBatch(): PriceTick[]
+        +clear(): void
+    }
+    
+    NasdaqStocksStore --> WSClient
+    NasdaqStocksStore o-- Stock
+    NasdaqStocksStore --> PriceBuffer
 ```
 
 ### 4.3 챗(SSE) & UI
 
-```plantuml
-@startuml
-class ChatStore {
-  + startSession(): Promise<SessionId>
-  + appendUser(msg: Message): void
-  + appendAssistant(delta: string): void
-  + history: Message[]
-}
-class SSEClient {
-  + open(url): EventSource
-  + close(): void
-  + onHeartbeat(callback): void
-  + setTimeout(ms: number): void
-}
-class TypingMessage {
-  - displayed: string
-  - idx: number
-  + render(text: string): JSX
-  - useRequestAnimationFrame(): void
-}
-
-ChatStore --> SSEClient
-TypingMessage --> ChatStore
-@enduml
+```mermaid
+classDiagram
+    class ChatStore {
+        +startSession(): Promise~SessionId~
+        +appendUser(msg: Message): void
+        +appendAssistant(delta: string): void
+        +history: Message[]
+    }
+    
+    class SSEClient {
+        +open(url): EventSource
+        +close(): void
+        +onHeartbeat(callback): void
+        +setTimeout(ms: number): void
+    }
+    
+    class TypingMessage {
+        -displayed: string
+        -idx: number
+        +render(text: string): JSX
+        -useRequestAnimationFrame(): void  %% planned
+    }
+    
+    ChatStore --> SSEClient
+    TypingMessage --> ChatStore
 ```
 
 ### 4.4 REST API 래퍼
 
-```plantuml
-@startuml
-class ApiClient {
-  - axios: AxiosInstance
-  + getPortfolio(): Promise<Portfolio>
-  + updatePortfolio(p: Portfolio): Promise<void>
-  + getSettings(): Promise<Settings>
-  + getTutorialProgress(): Promise<TutorialProgress>
-}
-class Portfolio { positions: Position[] }
-class Position { symbol: string; qty: number; avg: number }
-class Settings { locale: string; theme: string }
-class TutorialProgress { currentStep: number; completedSteps: string[] }
-
-ApiClient --> Portfolio
-Portfolio o- Position
-ApiClient --> Settings
-ApiClient --> TutorialProgress
-@enduml
+```mermaid
+classDiagram
+    class ApiClient {
+        -axios: AxiosInstance
+        +getPortfolio(): Promise~Portfolio~
+        +updatePortfolio(p: Portfolio): Promise~void~
+        +getSettings(): Promise~Settings~
+        +getTutorialProgress(): Promise~TutorialProgress~
+    }
+    
+    class Portfolio {
+        +positions: Position[]
+    }
+    
+    class Position {
+        +symbol: string
+        +qty: number
+        +avg: number
+    }
+    
+    class Settings {
+        +locale: string
+        +theme: string
+    }
+    
+    class TutorialProgress {
+        +currentStep: number
+        +completedSteps: string[]
+    }
+    
+    ApiClient --> Portfolio
+    Portfolio o-- Position
+    ApiClient --> Settings
+    ApiClient --> TutorialProgress
 ```
 
 ### 4.5 튜토리얼 시스템
 
-```plantuml
-@startuml
-class TutorialOverlay {
-  + currentStep: number
-  + currentStepInfo: StepInfo
-  + nextStep(): void
-  + previousStep(): void
-  + skipTutorial(): void
-}
-class useTutorial {
-  + currentTutorial: Tutorial
-  + currentStep: number
-  + currentStepInfo: StepInfo
-  + nextStep(): void
-  + previousStep(): void
-  + skipTutorial(): void
-}
-class StepInfo {
-  title: string
-  description: string
-  target: string
-  position: 'top' | 'bottom' | 'left' | 'right'
-}
-
-TutorialOverlay --> useTutorial
-useTutorial --> StepInfo
-@enduml
+```mermaid
+classDiagram
+    class TutorialOverlay {
+        +currentStep: number
+        +currentStepInfo: StepInfo
+        +nextStep(): void
+        +previousStep(): void
+        +skipTutorial(): void
+    }
+    
+    class useTutorial {
+        +currentTutorial: Tutorial
+        +currentStep: number
+        +currentStepInfo: StepInfo
+        +nextStep(): void
+        +previousStep(): void
+        +skipTutorial(): void
+    }
+    
+    class StepInfo {
+        +title: string
+        +description: string
+        +target: string
+        +position: 'top' | 'bottom' | 'left' | 'right'
+    }
+    
+    TutorialOverlay --> useTutorial
+    useTutorial --> StepInfo
 ```
 
 ---
@@ -395,133 +597,202 @@ useTutorial --> StepInfo
 
 ### 5.1 로그인/가드/페이지 전개
 
-![로그인 시퀀스 다이어그램](docs/uml/login-sequence.svg)
+```mermaid
+sequenceDiagram
+    actor User
+    participant Browser
+    participant AuthProvider as AP
+    participant RouteGuard as RG
+    participant ApiClient as API
+    participant AuthService as AS
+    
+    User->>Browser: /dashboard 접근
+    Browser->>RG: requireAuth()
+    Note over RG: <<planned>> RouteGuard 구현 후 활성화
+    
+    alt token 없음
+        RG->>Browser: redirect(/login)
+        User->>Browser: submit credentials
+        Browser->>AS: POST /auth/login
+        AS-->>Browser: {token, refreshToken, exp}
+        Browser->>AP: setToken(token, refreshToken, exp)
+    else token 있음
+        RG->>Browser: render(dashboard)
+        Browser->>API: GET /portfolio (Authorization: Bearer)
+        API-->>Browser: Portfolio JSON
+    end
+```
 
 ### 5.1.1 토큰 리프레시 동시성 제어 (<<planned>>)
 
-```plantuml
-@startuml
-actor User
-participant Browser
-participant AuthProvider as AP
-participant AuthService as AS
-
-Browser -> AP: useAuth().getToken()
-alt exp < t-Δ (만료 임박)
-  Browser -> AP: refreshLock? (pending)
-  alt 없음
-    AP -> AS: POST /auth/refresh
-    AS --> AP: {token, exp}
-    AP -> AP: resolve refreshLock
-  else 있음
-    AP -> AP: await refreshLock
-  end
-end
-@enduml
+```mermaid
+sequenceDiagram
+    actor User
+    participant Browser
+    participant AuthProvider as AP
+    participant AuthService as AS
+    
+    Browser->>AP: useAuth().getToken()
+    alt exp < t-Δ (만료 임박)
+        Browser->>AP: refreshLock? (pending)
+        alt 없음
+            AP->>AS: POST /auth/refresh
+            AS-->>AP: {token, exp}
+            AP->>AP: resolve refreshLock
+        else 있음
+            AP->>AP: await refreshLock
+        end
+    end
 ```
 
 ### 5.2 대시보드 실시간(WS)
 
-![WebSocket 실시간 시세 시퀀스](docs/uml/websocket-sequence.svg)
+```mermaid
+sequenceDiagram
+    actor User
+    participant Dashboard
+    participant NasdaqStocksStore as Store
+    participant WSClient as WS
+    participant Broker as MWS
+    
+    User->>Dashboard: 페이지 진입
+    Dashboard->>Store: initWs()
+    Store->>WS: connect(WS_URL)
+    WS->>MWS: WS Handshake
+    MWS-->>WS: 101 Switching Protocols
+    Dashboard->>Store: addSymbol([INDEX..., PORTF...])
+    Store->>WS: SUBSCRIBE {symbols}
+    MWS-->>WS: TICK {sym, price, ts} (stream)
+    WS-->>Store: onmessage(TICK)
+    Store->>Dashboard: setState(price update)
+```
 
 ### 5.2.1 WS 재연결 + 재구독 + 백필(Backfill)
 
-```plantuml
-@startuml
-actor User
-participant Dashboard
-participant NasdaqStocksStore as Store
-participant WSClient as WS
-participant Broker as MWS
-participant PortfolioAPI as PAPI
-
-WS -> WS: onClose/onError
-WS -> Store: connectionLost()
-Store -> Store: setMissingSince(Date.now())
-Store -> WS: reconnect(backoff)
-WS -> MWS: WS Handshake
-MWS --> WS: 101 Switching Protocols
-Store -> WS: SUBSCRIBE {symbols}
-Store -> PAPI: GET /portfolio/prices?since={missingSince}
-PAPI --> Store: {prices: [{sym, price, ts}]}
-Store -> Dashboard: backfillPrices(prices)
-MWS --> WS: TICK {sym, price, ts} (stream)
-WS --> Store: onmessage(TICK)
-Store -> Dashboard: setState(price update)
-@enduml
+```mermaid
+sequenceDiagram
+    actor User
+    participant Dashboard
+    participant NasdaqStocksStore as Store
+    participant WSClient as WS
+    participant Broker as MWS
+    participant PortfolioAPI as PAPI
+    
+    WS->>WS: onClose/onError
+    WS->>Store: connectionLost()
+    Store->>Store: setMissingSince(Date.now())
+    Store->>WS: reconnect(backoff)
+    WS->>MWS: WS Handshake
+    MWS-->>WS: 101 Switching Protocols
+    Store->>WS: SUBSCRIBE {symbols}
+    Store->>PAPI: GET /portfolio/prices?since={missingSince}
+    PAPI-->>Store: {prices: [{sym, price, ts}]}
+    Store->>Dashboard: backfillPrices(prices)
+    MWS-->>WS: TICK {sym, price, ts} (stream)
+    WS-->>Store: onmessage(TICK)
+    Store->>Dashboard: setState(price update)
 ```
 
 **백필 정합 규칙**: Backfill merge는 (1) ts 단조 증가 보장, (2) symbol+ts 중복 제거, (3) 서버시각과의 Δ 보정(절대시간 기준), (4) 라이브 틱과 백필의 단일 병합 패스로 완료한다. O(n log n) 정렬 1회 + O(n) 머지, 링버퍼 길이 N=1024 유지.
 
 ### 5.3 챗봇(SSE) 스트리밍 + requestAnimationFrame 타이핑
 
-![챗봇 SSE 시퀀스](docs/uml/chat-sse-sequence.svg)
+```mermaid
+sequenceDiagram
+    actor User
+    participant ChatPage as UI
+    participant ChatStore as CS
+    participant Api as ChatAPI
+    participant SSE as EventSource
+    
+    User->>UI: 입력 제출(prompt)
+    UI->>CS: appendUser(prompt)
+    UI->>ChatAPI: POST /api/chat/start
+    ChatAPI-->>UI: {streamUrl}
+    UI->>SSE: open(streamUrl)
+    SSE-->>UI: onmessage(delta)
+    UI->>CS: appendAssistant(delta)
+    UI->>UI: render(delta) // setInterval 18ms 기반, 문자 단위 처리
+    Note over UI,SSE: 반복...
+    SSE-->>UI: [DONE]
+    UI->>SSE: close()
+```
 
 ### 5.3.1 SSE 하트비트/타임아웃/조기 종료
 
-```plantuml
-@startuml
-actor User
-participant ChatPage as UI
-participant ChatStore as CS
-participant SSE as EventSource
-
-UI -> SSE: open(streamUrl)
-loop 15초마다
-  SSE --> UI: :heartbeat
-  UI -> UI: updateLastHeartbeat()
-end
-alt 120초 무응답
-  UI -> UI: timeout detected
-  UI -> SSE: close()
-  UI -> UI: restartSSE()
-else 정상 종료
-  SSE --> UI: [DONE]
-  UI -> SSE: close()
-end
-@enduml
+```mermaid
+sequenceDiagram
+    actor User
+    participant ChatPage as UI
+    participant ChatStore as CS
+    participant SSE as EventSource
+    
+    UI->>SSE: open(streamUrl)
+    loop 15초마다
+        SSE-->>UI: :heartbeat
+        UI->>UI: updateLastHeartbeat()
+    end
+    alt 120초 무응답
+        UI->>UI: timeout detected
+        UI->>SSE: close()
+        UI->>UI: restartSSE()
+    else 정상 종료
+        SSE-->>UI: [DONE]
+        UI->>SSE: close()
+    end
 ```
 
 ### 5.3.2 SharedWorker 멀티탭 시퀀스 (To-Be)
 
-```plantuml
-@startuml
-actor User1
-actor User2
-participant Tab1
-participant Tab2
-participant SharedWorker as SW
-participant WS as WebSocket
-
-User1 -> Tab1: 페이지 로드
-Tab1 -> SW: register(tab1)
-SW -> SW: setLeader(tab1)
-SW -> WS: connect()
-WS --> SW: connected
-
-User2 -> Tab2: 페이지 로드
-Tab2 -> SW: register(tab2)
-SW -> Tab2: setFollower(tab2)
-SW -> Tab2: broadcast(WS_OPEN)
-
-note over Tab1, Tab2
-  <<planned>>
-  탭 리더 선출/브로드캐스트
-  리더 다운시 재선출
-  (optional) SharedWorker 대신 BroadcastChannel + WS 멀티플렉싱 우선
-end note
-
-legend right
-  __실선__: 현재 구현 (As-Is)
-  ..점선..: 향후 계획 (To-Be)
-  <<planned>>: 개선 예정 항목
-endlegend
-@enduml
+```mermaid
+sequenceDiagram
+    actor User1
+    actor User2
+    participant Tab1
+    participant Tab2
+    participant SharedWorker as SW
+    participant WS as WebSocket
+    
+    User1->>Tab1: 페이지 로드
+    Tab1->>SW: register(tab1)
+    SW->>SW: setLeader(tab1)
+    SW->>WS: connect()
+    WS-->>SW: connected
+    
+    User2->>Tab2: 페이지 로드
+    Tab2->>SW: register(tab2)
+    SW->>Tab2: setFollower(tab2)
+    SW->>Tab2: broadcast(WS_OPEN)
+    
+    Note over Tab1,Tab2: <<planned>> 탭 리더 선출/브로드캐스트\n리더 다운시 재선출\n(optional) SharedWorker 대신 BroadcastChannel + WS 멀티플렉싱 우선
 ```
 
 ### 5.4 튜토리얼 진행 플로우
 
-![튜토리얼 진행 플로우](docs/uml/tutorial-sequence.svg)
+```mermaid
+sequenceDiagram
+    actor User
+    participant TutorialOverlay as TO
+    participant useTutorial as UT
+    participant ApiClient as API
+    participant TutorialAPI as TA
+    
+    User->>TO: 튜토리얼 시작
+    TO->>UT: currentTutorial 정보 로드
+    UT->>API: getTutorialProgress()
+    API->>TA: POST /api/tutorial/progress
+    TA-->>API: {currentStep, completedSteps}
+    API-->>UT: TutorialProgress
+    UT-->>TO: 현재 단계 정보 표시
+    
+    User->>TO: 다음 단계 진행
+    TO->>UT: nextStep()
+    UT->>API: updateTutorialProgress(step)
+    API->>TA: POST /api/tutorial/complete/step
+    TA-->>API: {success: true}
+    API-->>UT: 업데이트 완료
+    UT-->>TO: 다음 단계 표시
+```
 
 ---
 
@@ -529,89 +800,72 @@ endlegend
 
 ### 6.1 자동매매 설정 저장
 
-```plantuml
-@startuml
-start
-:사용자 입력 검증;
-if (유효?) then (예)
-  :로컬 미리보기 반영;
-  :변경 diff 산출;
-  :REST PATCH /autotrade;
-  if (200 OK) then (성공)
-    :전역 상태 invalidate;
-    :Toast 성공;
-  else (실패)
-    :로컬 롤백;
-    :에러 토스트 및 재시도 버튼;
-  endif
-else (아니오)
-  :폼 에러 강조;
-endif
-stop
-@enduml
+```mermaid
+flowchart TD
+    A[시작] --> B[사용자 입력 검증]
+    B --> C{유효?}
+    C -->|예| D[로컬 미리보기 반영]
+    C -->|아니오| E[폼 에러 강조]
+    D --> F[변경 diff 산출]
+    F --> G[REST PATCH /autotrade]
+    G --> H{200 OK?}
+    H -->|성공| I[전역 상태 invalidate]
+    H -->|실패| J[로컬 롤백]
+    I --> K[Toast 성공]
+    J --> L[에러 토스트 및 재시도 버튼]
+    E --> M[종료]
+    K --> M
+    L --> M
 ```
 
 ### 6.2 시세 구독 관리 (심볼 추가/삭제)
 
-```plantuml
-@startuml
-start
-:사용자 심볼 추가;
-:Store.addSymbol(sym);
-if (WS 연결됨?) then (예)
-  :WS.SUBSCRIBE(sym);
-else (아니오)
-  :대기 -> OnOpen 후 큐 처리;
-endif
-stop
-@enduml
+```mermaid
+flowchart TD
+    A[시작] --> B[사용자 심볼 추가]
+    B --> C[Store.addSymbol(sym)]
+    C --> D{WS 연결됨?}
+    D -->|예| E[WS.SUBSCRIBE(sym)]
+    D -->|아니오| F[대기 -> OnOpen 후 큐 처리]
+    E --> G[종료]
+    F --> G
 ```
 
 ### 6.3 튜토리얼 단계 진행
 
-```plantuml
-@startuml
-start
-:현재 단계 정보 로드;
-:사용자 액션 감지;
-if (단계 완료 조건 충족?) then (예)
-  :완료 상태 저장;
-  :다음 단계 정보 로드;
-  if (모든 단계 완료?) then (예)
-    :튜토리얼 완료 축하;
-    :보상 지급;
-  else (아니오)
-    :다음 단계 안내;
-  endif
-else (아니오)
-  :현재 단계 계속 진행;
-endif
-stop
-@enduml
+```mermaid
+flowchart TD
+    A[시작] --> B[현재 단계 정보 로드]
+    B --> C[사용자 액션 감지]
+    C --> D{단계 완료 조건 충족?}
+    D -->|예| E[완료 상태 저장]
+    D -->|아니오| F[현재 단계 계속 진행]
+    E --> G[다음 단계 정보 로드]
+    G --> H{모든 단계 완료?}
+    H -->|예| I[튜토리얼 완료 축하]
+    H -->|아니오| J[다음 단계 안내]
+    I --> K[보상 지급]
+    F --> L[종료]
+    J --> L
+    K --> L
 ```
 
 ### 6.4 폴백 전략 (WS → SSE → Polling)
 
-```plantuml
-@startuml
-start
-:WebSocket 연결 시도;
-if (연결 성공?) then (예)
-  :실시간 데이터 수신;
-else (아니오)
-  :SSE 연결 시도;
-  if (SSE 연결 성공?) then (예)
-    :스트리밍 데이터 수신;
-  else (아니오)
-    :폴링 모드 전환;
-    loop 5초마다
-      :REST API 호출;
-      :데이터 업데이트;
-    end
-  endif
-endif
-stop
-@enduml
+```mermaid
+flowchart TD
+    A[시작] --> B[WebSocket 연결 시도]
+    B --> C{연결 성공?}
+    C -->|예| D[실시간 데이터 수신]
+    C -->|아니오| E[SSE 연결 시도]
+    E --> F{SSE 연결 성공?}
+    F -->|예| G[스트리밍 데이터 수신]
+    F -->|아니오| H[폴링 모드 전환]
+    H --> I[5초마다 REST API 호출]
+    I --> J[데이터 업데이트]
+    D --> K[종료]
+    G --> K
+    J --> K
 ```
 
 ---
@@ -620,136 +874,137 @@ stop
 
 ### 7.1 TypingMessage
 
-![TypingMessage 상태 머신](docs/uml/state-machines.svg#TypingMessage)
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> Typing : setText(text)
+    Typing --> Typing : setInterval 18ms (append chars)
+    Typing --> Done : idx >= len
+    Done --> Idle : setText("")
+    Typing --> Idle : unmount/cleanup(clearInterval)
+```
 
 ### 7.2 WS 연결 재시도(백오프)
 
-```plantuml
-@startuml
-[*] --> Connecting
-Connecting --> Open: onOpen
-Connecting --> Backoff: onError
-Open --> Backoff: onClose
-Backoff --> Connecting: timer(exp backoff)
-@enduml
+```mermaid
+stateDiagram-v2
+    [*] --> Connecting
+    Connecting --> Open : onOpen
+    Connecting --> Backoff : onError
+    Open --> Backoff : onClose
+    Backoff --> Connecting : timer(exp backoff)
 ```
 
 ### 7.3 인증 세션
 
-```plantuml
-@startuml
-[*] --> Anonymous
-Anonymous --> Authenticated: login(token)
-Authenticated --> Anonymous: logout/expire
-Authenticated --> Refreshing: t-Δ before exp
-Refreshing --> Authenticated: refresh OK
-Refreshing --> Anonymous: refresh FAIL
-@enduml
+```mermaid
+stateDiagram-v2
+    [*] --> Anonymous
+    Anonymous --> Authenticated : login(token)
+    Authenticated --> Anonymous : logout/expire
+    Authenticated --> Refreshing : t-Δ before exp
+    Refreshing --> Authenticated : refresh OK
+    Refreshing --> Anonymous : refresh FAIL
 ```
 
 ### 7.4 튜토리얼 진행 상태
 
-```plantuml
-@startuml
-[*] --> NotStarted
-NotStarted --> InProgress: startTutorial()
-InProgress --> StepComplete: completeStep()
-StepComplete --> InProgress: nextStep()
-InProgress --> Completed: allStepsComplete()
-Completed --> NotStarted: resetTutorial()
-@enduml
+```mermaid
+stateDiagram-v2
+    [*] --> NotStarted
+    NotStarted --> InProgress : startTutorial()
+    InProgress --> StepComplete : completeStep()
+    StepComplete --> InProgress : nextStep()
+    InProgress --> Completed : allStepsComplete()
+    Completed --> NotStarted : resetTutorial()
 ```
 
 ### 7.5 WS 장애 복구 상태
 
-```plantuml
-@startuml
-[*] --> Connected
-Connected --> Disconnected: onClose/onError
-Disconnected --> Backoff: exponential backoff
-Backoff --> Reconnecting: timer
-Reconnecting --> Connected: onOpen
-Reconnecting --> Backoff: onError
-@enduml
+```mermaid
+stateDiagram-v2
+    [*] --> Connected
+    Connected --> Disconnected : onClose/onError
+    Disconnected --> Backoff : exponential backoff
+    Backoff --> Reconnecting : timer
+    Reconnecting --> Connected : onOpen
+    Reconnecting --> Backoff : onError
 ```
 
 ### 7.6 폴백 전략 상태 머신 (To-Be)
 
-```plantuml
-@startuml
-[*] --> WS_Open
-WS_Open --> WS_Fail: connection lost
-WS_Fail --> SSE_Open: WS 재연결 실패
-SSE_Open --> SSE_Fail: SSE 연결 실패
-SSE_Fail --> Polling: SSE 재연결 실패
-Polling --> Recover: 네트워크 복구
-Recover --> WS_Open: WS 재시도
-Recover --> SSE_Open: WS 실패 시 SSE 시도
-
-note right of WS_Fail
-  <<planned>>
-  지수 백오프 + jitter
-  최대 5회 시도
-end note
-
-note right of SSE_Fail
-  <<planned>>
-  heartbeat 15-30s
-  120s 타임아웃
-end note
-
-note right of Polling
-  <<planned>>
-  5초 간격 REST
-  배터리 절약 모드
-  anti-flap: 30s 내 3회 실패 → 60s 쿨다운 후 재평가
-end note
-
-legend right
-  __실선__: 현재 구현 (As-Is)
-  ..점선..: 향후 계획 (To-Be)
-  <<planned>>: 개선 예정 항목
-endlegend
-@enduml
+```mermaid
+stateDiagram-v2
+    [*] --> WS_Open
+    WS_Open --> WS_Fail : connection lost
+    WS_Fail --> SSE_Open : WS 재연결 실패
+    SSE_Open --> SSE_Fail : SSE 연결 실패
+    SSE_Fail --> Polling : SSE 재연결 실패
+    Polling --> Recover : 네트워크 복구
+    Recover --> WS_Open : WS 재시도
+    Recover --> SSE_Open : WS 실패 시 SSE 시도
+    
+    note right of WS_Fail
+        <<planned>>
+        지수 백오프 + jitter
+        최대 5회 시도
+    end note
+    
+    note right of SSE_Fail
+        <<planned>>
+        heartbeat 15-30s
+        120s 타임아웃
+    end note
+    
+    note right of Polling
+        <<planned>>
+        5초 간격 REST
+        배터리 절약 모드
+        anti-flap: 30s 내 3회 실패 → 60s 쿨다운 후 재평가
+    end note
 ```
 
 ---
 
 ## 8. 배포 다이어그램 (Deployment)
 
-```plantuml
-@startuml
-node "User Device" as UD {
-  artifact "Browser (React 18)" as BR
-}
-node "Edge Runtime" as EDGE {
-  artifact "Next.js App Router (SSR/SSG)" as APP
-  artifact "SSE Gateway (Edge)" as SSE_GW
-}
-node "Node Runtime" as NODE {
-  artifact "WebSocket Gateway" as WS_GW
-}
-node "Backend" as BE {
-  node "APIs" {
-    component "Auth Service"
-    component "Portfolio API"
-    component "Trade Engine API"
-    component "Tutorial API"
-    component "Notification API"
-  }
-  node "Realtime" {
-    component "Market WS Broker"
-    component "Chat SSE Gateway"
-  }
-}
-
-BR <--> APP : HTTP/HTTPS
-BR --> WS_GW : WebSocket (Node only)
-BR --> SSE_GW : SSE (Edge/Node)
-APP --> "APIs" : REST
-note right of WS_GW : WebSocket은 Node 런타임 필요\n서버리스면 전용 서비스로 분리
-note right of SSE_GW : SSE는 Edge/Node 둘 다 가능\n플랫폼 따라 다름
-@enduml
+```mermaid
+graph TB
+    subgraph UD[User Device]
+        BR[Browser (React 18)]
+    end
+    
+    subgraph EDGE[Edge Runtime]
+        APP[Next.js App Router (SSR/SSG)]
+        SSE_GW[SSE Gateway (Edge)]
+    end
+    
+    subgraph NODE[Node Runtime]
+        WS_GW[WebSocket Gateway]
+    end
+    
+    subgraph BE[Backend]
+        subgraph APIs[APIs]
+            AuthService[Auth Service]
+            PortfolioAPI[Portfolio API]
+            TradeEngine[Trade Engine API]
+            TutorialAPI[Tutorial API]
+            NotificationAPI[Notification API]
+        end
+        
+        subgraph Realtime[Realtime]
+            MarketWS[Market WS Broker]
+            ChatSSE[Chat SSE Gateway]
+        end
+    end
+    
+    BR <--> APP : HTTP/HTTPS
+    BR --> WS_GW : WebSocket (Node only)
+    BR --> SSE_GW : SSE (Edge/Node)
+    APP --> APIs : REST
+    
+    classDef note fill:#fff8e1,stroke:#f4b400,stroke-width:2px
+    class WS_GW,SSE_GW note
 ```
 
 ---
@@ -1034,38 +1289,41 @@ data: {
 
 ### 17.2 마이그레이션 로드맵
 
-```plantuml
-@startuml
-title 마이그레이션 로드맵 (2025-2026년)
-!theme plain
-skinparam backgroundColor #FFFFFF
-skinparam activity {
-  BackgroundColor<<phase1>> #E3F2FD
-  BackgroundColor<<phase2>> #F3E5F5
-  BackgroundColor<<phase3>> #E8F5E8
-}
-
-start
-:현재 상태 (As-Is);
-fork
-  :Phase 1 (Q4-2025)\n성능 최적화 <<phase1>>;
-  :rAF 타이핑 전환;
-  :코드 스플릿 적용;
-  :가상화 도입;
-fork again
-  :Phase 2 (Q1-2026)\n보안 강화 <<phase2>>;
-  :CSP 설정;
-  :DOMPurify 적용;
-  :httpOnly 쿠키 전환;
-fork again
-  :Phase 3 (Q2-2026)\n오프라인 지원 <<phase3>>;
-  :ServiceWorker 구현;
-  :PWA 매니페스트;
-  :IndexedDB 캐시;
-end fork
-:목표 상태 (To-Be);
-stop
-@enduml
+```mermaid
+flowchart TD
+    A[현재 상태 (As-Is)] --> B[Phase 1 (Q4-2025)<br/>성능 최적화]
+    A --> C[Phase 2 (Q1-2026)<br/>보안 강화]
+    A --> D[Phase 3 (Q2-2026)<br/>오프라인 지원]
+    
+    B --> B1[rAF 타이핑 전환]
+    B --> B2[코드 스플릿 적용]
+    B --> B3[가상화 도입]
+    
+    C --> C1[CSP 설정]
+    C --> C2[DOMPurify 적용]
+    C --> C3[httpOnly 쿠키 전환]
+    
+    D --> D1[ServiceWorker 구현]
+    D --> D2[PWA 매니페스트]
+    D --> D3[IndexedDB 캐시]
+    
+    B1 --> E[목표 상태 (To-Be)]
+    B2 --> E
+    B3 --> E
+    C1 --> E
+    C2 --> E
+    C3 --> E
+    D1 --> E
+    D2 --> E
+    D3 --> E
+    
+    classDef phase1 fill:#E3F2FD,stroke:#2196F3,stroke-width:2px
+    classDef phase2 fill:#F3E5F5,stroke:#9C27B0,stroke-width:2px
+    classDef phase3 fill:#E8F5E8,stroke:#4CAF50,stroke-width:2px
+    
+    class B,B1,B2,B3 phase1
+    class C,C1,C2,C3 phase2
+    class D,D1,D2,D3 phase3
 ```
 
 ### 17.3 수용 기준 및 메트릭
@@ -1369,50 +1627,44 @@ test('백필 merge 정합성 유지', () => {
 
 ### 19.4 다이어그램 드리프트 방지
 
-#### PlantUML 공통 스킨
-```plantuml
-!include common.puml
+#### Mermaid 공통 스타일
+```mermaid
+%% 모든 다이어그램에서 사용할 수 있는 공통 스타일
+%% planned 요소는 노란색 배경으로 표시
+classDef planned fill:#fff8e1,stroke:#f4b400,stroke-width:2px
+classDef current fill:#e3f2fd,stroke:#2196f3,stroke-width:2px
+classDef future fill:#f3e5f5,stroke:#9c27b0,stroke-width:2px
 
-' 모든 다이어그램 상단에 추가
-skinparam component {
-  BackgroundColor<<planned>> #FFF8E1
-  BorderColor<<planned>> #F4B400
-  FontColor<<planned>> #8A6D00
-}
-skinparam stereotype {
-  CBackgroundColor<<planned>> #FFF8E1
-  CBorderColor<<planned>> #F4B400
-}
-
-legend right
-  __실선__ = As-Is (현재)
-  ..점선.. = To-Be (개선안)
-  <<planned>> = 계획 항목
-endlegend
+%% 사용 예시:
+%% 노드명:::planned  - 향후 계획
+%% 노드명:::current  - 현재 구현
+%% 노드명:::future   - 미래 계획
 ```
 
 #### CI 린트 규칙
 ```yaml
-# .github/workflows/uml-lint.yml
-name: UML Lint Check
+# .github/workflows/mermaid-lint.yml
+name: Mermaid Lint Check
 on: [push, pull_request]
 jobs:
-  uml-lint:
+  mermaid-lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Check UML conventions
+      - name: Check Mermaid conventions
         run: |
-          # <<planned>> 누락 검출
-          if grep -r "\.\.\." docs/ --include="*.md" | grep -v "<<planned>>"; then
-            echo "❌ To-Be 요소에 <<planned>> 스테레오타입 누락"
+          # planned 요소 누락 검출
+          if grep -r "\.\.\." docs/ --include="*.md" | grep -v ":::planned"; then
+            echo "❌ To-Be 요소에 :::planned 스타일 누락"
             exit 1
           fi
           
-          # 범례 누락 검출
-          if grep -r "@startuml" docs/ --include="*.md" | grep -v "legend"; then
-            echo "❌ PlantUML 다이어그램에 범례 누락"
-            exit 1
+          # Mermaid 코드 블록 검증
+          if grep -r "```mermaid" docs/ --include="*.md"; then
+            echo "✅ Mermaid 다이어그램 발견"
+          else
+            echo "⚠️ Mermaid 다이어그램이 없습니다"
           fi
           
-          echo "✅ UML 컨벤션 검증 완료"
+          echo "✅ Mermaid 컨벤션 검증 완료"
+```
