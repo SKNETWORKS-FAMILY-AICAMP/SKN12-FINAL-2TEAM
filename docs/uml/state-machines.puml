@@ -6,9 +6,9 @@ skinparam state {
   FontColor black
 }
 
-title 상태 머신 다이어그램 모음
+title State Machine Diagrams
 
-' TypingMessage 상태 머신
+' TypingMessage state machine
 state TypingMessage {
   [*] --> Idle
   Idle --> Typing : setText(text)
@@ -18,7 +18,7 @@ state TypingMessage {
   Typing --> Idle : unmount/cleanup(clearInterval)
 }
 
-' WS 연결 재시도 상태 머신
+' WebSocket connection retry state machine
 state WebSocket {
   [*] --> Connecting
   Connecting --> Open : onOpen
@@ -27,7 +27,7 @@ state WebSocket {
   Backoff --> Connecting : timer(exp backoff)
 }
 
-' 인증 세션 상태 머신
+' Authentication session state machine
 state AuthSession {
   [*] --> Anonymous
   Anonymous --> Authenticated : login(token)
@@ -37,7 +37,7 @@ state AuthSession {
   Refreshing --> Anonymous : refresh FAIL
 }
 
-' 튜토리얼 진행 상태 머신
+' Tutorial progress state machine
 state Tutorial {
   [*] --> NotStarted
   NotStarted --> InProgress : startTutorial()

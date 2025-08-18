@@ -6,18 +6,20 @@ participant RouteGuard as RG
 participant ApiClient as API
 participant AuthService as AS
 
-User -> Browser: /dashboard 접근
+User -> Browser: Access /dashboard
 Browser -> RG: requireAuth()
-note right of RG: <<planned>> RouteGuard 구현 후 활성화
-alt token 없음
+note right of RG: <<planned>> RouteGuard implementation required
+
+alt no token
   RG -> Browser: redirect(/login)
   User -> Browser: submit credentials
   Browser -> AS: POST /auth/login
   AS --> Browser: {token, refreshToken, exp}
   Browser -> AP: setToken(token, refreshToken, exp)
+else token exists
+  RG -> Browser: render(dashboard)
+  Browser -> API: GET /portfolio (Authorization: Bearer)
+  API --> Browser: Portfolio JSON
 end
-note right of Browser: <<planned>> RouteGuard 구현 후 활성화
-Browser -> Browser: render(dashboard)  // 현재는 직접 렌더링
-Browser -> API: GET /portfolio (Authorization: Bearer)
-API --> Browser: Portfolio JSON
+
 @enduml

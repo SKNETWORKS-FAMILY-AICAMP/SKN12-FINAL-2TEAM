@@ -2,14 +2,14 @@
 left to right direction
 actor User
 rectangle Frontend as FE {
-  usecase UC_Login as "로그인/세션확립"
-  usecase UC_ViewDashboard as "대시보드 실시간 보기"
-  usecase UC_ChatAI as "AI 챗봇 대화(SSE)"
-  usecase UC_ManagePortfolio as "포트폴리오 조회/편집"
-  usecase UC_Autotrade as "자동매매 전략 구성"
-  usecase UC_Settings as "사용자 설정"
-  usecase UC_Tutorial as "온보딩 튜토리얼"
-  usecase UC_MarketData as "시장 데이터 조회"
+  usecase UC_Login as "Login/Session Establishment"
+  usecase UC_ViewDashboard as "Dashboard Real-time View"
+  usecase UC_ChatAI as "AI Chatbot Conversation (SSE)"
+  usecase UC_ManagePortfolio as "Portfolio View/Edit"
+  usecase UC_Autotrade as "Auto-trading Strategy Setup"
+  usecase UC_Settings as "User Settings"
+  usecase UC_Tutorial as "Onboarding Tutorial"
+  usecase UC_MarketData as "Market Data View"
 }
 
 User --> UC_Login
