@@ -27,14 +27,13 @@ sequenceDiagram
     ES->>HC: request("GET", "/quote", params)
     HC->>HC: RateLimit 토큰 획득 (대기/거절)
     HC->>HC: CircuitBreaker 상태 확인 (CLOSED?)
-    loop 재시도 n회 (지수 백오프(+지터))
+    loop 재시도 n회 (지수 백오프 + 지터)
         HC->>API: HTTP 요청 (aiohttp 세션/커넥션풀)
         alt 성공 (2xx)
             API-->>HC: JSON 응답
             HC->>HC: CircuitBreaker.record_success()
             HC-->>ES: 결과 반환
             ES-->>Caller: 데이터
-            break
         else 실패 (네트워크/5xx/타임아웃)
             API-->>HC: 오류
             HC->>HC: CircuitBreaker.record_failure()
