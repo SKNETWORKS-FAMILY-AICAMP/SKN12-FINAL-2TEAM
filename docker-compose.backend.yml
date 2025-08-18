@@ -49,8 +49,8 @@ networks:
 #        "type": "mysql",
 #        "host": "trading-mysql-db.cpkmaq4eqdte.ap-northeast-2.rds.amazonaws.com",
 #        "port": 3306,
-#        "user": "trading",
-#        "password": "dkdlqmsbwlstmdptmvkWkd1234!",
+#        "user": "YOUR_DB_USERNAME",
+#        "password": "YOUR_DB_PASSWORD",
 #        "database": "finance_global",
 #        "shard_databases": ["finance_shard_1", "finance_shard_2"]
 #      },
@@ -58,14 +58,14 @@ networks:
 #        "type": "redis",
 #        "host": "ec2-52-78-194-14.ap-northeast-2.compute.amazonaws.com",
 #        "port": 6379,
-#        "password": "dkdlqmsbwlstmdptmvkWkd1234!",
+#        "password": "YOUR_REDIS_PASSWORD",
 #        "session_expire_seconds": 3600
 #      },
 #      "llmConfig": {
 #        "default_provider": "openai",
 #        "providers": {
 #          "openai": {
-#            "api_key": "sk-your-openai-api-key-here",
+#            "api_key": "YOUR_OPENAI_API_KEY",
 #            "model": "gpt-4",
 #            "temperature": 0.7,
 #            "max_tokens": 2000
