@@ -18,12 +18,13 @@ from service.scheduler.base_scheduler import ScheduleJob, ScheduleType
 import uuid
 
 class SignalMonitoringService:
-    """시그널 모니터링 서비스 - 실시간 주가 감시 및 볼린저 밴드 기반 시그널 발생"""
+    """시그널 모니터링 서비스 - 실시간 주가 감시 및 볼린저 밴드 기반 시그널 발생 (마스터 서버 전용)"""
     
     _initialized = False
     _monitoring_symbols: Set[str] = set()  # 모니터링 중인 종목
     _korea_websocket: Optional[KoreaInvestmentWebSocketIOCP] = None
     _scheduler_job_ids: Set[str] = set()  # 스케줄러 작업 ID들
+    _is_master_server: bool = False  # 마스터 서버 여부
     
     # 캐시 키 패턴
     CACHE_KEY_PATTERN = "signal:price:{symbol}:{date}"  # 일별 가격 데이터
@@ -33,18 +34,38 @@ class SignalMonitoringService:
     
     @classmethod
     async def init(cls):
-        """서비스 초기화"""
+        """서비스 초기화 - 마스터 서버만 한투증권 로직 실행"""
         if cls._initialized:
             Logger.warn("SignalMonitoringService 이미 초기화됨")
             return
         
         try:
+            from service.service_container import ServiceContainer
+            
+            # 🎯 마스터/슬레이브 서버 확인
+            if ServiceContainer.is_korea_investment_disabled():
+                Logger.info("🔒 슬레이브 서버 - Korea Investment 로직 비활성화")
+                Logger.info("📡 이 서버는 일반 웹서버 기능만 담당")
+                cls._korea_websocket = None
+                cls._is_master_server = False
+                cls._initialized = True
+                return
+            
+            if not ServiceContainer.is_korea_investment_master_server():
+                Logger.warn("⚠️ 마스터 서버가 아님 - Korea Investment 로직 스킵")
+                cls._korea_websocket = None
+                cls._is_master_server = False
+                cls._initialized = True
+                return
+            
+            # 🏆 마스터 서버에서만 실행되는 로직
+            Logger.info("🏆 마스터 서버 - Korea Investment 로직 활성화")
+            cls._is_master_server = True
+            
             # ServiceContainer에서 검증된 한투증권 서비스 인스턴스 획득
             cls._korea_websocket = None
             
             try:
-                from service.service_container import ServiceContainer
-                
                 # ExternalService에서 이미 초기화되고 검증된 인스턴스 사용
                 if ServiceContainer.is_korea_investment_service_initialized():
                     Logger.info("✅ KoreaInvestmentService 이미 초기화됨 (ExternalService)")
@@ -179,7 +200,12 @@ class SignalMonitoringService:
     
     @classmethod
     async def _sync_active_alarms(cls):
-        """활성 알림 목록 조회 및 구독 (동적 샤드 조회)"""
+        """활성 알림 목록 조회 및 구독 (마스터 서버 전용)"""
+        # 🏆 마스터 서버 확인
+        if not cls._is_master_server:
+            Logger.info("🔒 슬레이브 서버 - 시그널 알림 동기화 스킵")
+            return
+            
         try:
             db_service = ServiceContainer.get_database_service()
             new_symbols = set()
@@ -295,11 +321,16 @@ class SignalMonitoringService:
     
     @classmethod
     async def subscribe_symbol(cls, symbol: str):
-        """종목 실시간 구독 시작 - 신뢰성 있는 연결 보장"""
+        """종목 실시간 구독 시작 - 마스터 서버 전용"""
+        # 🏆 마스터 서버 확인
+        if not cls._is_master_server:
+            Logger.warn(f"🔒 슬레이브 서버 - {symbol} 구독 스킵")
+            return
+            
         if symbol in cls._monitoring_symbols:
             Logger.info(f"🔄 이미 구독 중인 종목: {symbol}")
             return
-        
+            
         try:
             # 미국 주식만 처리
             if not cls._is_us_stock(symbol):
@@ -1313,7 +1344,12 @@ class SignalMonitoringService:
     
     @classmethod
     async def _update_signal_performance(cls):
-        """1일 경과한 시그널의 성과 업데이트 - 실제 가격 조회 및 계산"""
+        """1일 경과한 시그널의 성과 업데이트 - 마스터 서버 전용"""
+        # 🏆 마스터 서버 확인
+        if not cls._is_master_server:
+            Logger.info("🔒 슬레이브 서버 - 시그널 성과 업데이트 스킵")
+            return
+            
         try:
             db_service = ServiceContainer.get_database_service()
             

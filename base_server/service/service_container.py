@@ -150,25 +150,41 @@ class ServiceContainer:
         return getattr(cls(), "_notification_service_initialized", False)
 
     @classmethod
-    def set_korea_investment_service(cls, service, websocket_service) -> None:
-        """Korea Investment 서비스 인스턴스 설정"""
+    def set_korea_investment_service(cls, service, websocket_service, is_master=False, master_lock_token=None) -> None:
+        """Korea Investment 서비스 인스턴스 설정 (마스터/슬레이브 모드 지원)"""
         container = cls()
         container._korea_investment_service = service
         container._korea_investment_websocket = websocket_service
         container._korea_investment_service_initialized = True
+        container._korea_investment_is_master = is_master
+        container._korea_investment_master_lock_token = master_lock_token
+        
+    @classmethod
+    def set_korea_investment_disabled(cls) -> None:
+        """Korea Investment 서비스 비활성화 (슬레이브 서버용)"""
+        container = cls()
+        container._korea_investment_service = None
+        container._korea_investment_websocket = None
+        container._korea_investment_service_initialized = False
+        container._korea_investment_is_master = False
+        container._korea_investment_disabled = True
 
     @classmethod
     def get_korea_investment_service(cls):
-        """Korea Investment 서비스 인스턴스 반환"""
+        """Korea Investment 서비스 인스턴스 반환 (마스터 서버만)"""
         container = cls()
+        if getattr(container, "_korea_investment_disabled", False):
+            raise RuntimeError("Korea Investment Service is disabled on this slave server")
         if container._korea_investment_service is None:
             raise RuntimeError("Korea Investment Service not initialized in ServiceContainer")
         return container._korea_investment_service
 
     @classmethod
     def get_korea_investment_websocket(cls):
-        """Korea Investment WebSocket 서비스 인스턴스 반환"""
+        """Korea Investment WebSocket 서비스 인스턴스 반환 (마스터 서버만)"""
         container = cls()
+        if getattr(container, "_korea_investment_disabled", False):
+            raise RuntimeError("Korea Investment WebSocket Service is disabled on this slave server")
         if container._korea_investment_websocket is None:
             raise RuntimeError("Korea Investment WebSocket Service not initialized in ServiceContainer")
         return container._korea_investment_websocket
@@ -176,6 +192,16 @@ class ServiceContainer:
     @classmethod
     def is_korea_investment_service_initialized(cls) -> bool:
         return getattr(cls(), "_korea_investment_service_initialized", False)
+    
+    @classmethod
+    def is_korea_investment_master_server(cls) -> bool:
+        """이 서버가 Korea Investment 마스터 서버인지 확인"""
+        return getattr(cls(), "_korea_investment_is_master", False)
+    
+    @classmethod
+    def is_korea_investment_disabled(cls) -> bool:
+        """이 서버에서 Korea Investment 서비스가 비활성화되었는지 확인"""
+        return getattr(cls(), "_korea_investment_disabled", False)
 
     @classmethod
     def get_service_status(cls) -> dict:

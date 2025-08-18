@@ -22,12 +22,40 @@ class ExternalService:
             await client.start()
             Logger.info(f"External client initialized for API: {api_name}")
             
-        # Korea Investment 서비스 초기화 (있는 경우에만)
+        # 🎯 Korea Investment 마스터 서버 전용 로직 (단일 서버만 실행)
         if config.korea_investment:
+            # 🔒 글로벌 마스터 락으로 한투증권 전담 서버 결정
+            master_lock_key = "korea_investment:master:global"
+            master_lock_token = None
+            
             try:
+                from service.lock.lock_service import LockService
                 from service.external.korea_investment_service import KoreaInvestmentService
                 from service.external.korea_investment_websocket_iocp import get_korea_investment_websocket
                 from service.service_container import ServiceContainer
+                
+                # LockService 초기화 확인 및 대기
+                if not LockService.is_initialized():
+                    Logger.warn("🔒 LockService 아직 초기화되지 않음 - 슬레이브 모드로 시작")
+                    Logger.info("📡 이 서버는 일반 웹서버 기능만 담당 (한투증권 로직 비활성화)")
+                    ServiceContainer.set_korea_investment_disabled()
+                    return
+                
+                # 🏆 마스터 락 획득 시도 (24시간 TTL - 마스터 서버 고정)
+                master_lock_token = await LockService.acquire(master_lock_key, ttl=86400)
+                
+                if not master_lock_token:
+                    # 🔒 마스터 락 획득 실패 = 슬레이브 서버
+                    Logger.info("🔒 다른 서버가 Korea Investment 마스터 서버임 - 이 서버는 슬레이브 모드")
+                    Logger.info("📡 이 서버는 일반 웹서버 기능만 담당 (한투증권 로직 비활성화)")
+                    
+                    # 슬레이브 서버는 한투증권 관련 로직을 아예 실행하지 않음
+                    ServiceContainer.set_korea_investment_disabled()
+                    return
+                
+                # 🏆 마스터 락 획득 성공 = 마스터 서버
+                Logger.info("🏆 이 서버가 Korea Investment 마스터 서버로 선정됨")
+                Logger.info("🎯 모든 한투증권 로직을 이 서버에서 독점 실행")
                 
                 ki_config = config.korea_investment
                 if await KoreaInvestmentService.init(ki_config.app_key, ki_config.app_secret):
@@ -45,12 +73,17 @@ class ExternalService:
                             # health_check는 이제 무조건 성공하거나 Exception 발생
                             Logger.info(f"✅ Korea Investment WebSocket 테스트 완료: {ws_health_result.get('test_result', '')}")
                             
-                            # ServiceContainer에 등록
+                            # ServiceContainer에 마스터 서버로 등록
                             ServiceContainer.set_korea_investment_service(
                                 KoreaInvestmentService, 
-                                korea_websocket
+                                korea_websocket,
+                                is_master=True,
+                                master_lock_token=master_lock_token
                             )
-                            Logger.info("✅ Korea Investment 서비스 (REST + WebSocket) 초기화 완료")
+                            Logger.info("🏆 Korea Investment 마스터 서비스 (REST + WebSocket) 초기화 완료")
+                            
+                            # 마스터 락을 유지하므로 여기서 해제하지 않음
+                            master_lock_token = None  # finally에서 해제하지 않도록 설정
                             
                         except RuntimeError as ws_error:
                             Logger.error(f"❌ Korea Investment WebSocket 필수 연결 실패: {ws_error}")
@@ -58,10 +91,21 @@ class ExternalService:
                             raise RuntimeError(f"Korea Investment WebSocket 연결 실패로 서버 시작 불가: {ws_error}")
                     else:
                         Logger.error(f"❌ Korea Investment REST API 테스트 실패: {health_result.get('error', '')}")
+                        raise RuntimeError("Korea Investment REST API 연결 실패")
                 else:
                     Logger.error("❌ Korea Investment 서비스 인증 실패")
+                    raise RuntimeError("Korea Investment 인증 실패")
+                    
             except Exception as e:
-                Logger.error(f"❌ Korea Investment 서비스 초기화 실패: {e}")
+                Logger.error(f"❌ Korea Investment 마스터 서버 초기화 실패: {e}")
+                # 초기화 실패시 마스터 락 해제하여 다른 서버가 시도할 수 있게 함
+                if master_lock_token:
+                    try:
+                        await LockService.release(master_lock_key, master_lock_token)
+                        Logger.info("🔓 Korea Investment 마스터 락 해제 (초기화 실패)")
+                    except Exception as release_e:
+                        Logger.warn(f"⚠️ Korea Investment 마스터 락 해제 오류: {release_e}")
+                raise  # 마스터 서버 초기화 실패시 서버 시작 중단
             
         cls._initialized = True
         Logger.info("External service initialized")
