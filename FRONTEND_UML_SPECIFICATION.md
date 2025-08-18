@@ -39,7 +39,7 @@ graph LR
     subgraph Frontend[Frontend]
         UC_Login[로그인/세션확립]
         UC_ViewDashboard[대시보드 실시간 보기]
-        UC_ChatAI[AI 챗봇 대화(SSE)]
+        UC_ChatAI[AI 챗봇 대화 SSE]
         UC_ManagePortfolio[포트폴리오 조회/편집]
         UC_Autotrade[자동매매 전략 구성]
         UC_Settings[사용자 설정]
@@ -95,7 +95,7 @@ graph LR
     subgraph Frontend[Frontend]
         UC_Login[로그인/세션확립]
         UC_ViewDashboard[대시보드 실시간 보기]
-        UC_ChatAI[AI 챗봇 대화(SSE)]
+        UC_ChatAI[AI 챗봇 대화 SSE]
         UC_ManagePortfolio[포트폴리오 조회/편집]
         UC_Autotrade[자동매매 전략 구성]
         UC_Settings[사용자 설정]
@@ -216,7 +216,7 @@ graph TD
 
 ```mermaid
 graph TD
-    subgraph App[app/ (App Router)]
+    subgraph App[App Router]
         Layout[layout.tsx]
         Page[page.tsx]
         Auth[auth/]
@@ -348,11 +348,11 @@ graph LR
 
 ```mermaid
 graph LR
-    subgraph NextJS[Next.js App (Edge/Node)]
+    subgraph NextJS[Next.js App Edge/Node]
         Next[Next.js App]
     end
     
-    subgraph Browser[Browser (React 18)]
+    subgraph Browser[Browser React 18]
         AuthCtx[Auth Context/Provider]
         Zustand[Zustand Stores]
         Axios[Axios Client]
@@ -823,10 +823,10 @@ flowchart TD
 ```mermaid
 flowchart TD
     A[시작] --> B[사용자 심볼 추가]
-    B --> C[Store.addSymbol(sym)]
+    B --> C[Store.addSymbol sym]
     C --> D{WS 연결됨?}
-    D -->|예| E[WS.SUBSCRIBE(sym)]
-    D -->|아니오| F[대기 -> OnOpen 후 큐 처리]
+    D -->|예| E[WS.SUBSCRIBE sym]
+    D -->|아니오| F[대기 OnOpen 후 큐 처리]
     E --> G[종료]
     F --> G
 ```
@@ -971,12 +971,12 @@ stateDiagram-v2
 ```mermaid
 graph TB
     subgraph UD[User Device]
-        BR[Browser (React 18)]
+        BR[Browser React 18]
     end
     
     subgraph EDGE[Edge Runtime]
-        APP[Next.js App Router (SSR/SSG)]
-        SSE_GW[SSE Gateway (Edge)]
+        APP[Next.js App Router SSR/SSG]
+        SSE_GW[SSE Gateway Edge]
     end
     
     subgraph NODE[Node Runtime]
@@ -999,8 +999,8 @@ graph TB
     end
     
     BR <--> APP : HTTP/HTTPS
-    BR --> WS_GW : WebSocket (Node only)
-    BR --> SSE_GW : SSE (Edge/Node)
+    BR --> WS_GW : WebSocket Node only
+    BR --> SSE_GW : SSE Edge/Node
     APP --> APIs : REST
     
     classDef note fill:#fff8e1,stroke:#f4b400,stroke-width:2px
