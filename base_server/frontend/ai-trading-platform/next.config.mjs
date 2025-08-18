@@ -26,7 +26,7 @@ const nextConfig = {
 
   // ✅ 전역 CORS 헤더 금지 (프론트 개발자안 유지)
   async headers() {
-    return [] // 필요하면 API 서버에서만 CORS 허용
+    return [] // CSP 비활성화 - TradingView 위젯을 위해
   },
 
   // ✅ devServer/HMR 튜닝 금지 (프론트 개발자안 유지)

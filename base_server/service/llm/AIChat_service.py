@@ -136,17 +136,244 @@ class AIChatService:
         """전체 응답 생성 (REST API용)"""
         joined = "\n".join(tool_out) if isinstance(tool_out, list) else str(tool_out)
         memory = self.mem(sid)
+        
+        # 차트 정보를 포함한 시스템 프롬프트
+        system_prompt = """당신은 친절하고 정확한 AI 비서입니다.
+
+🚫 **절대 금지 규칙: 금융/투자/경제 관련 질문이 아니면 무조건 차단!**
+
+🚨 **금융 외 질문 키워드 감지 시 즉시 차단:**
+운세, 띠, 별자리, 사주, 타로, 점성술, 연애, 사랑, 요리, 음식, 날씨, 게임, 영화, 음악, 운동, 여행, 교육, 학업 등이 포함된 질문은 즉시 차단하고 금융 질문만 요청하라!
+
+❌ **금융 외 질문 차단 목록 (절대 답변 금지):**
+- 운세, 사주, 타로, 점성술, 띠, 별자리, 오늘의 운세
+- 사랑, 연애, 인간관계 고민, 연애운
+- 요리, 음식, 레시피, 맛집
+- 날씨, 기후, 계절, 일기예보
+- 게임, 엔터테인먼트, 영화, 음악, 드라마
+- 운동, 건강 관리, 다이어트, 다이어트 방법
+- 여행, 관광, 문화, 축제
+- 교육, 학습, 학업, 공부법
+- 기타 금융/투자/경제와 무관한 모든 질문
+
+⚠️ **중요:**
+- 사용자의 질문이 금융/투자/경제 관련인지 먼저 판단해. 관련이 없으면 즉시 차단하고 금융 질문만 요청해.
+- 운세, 띠, 별자리, 사주, 사랑, 요리, 날씨, 게임, 영화, 음악, 운동 등 금융 외 모든 질문은 무조건 차단.
+- 질문에 '운세', '띠', '사주', '사랑', '요리', '날씨', '게임', '영화' 등이 포함되면 즉시 차단.
+
+주식 관련 질문에 답할 때는 다음과 같은 형식으로 응답해주세요:
+
+1. 일반적인 답변 후
+2. 차트 정보를 JSON 형식으로 포함:
+
+```chart
+{{
+  "symbols": ["NASDAQ:TSLA"],
+  "type": "mini",
+  "reason": "테슬라 주식 분석"
+}}
+```
+
+차트 타입:
+- "mini": 간단한 차트 (일반적인 주식 대화)
+- "advanced": 고급 차트 (기술적 분석, 지표 등)
+
+**주식 관련 질문 감지 규칙:**
+- 질문에 주식 심볼(AAPL, TSLA, MSFT 등)이 언급되면 차트 정보 포함
+- "주식", "주가", "차트", "분석", "기술적", "재무" 등 키워드가 있으면 차트 정보 포함
+- 일반적인 경제/투자 질문이면 차트 정보 포함
+
+**차트 심볼 매핑:**
+- 애플 → "NASDAQ:AAPL"
+- 테슬라 → "NASDAQ:TSLA"
+- 마이크로소프트 → "NASDAQ:MSFT"
+- 구글 → "NASDAQ:GOOGL"
+- 아마존 → "NASDAQ:AMZN"
+- 엔비디아 → "NASDAQ:NVDA"
+- 메타 → "NASDAQ:META"
+- 넷플릭스 → "NASDAQ:NFLX"
+
+미국 주식에 대해서만 정보를 제공해.
+
+예시:
+사용자: "애플 주식 어때?"
+답변: "애플(AAPL) 주식은 현재 상승 추세에 있습니다...
+
+```chart
+{{
+  "symbols": ["NASDAQ:AAPL"],
+  "type": "mini",
+  "reason": "애플 주식 분석"
+}}
+```
+
+사용자: "테슬라와 엔비디아 기술적 분석해줘"
+답변: "테슬라와 엔비디아의 기술적 분석 결과입니다...
+
+```chart
+{{
+  "symbols": ["NASDAQ:TSLA", "NASDAQ:NVDA"],
+  "type": "advanced",
+  "reason": "테슬라와 엔비디아 기술적 분석"
+}}
+```
+
+사용자: "날씨 어때?"
+답변: "🚫 **금융 투자 상담 외의 질문은 답변할 수 없습니다. 주식, 투자, 경제 관련 질문만 해주세요.**"
+
+사용자: "요리법 알려줘"
+답변: "🚫 **금융 투자 상담 외의 질문은 답변할 수 없습니다. 주식, 투자, 경제 관련 질문만 해주세요.**"
+
+사용자: "운세 알려줘"
+답변: "🚫 **금융 투자 상담 외의 질문은 답변할 수 없습니다. 주식, 투자, 경제 관련 질문만 해주세요.**" """
+
         prompt = ChatPromptTemplate.from_messages(
-            [("system", "당신은 친절하고 정확한 AI 비서입니다.")] +
+            [("system", system_prompt)] +
             memory.buffer +
             [("user", f'{question}\n\n🛠 도구 결과:\n{joined}')]
         )
-        answer = markdown((prompt | self.llm).invoke({}).content)
-        memory.chat_memory.add_user_message(question)
+        
+        raw_answer = (prompt | self.llm).invoke({}).content
+        
+        # 차트 정보 추출 (LLM 응답과 원본 질문 모두 확인)
+        chart_info = self._extract_chart_info(raw_answer)
+        Logger.debug(f"LLM 응답에서 추출한 차트 정보: {chart_info}")
+        
+        if not chart_info:
+            # LLM 응답에 차트 정보가 없으면 원본 질문에서 추출
+            chart_info = self._extract_stock_symbols_from_question(question)
+            Logger.debug(f"원본 질문에서 추출한 차트 정보: {chart_info}")
+        
+        Logger.debug(f"최종 차트 정보: {chart_info}")
+        
+        # 금융 외 질문인 경우 차트 정보 제거
+        if self._is_non_financial_question(question):
+            chart_info = None
+            Logger.debug("금융 외 질문으로 판단되어 차트 정보 제거")
+        
+        # 마크다운 변환 (차트 정보 제외)
+        answer_without_chart = self._remove_chart_info(raw_answer)
+        answer = markdown(answer_without_chart)
+        
         if isinstance(answer, list):
             answer = "\n".join(str(x) for x in answer)
-        memory.chat_memory.add_ai_message(answer)
-        return answer
+        
+        memory.chat_memory.add_user_message(question)
+        memory.chat_memory.add_ai_message(answer_without_chart)
+        
+        # 차트 정보가 있으면 포함하여 반환
+        if chart_info:
+            return {
+                "content": answer,
+                "chart": chart_info
+            }
+        else:
+            return answer
+
+    def _extract_chart_info(self, text: str) -> dict | None:
+        """텍스트에서 차트 정보를 추출합니다."""
+        import re
+        import json
+        
+        # ```chart ... ``` 패턴 찾기
+        chart_pattern = r'```chart\s*\n(.*?)\n```'
+        match = re.search(chart_pattern, text, re.DOTALL)
+        
+        if match:
+            try:
+                chart_json = match.group(1).strip()
+                chart_info = json.loads(chart_json)
+                
+                # 필수 필드 검증
+                if "symbols" in chart_info and "type" in chart_info:
+                    Logger.debug(f"Extracted chart info: {chart_info}")
+                    return chart_info
+                else:
+                    Logger.warn(f"Invalid chart info format: {chart_info}")
+                    return None
+            except json.JSONDecodeError as e:
+                Logger.warn(f"Failed to parse chart JSON: {e}")
+                return None
+        
+        # 차트 정보가 없으면 질문에서 주식 심볼을 추출하여 기본 차트 정보 생성
+        return self._extract_stock_symbols_from_question(text)
+    
+    def _extract_stock_symbols_from_question(self, text: str) -> dict | None:
+        """질문에서 주식 심볼을 추출하여 기본 차트 정보를 생성합니다."""
+        import re
+        
+        # 주식 심볼 매핑
+        stock_mapping = {
+            '애플': 'NASDAQ:AAPL', 'apple': 'NASDAQ:AAPL', 'aapl': 'NASDAQ:AAPL',
+            '테슬라': 'NASDAQ:TSLA', 'tesla': 'NASDAQ:TSLA', 'tsla': 'NASDAQ:TSLA',
+            '마이크로소프트': 'NASDAQ:MSFT', 'microsoft': 'NASDAQ:MSFT', 'msft': 'NASDAQ:MSFT',
+            '구글': 'NASDAQ:GOOGL', 'google': 'NASDAQ:GOOGL', 'googl': 'NASDAQ:GOOGL',
+            '아마존': 'NASDAQ:AMZN', 'amazon': 'NASDAQ:AMZN', 'amzn': 'NASDAQ:AMZN',
+            '엔비디아': 'NASDAQ:NVDA', 'nvidia': 'NASDAQ:NVDA', 'nvda': 'NASDAQ:NVDA',
+            '메타': 'NASDAQ:META', 'meta': 'NASDAQ:META', 'meta': 'NASDAQ:META',
+            '넷플릭스': 'NASDAQ:NFLX', 'netflix': 'NASDAQ:NFLX', 'nflx': 'NASDAQ:NFLX',
+            '삼성전자': 'KRX:005930', '삼성': 'KRX:005930',
+            'sk하이닉스': 'KRX:000660', 'sk': 'KRX:000660',
+            '현대차': 'KRX:005380', '현대': 'KRX:005380',
+            'lg에너지솔루션': 'KRX:373220', 'lg에너지': 'KRX:373220'
+        }
+        
+        # 질문에서 주식 심볼 찾기
+        found_symbols = []
+        question_lower = text.lower()
+        
+        for keyword, symbol in stock_mapping.items():
+            if keyword.lower() in question_lower:
+                found_symbols.append(symbol)
+        
+        # 중복 제거
+        found_symbols = list(set(found_symbols))
+        
+        if found_symbols:
+            # 차트 타입 결정
+            chart_type = "advanced" if any(word in question_lower for word in ["기술적", "분석", "지표", "rsi", "macd"]) else "mini"
+            
+            chart_info = {
+                "symbols": found_symbols,
+                "type": chart_type,
+                "reason": f"{', '.join([s.split(':')[1] for s in found_symbols])} 주식 분석"
+            }
+            
+            Logger.debug(f"Auto-generated chart info: {chart_info}")
+            return chart_info
+        
+        return None
+    
+    def _is_non_financial_question(self, text: str) -> bool:
+        """질문이 금융 외 질문인지 판단합니다."""
+        non_financial_keywords = [
+            '운세', '띠', '별자리', '사주', '타로', '점성술', '오늘의 운세',
+            '사랑', '연애', '인간관계', '연애운', '고민',
+            '요리', '음식', '레시피', '맛집',
+            '날씨', '기후', '계절', '일기예보',
+            '게임', '엔터테인먼트', '영화', '음악', '드라마',
+            '운동', '건강', '다이어트', '다이어트 방법',
+            '여행', '관광', '문화', '축제',
+            '교육', '학습', '학업', '공부법'
+        ]
+        
+        text_lower = text.lower()
+        for keyword in non_financial_keywords:
+            if keyword in text_lower:
+                Logger.debug(f"금융 외 질문 감지: '{keyword}' 키워드 발견")
+                return True
+        
+        return False
+
+    def _remove_chart_info(self, text: str) -> str:
+        """텍스트에서 차트 정보를 제거합니다."""
+        import re
+        
+        # ```chart ... ``` 패턴 제거
+        chart_pattern = r'```chart\s*\n.*?\n```'
+        cleaned_text = re.sub(chart_pattern, '', text, flags=re.DOTALL)
+        
+        return cleaned_text.strip()
 
     async def load_chat_history(self, session_id: str, messages: list):
         """DB/Redis에서 로드한 채팅 히스토리를 메모리에 복원

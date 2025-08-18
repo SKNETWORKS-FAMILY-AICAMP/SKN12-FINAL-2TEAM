@@ -10,6 +10,11 @@ interface LocalMessage {
   role: "user" | "assistant";
   isTyping?: boolean;
   timestamp?: number; // 추가: 메시지 생성 시간
+  chart?: {
+    symbols: string[];
+    type: "mini" | "advanced";
+    reason?: string;
+  };
 }
 
 export function useChat() {
@@ -84,12 +89,23 @@ export function useChat() {
       
       if (response.errorCode === 0) {
         // 백엔드 응답을 UI 메시지로 정규화 (백엔드 ID 우선 사용)
-        const normalizedMessages = (response.messages || []).map((m: any) => ({
-          id: m.message_id, // 백엔드에서 생성한 고유 ID 우선 사용
-          role: m.sender_type === 'USER' ? 'user' : 'assistant',
-          content: m.content,
-          timestamp: m.timestamp || m.created_at || Date.now()
-        }));
+        const normalizedMessages = (response.messages || []).map((m: any) => {
+          // 차트 정보 추출
+          let chartInfo = null;
+          if (m.chart) {
+            chartInfo = m.chart;
+          } else if (typeof m.content === 'object' && m.content.chart) {
+            chartInfo = m.content.chart;
+          }
+          
+          return {
+            id: m.message_id, // 백엔드에서 생성한 고유 ID 우선 사용
+            role: m.sender_type === 'USER' ? 'user' : 'assistant',
+            content: typeof m.content === 'string' ? m.content : m.content?.content || m.content,
+            timestamp: m.timestamp || m.created_at || Date.now(),
+            chart: chartInfo
+          };
+        });
         
         console.log("[useChat] 정규화된 메시지:", normalizedMessages);
         setMessages(normalizedMessages)
@@ -189,6 +205,9 @@ export function useChat() {
         message: parsed.message,
         messageKeys: parsed.message ? Object.keys(parsed.message) : []
       });
+      console.log("[useChat] messageObj.content 타입:", typeof parsed.message?.content);
+      console.log("[useChat] messageObj.content:", parsed.message?.content);
+      console.log("[useChat] messageObj.chart:", parsed.message?.chart);
       
       if (parsed.errorCode === 0) {
         // 백엔드 응답에서 AI 메시지 정보 추출
@@ -205,11 +224,22 @@ export function useChat() {
           
           // 2. AI 메시지 추가 (백엔드에서 생성한 message_id 사용)
           const aiMessageId = messageObj.message_id;
+          
+          // 차트 정보 추출 (서버 응답에서 차트 정보가 있는 경우)
+          let chartInfo = null;
+          if (messageObj.chart) {
+            chartInfo = messageObj.chart;
+          } else if (typeof messageObj.content === 'object' && messageObj.content.chart) {
+            // content가 객체이고 chart 정보가 포함된 경우
+            chartInfo = messageObj.content.chart;
+          }
+          
           const aiMessage: LocalMessage = {
             id: aiMessageId,
-            content: messageObj.content,
+            content: typeof messageObj.content === 'string' ? messageObj.content : messageObj.content?.content || messageObj.content,
             role: "assistant",
-            timestamp: messageObj.timestamp || messageObj.created_at || Date.now()
+            timestamp: messageObj.timestamp || messageObj.created_at || Date.now(),
+            chart: chartInfo
           };
           
           console.log("[useChat] AI 메시지 추가:", aiMessage);

@@ -19,3 +19,4 @@ class ChatMessage(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
     timestamp: str = ""
     is_streaming: bool = False
+    chart: Optional[Dict[str, Any]] = None  # 차트 정보 추가

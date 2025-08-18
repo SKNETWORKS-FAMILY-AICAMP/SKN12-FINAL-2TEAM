@@ -1,8 +1,10 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import DOMPurify from "dompurify";
 import TypingEffect from "./typing-effect";
+import TVMiniWidget from "./TVMiniWidget";
+import TVAdvancedChart from "./TVAdvancedChart";
 
 interface Message {
   id: string;
@@ -10,18 +12,28 @@ interface Message {
   role: "user" | "assistant";
   isTyping?: boolean;
   onTypingUpdate?: () => void;
+  chart?: {
+    symbols: string[];
+    type: "mini" | "advanced";
+    reason?: string;
+  };
 }
 
 export default function ChatMessage({ message }: { message: Message }) {
+  const [showChart, setShowChart] = useState(false);
   const isUser = message.role === "user";
   const content = message.content ?? "";
   const safeHtml = DOMPurify.sanitize(content);
+
+  // AI 메시지에서 차트 정보 확인
+  const hasChart = !isUser && message.chart && message.chart.symbols && message.chart.symbols.length > 0;
 
   // 디버깅용 로그
   console.log("[ChatMessage] message:", message);
   console.log("[ChatMessage] role:", message.role, "isUser:", isUser);
   console.log("[ChatMessage] content (sanitized):", safeHtml);
-  console.log("[ChatMessage] HTML 구조 분석:", safeHtml.includes('<li>'), safeHtml.includes('<strong>'));
+  console.log("[ChatMessage] chart info:", message.chart);
+  console.log("[ChatMessage] hasChart:", hasChart);
 
   // 사용자 메시지만 풍선으로 표시
   if (isUser) {
@@ -66,6 +78,76 @@ export default function ChatMessage({ message }: { message: Message }) {
           } as React.CSSProperties}
           dangerouslySetInnerHTML={{ __html: safeHtml }}
         />
+        
+        {/* 차트 토글 버튼 (AI 메시지에 차트 정보가 있는 경우) */}
+        {hasChart && (
+          <div className="mt-4 pt-3 border-t border-gray-700">
+            <button
+              onClick={() => setShowChart(!showChart)}
+              className="text-sm text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-2"
+            >
+              {showChart ? "📊 차트 숨기기" : "📊 차트 보기"}
+              <span className="text-gray-500 text-xs">
+                ({message.chart!.symbols.length}개 종목: {message.chart!.symbols.map(s => s.split(':')[1] || s).join(", ")})
+              </span>
+            </button>
+          </div>
+        )}
+        
+        {/* 차트 영역 */}
+        {hasChart && showChart && (
+          <div className="mt-4 rounded-xl overflow-hidden border border-gray-700 bg-gray-900" style={{ aspectRatio: "10/4", minHeight: "200px" }}>
+            {message.chart!.type === "mini" && message.chart!.symbols.length > 0 && (
+              <div className="p-2 h-full">
+                <div className="text-xs text-gray-400 mb-2 px-2">
+                  📈 {message.chart!.reason || `${message.chart!.symbols[0].split(':')[1] || message.chart!.symbols[0]} 차트`} (6개월)
+                </div>
+                <div className="h-full">
+                  <TVMiniWidget 
+                    symbol={message.chart!.symbols[0]} 
+                    theme="dark"
+                    dateRange="6M"
+                  />
+                </div>
+              </div>
+            )}
+            
+            {message.chart!.type === "advanced" && message.chart!.symbols.length > 0 && (
+              <div className="p-2 h-full">
+                <div className="text-xs text-gray-400 mb-2 px-2">
+                  📊 {message.chart!.reason || `${message.chart!.symbols[0].split(':')[1] || message.chart!.symbols[0]} 고급 차트`}
+                </div>
+                <div className="h-full">
+                  <TVAdvancedChart 
+                    symbol={message.chart!.symbols[0]} 
+                    theme="dark"
+                    interval="D"
+                  />
+                </div>
+              </div>
+            )}
+            
+            {/* 여러 종목이 있는 경우 미니 차트로 표시 */}
+            {message.chart!.symbols.length > 1 && (
+              <div className="p-2 border-t border-gray-700">
+                <div className="text-xs text-gray-400 mb-2 px-2">
+                  📈 관련 종목들
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {message.chart!.symbols.slice(1, 3).map((symbol, index) => (
+                    <div key={index} className="h-24" style={{ aspectRatio: "10/4" }}>
+                      <TVMiniWidget 
+                        symbol={symbol} 
+                        theme="dark"
+                        dateRange="1M"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

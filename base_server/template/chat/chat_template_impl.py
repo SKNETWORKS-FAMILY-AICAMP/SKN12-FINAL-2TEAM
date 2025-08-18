@@ -343,14 +343,25 @@ class ChatTemplateImpl(BaseTemplate):
             # 6) LLM에 질문 보내고 답변 받기
             try:
                 result = await ai_service.chat(request.content, session_id=session_id, client_session=client_session)
-                reply_text = result["reply"]
+                
+                # 차트 정보 추출
+                chart_info = None
+                if isinstance(result["reply"], dict) and "chart" in result["reply"]:
+                    chart_info = result["reply"]["chart"]
+                    reply_text = result["reply"]["content"]
+                else:
+                    reply_text = result["reply"]
+                    
+                Logger.debug(f"LLM 응답: {result}")
+                Logger.debug(f"차트 정보: {chart_info}")
+                
             except Exception as llm_error:
                 # LLM 호출 실패 시 AI 메시지 상태를 DELETED로 전이
                 await state_machine.transition_message(ai_message_id, MessageState.DELETED, MessageState.PENDING)
                 Logger.error(f"LLM 호출 실패: {llm_error}")
                 raise
 
-            # 7) Redis 메모리에 AI 답변 기록
+            # 7) Redis 메모리에 AI 답변 기록 (차트 정보 제외)
             ai_service.mem(session_id).chat_memory.add_ai_message(reply_text)
 
             # 7) AI 응답을 MessageQueue로 발행 (DB 저장용)
@@ -420,6 +431,7 @@ class ChatTemplateImpl(BaseTemplate):
                         "tokens": result.get("tokens", {}),
                         "parent_message_id": user_message_id
                     },
+                    "chart": chart_info,  # 차트 정보 추가
                     "is_streaming": False
                 }
                 
@@ -444,6 +456,7 @@ class ChatTemplateImpl(BaseTemplate):
                 content=reply_text,
                 timestamp=ai_timestamp,
                 metadata=None,
+                chart=chart_info,  # 차트 정보 추가
                 is_streaming=False
             )
             response.errorCode = 0

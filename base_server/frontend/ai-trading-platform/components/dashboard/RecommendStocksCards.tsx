@@ -168,7 +168,7 @@ export default function RecommendStocksCards() {
                   <span className="text-2xl font-extrabold mr-3" style={{ color: dirColor }}>{price ? price.toLocaleString() : '-'}</span>
                   {sd && (
                     <span className="text-sm font-bold" style={{ color: dirColor }}>
-                      {isUp ? '▲' : '▼'} {Math.abs(delta).toLocaleString()} ({Number.isFinite(pct) ? Math.abs(pct).toFixed(2) : '0.00'}%)
+                      {isUp ? '▲' : '▼'} {delta >= 0 ? '+' : ''}{delta.toLocaleString()} ({pct >= 0 ? '+' : ''}{Number.isFinite(pct) ? pct.toFixed(2) : '0.00'}%)
                     </span>
                   )}
                 </div>
