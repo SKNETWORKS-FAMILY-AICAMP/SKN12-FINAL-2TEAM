@@ -453,7 +453,7 @@ export default function ChatPage() {
             </div>
             {/* 간단한 안내 */}
             <div className="text-center mt-2 text-xs text-gray-500">
-              AI 트레이딩 어시스턴트와 자유롭게 대화하세요
+              AI 트레이딩 어시스턴트와 자유롭게 대화 하되, 모든 선택과 책임은 사용자에게 있습니다. 명심하세요.
             </div>
           </div>
         </div>
