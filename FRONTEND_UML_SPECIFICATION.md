@@ -306,7 +306,7 @@ graph LR
         Next[Next.js App]
     end
     
-    subgraph Browser[Browser (React 18)]
+    subgraph Browser[Browser React 18]
         AuthCtx[Auth Context/Provider]
         Zustand[Zustand Stores]
         Axios[Axios Client]
@@ -618,7 +618,7 @@ sequenceDiagram
         Browser->>AP: setToken(token, refreshToken, exp)
     else token 있음
         RG->>Browser: render(dashboard)
-        Browser->>API: GET /portfolio (Authorization: Bearer)
+        Browser->>API: GET /portfolio Authorization Bearer
         API-->>Browser: Portfolio JSON
     end
 ```
@@ -633,8 +633,8 @@ sequenceDiagram
     participant AuthService as AS
     
     Browser->>AP: useAuth().getToken()
-    alt exp < t-Δ (만료 임박)
-        Browser->>AP: refreshLock? (pending)
+    alt exp < t-Δ 만료 임박
+        Browser->>AP: refreshLock pending
         alt 없음
             AP->>AS: POST /auth/refresh
             AS-->>AP: {token, exp}
@@ -657,13 +657,13 @@ sequenceDiagram
     
     User->>Dashboard: 페이지 진입
     Dashboard->>Store: initWs()
-    Store->>WS: connect(WS_URL)
+    Store->>WS: connect WS_URL
     WS->>MWS: WS Handshake
     MWS-->>WS: 101 Switching Protocols
-    Dashboard->>Store: addSymbol([INDEX..., PORTF...])
-    Store->>WS: SUBSCRIBE {symbols}
-    MWS-->>WS: TICK {sym, price, ts} (stream)
-    WS-->>Store: onmessage(TICK)
+    Dashboard->>Store: addSymbol INDEX PORTF
+    Store->>WS: SUBSCRIBE symbols
+    MWS-->>WS: TICK sym price ts stream
+    WS-->>Store: onmessage TICK
     Store->>Dashboard: setState(price update)
 ```
 
@@ -680,16 +680,16 @@ sequenceDiagram
     
     WS->>WS: onClose/onError
     WS->>Store: connectionLost()
-    Store->>Store: setMissingSince(Date.now())
-    Store->>WS: reconnect(backoff)
+    Store->>Store: setMissingSince Date.now
+    Store->>WS: reconnect backoff
     WS->>MWS: WS Handshake
     MWS-->>WS: 101 Switching Protocols
-    Store->>WS: SUBSCRIBE {symbols}
-    Store->>PAPI: GET /portfolio/prices?since={missingSince}
-    PAPI-->>Store: {prices: [{sym, price, ts}]}
+    Store->>WS: SUBSCRIBE symbols
+    Store->>PAPI: GET /portfolio/prices since missingSince
+    PAPI-->>Store: prices sym price ts
     Store->>Dashboard: backfillPrices(prices)
-    MWS-->>WS: TICK {sym, price, ts} (stream)
-    WS-->>Store: onmessage(TICK)
+    MWS-->>WS: TICK sym price ts stream
+    WS-->>Store: onmessage TICK
     Store->>Dashboard: setState(price update)
 ```
 
@@ -705,16 +705,16 @@ sequenceDiagram
     participant Api as ChatAPI
     participant SSE as EventSource
     
-    User->>UI: 입력 제출(prompt)
-    UI->>CS: appendUser(prompt)
+    User->>UI: 입력 제출 prompt
+    UI->>CS: appendUser prompt
     UI->>ChatAPI: POST /api/chat/start
-    ChatAPI-->>UI: {streamUrl}
-    UI->>SSE: open(streamUrl)
-    SSE-->>UI: onmessage(delta)
-    UI->>CS: appendAssistant(delta)
-    UI->>UI: render(delta) // setInterval 18ms 기반, 문자 단위 처리
+    ChatAPI-->>UI: streamUrl
+    UI->>SSE: open streamUrl
+    SSE-->>UI: onmessage delta
+    UI->>CS: appendAssistant delta
+    UI->>UI: render delta setInterval 18ms 기반 문자 단위 처리
     Note over UI,SSE: 반복...
-    SSE-->>UI: [DONE]
+    SSE-->>UI: DONE
     UI->>SSE: close()
 ```
 
@@ -727,7 +727,7 @@ sequenceDiagram
     participant ChatStore as CS
     participant SSE as EventSource
     
-    UI->>SSE: open(streamUrl)
+    UI->>SSE: open streamUrl
     loop 15초마다
         SSE-->>UI: :heartbeat
         UI->>UI: updateLastHeartbeat()
@@ -737,7 +737,7 @@ sequenceDiagram
         UI->>SSE: close()
         UI->>UI: restartSSE()
     else 정상 종료
-        SSE-->>UI: [DONE]
+        SSE-->>UI: DONE
         UI->>SSE: close()
     end
 ```
@@ -754,15 +754,15 @@ sequenceDiagram
     participant WS as WebSocket
     
     User1->>Tab1: 페이지 로드
-    Tab1->>SW: register(tab1)
-    SW->>SW: setLeader(tab1)
-    SW->>WS: connect()
+    Tab1->>SW: register tab1
+    SW->>SW: setLeader tab1
+    SW->>WS: connect
     WS-->>SW: connected
     
     User2->>Tab2: 페이지 로드
-    Tab2->>SW: register(tab2)
-    SW->>Tab2: setFollower(tab2)
-    SW->>Tab2: broadcast(WS_OPEN)
+    Tab2->>SW: register tab2
+    SW->>Tab2: setFollower tab2
+    SW->>Tab2: broadcast WS_OPEN
     
     Note over Tab1,Tab2: <<planned>> 탭 리더 선출/브로드캐스트\n리더 다운시 재선출\n(optional) SharedWorker 대신 BroadcastChannel + WS 멀티플렉싱 우선
 ```
@@ -779,17 +779,17 @@ sequenceDiagram
     
     User->>TO: 튜토리얼 시작
     TO->>UT: currentTutorial 정보 로드
-    UT->>API: getTutorialProgress()
+    UT->>API: getTutorialProgress
     API->>TA: POST /api/tutorial/progress
-    TA-->>API: {currentStep, completedSteps}
+    TA-->>API: currentStep completedSteps
     API-->>UT: TutorialProgress
     UT-->>TO: 현재 단계 정보 표시
     
     User->>TO: 다음 단계 진행
-    TO->>UT: nextStep()
-    UT->>API: updateTutorialProgress(step)
+    TO->>UT: nextStep
+    UT->>API: updateTutorialProgress step
     API->>TA: POST /api/tutorial/complete/step
-    TA-->>API: {success: true}
+    TA-->>API: success true
     API-->>UT: 업데이트 완료
     UT-->>TO: 다음 단계 표시
 ```
@@ -803,12 +803,12 @@ sequenceDiagram
 ```mermaid
 flowchart TD
     A[시작] --> B[사용자 입력 검증]
-    B --> C{유효?}
+    B --> C{유효}
     C -->|예| D[로컬 미리보기 반영]
     C -->|아니오| E[폼 에러 강조]
     D --> F[변경 diff 산출]
     F --> G[REST PATCH /autotrade]
-    G --> H{200 OK?}
+    G --> H{200 OK}
     H -->|성공| I[전역 상태 invalidate]
     H -->|실패| J[로컬 롤백]
     I --> K[Toast 성공]
@@ -823,9 +823,9 @@ flowchart TD
 ```mermaid
 flowchart TD
     A[시작] --> B[사용자 심볼 추가]
-    B --> C[Store.addSymbol sym]
-    C --> D{WS 연결됨?}
-    D -->|예| E[WS.SUBSCRIBE sym]
+    B --> C[Store.addSymbol]
+    C --> D{WS 연결됨}
+    D -->|예| E[WS.SUBSCRIBE]
     D -->|아니오| F[대기 OnOpen 후 큐 처리]
     E --> G[종료]
     F --> G
@@ -837,11 +837,11 @@ flowchart TD
 flowchart TD
     A[시작] --> B[현재 단계 정보 로드]
     B --> C[사용자 액션 감지]
-    C --> D{단계 완료 조건 충족?}
+    C --> D{단계 완료 조건 충족}
     D -->|예| E[완료 상태 저장]
     D -->|아니오| F[현재 단계 계속 진행]
     E --> G[다음 단계 정보 로드]
-    G --> H{모든 단계 완료?}
+    G --> H{모든 단계 완료}
     H -->|예| I[튜토리얼 완료 축하]
     H -->|아니오| J[다음 단계 안내]
     I --> K[보상 지급]
@@ -855,10 +855,10 @@ flowchart TD
 ```mermaid
 flowchart TD
     A[시작] --> B[WebSocket 연결 시도]
-    B --> C{연결 성공?}
+    B --> C{연결 성공}
     C -->|예| D[실시간 데이터 수신]
     C -->|아니오| E[SSE 연결 시도]
-    E --> F{SSE 연결 성공?}
+    E --> F{SSE 연결 성공}
     F -->|예| G[스트리밍 데이터 수신]
     F -->|아니오| H[폴링 모드 전환]
     H --> I[5초마다 REST API 호출]
@@ -877,11 +877,11 @@ flowchart TD
 ```mermaid
 stateDiagram-v2
     [*] --> Idle
-    Idle --> Typing : setText(text)
-    Typing --> Typing : setInterval 18ms (append chars)
+    Idle --> Typing : setText
+    Typing --> Typing : setInterval 18ms append chars
     Typing --> Done : idx >= len
-    Done --> Idle : setText("")
-    Typing --> Idle : unmount/cleanup(clearInterval)
+    Done --> Idle : setText
+    Typing --> Idle : unmount cleanup clearInterval
 ```
 
 ### 7.2 WS 연결 재시도(백오프)
@@ -892,7 +892,7 @@ stateDiagram-v2
     Connecting --> Open : onOpen
     Connecting --> Backoff : onError
     Open --> Backoff : onClose
-    Backoff --> Connecting : timer(exp backoff)
+    Backoff --> Connecting : timer exp backoff
 ```
 
 ### 7.3 인증 세션
@@ -1307,7 +1307,7 @@ flowchart TD
     D --> D2[PWA 매니페스트]
     D --> D3[IndexedDB 캐시]
     
-    B1 --> E[목표 상태 (To-Be)]
+    B1 --> E[목표 상태 To-Be]
     B2 --> E
     B3 --> E
     C1 --> E
