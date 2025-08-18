@@ -1,13 +1,13 @@
 // =============================================================================
-// SKN12 Trading Platform - Jenkins Pipeline (Pipeline as Code)
+// SKN12 Trading Platform - Jenkins Pipeline (AWS Production Docker Deploy)
 // =============================================================================
 // 
-// 🎯 이 파이프라인의 역할:
-// 1. GitHub에서 소스코드 자동 다운로드
-// 2. Docker 이미지 빌드 (Base Web Server + Model Server 통합)
-// 3. Docker Hub에 이미지 업로드 (태그 관리)
-// 4. Deploy Server에 SSH 접속하여 자동 배포
-// 5. 배포 상태 확인 및 알림
+// 🎯 프로덕션 배포 파이프라인:
+// 1. GitHub 소스코드 자동 체크아웃
+// 2. Backend/Frontend Docker 이미지 빌드
+// 3. Docker Hub 이미지 푸시 (태그 관리)
+// 4. AWS EC2 서버 Docker Compose 배포
+// 5. 헬스체크 및 배포 상태 확인
 //
 // 📝 사용법:
 // - GitHub에 코드 Push 시 자동 실행
@@ -21,7 +21,7 @@ pipeline {
     environment {
         // Docker 이미지 설정
         DOCKER_REGISTRY = "docker.io"
-        DOCKER_IMAGE = "[Docker-Hub-사용자명]/ai-trading-platform"  // ⚠️ 실제 사용자명으로 교체 필요
+        DOCKER_IMAGE = "ashone91/ai-trading-platform"
         DOCKER_CREDENTIALS = "dockerhub-credentials"
         
         // Git 및 GitHub 설정

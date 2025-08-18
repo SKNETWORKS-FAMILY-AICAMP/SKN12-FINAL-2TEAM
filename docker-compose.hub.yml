@@ -3,7 +3,7 @@ version: '3.8'
 services:
   # Backend API Server (Docker Hub에서 다운로드)
   backend:
-    image: ${DOCKERHUB_USERNAME}/ai-trading-backend:local
+    image: ${DOCKERHUB_USERNAME}/ai-trading-backend:latest
     container_name: trading-backend-hub
     ports:
       - "8000:8000"
@@ -25,7 +25,7 @@ services:
 
   # Frontend Next.js Server (Docker Hub에서 다운로드)
   frontend:
-    image: ${DOCKERHUB_USERNAME}/ai-trading-frontend:local
+    image: ${DOCKERHUB_USERNAME}/ai-trading-frontend:latest
     container_name: trading-frontend-hub
     ports:
       - "3000:3000"
