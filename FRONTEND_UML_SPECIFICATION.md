@@ -998,7 +998,7 @@ graph TB
         end
     end
     
-    BR <--> APP : HTTP/HTTPS
+    BR <--> APP : HTTP
     BR --> WS_GW : WebSocket Node only
     BR --> SSE_GW : SSE Edge/Node
     APP --> APIs : REST
