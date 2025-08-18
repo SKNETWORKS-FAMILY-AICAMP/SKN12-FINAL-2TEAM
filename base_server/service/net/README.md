@@ -726,27 +726,6 @@ formatter = logging.Formatter(
 daily_handler.setFormatter(formatter)
 ```
 
-### **운영환경별 로깅 체크리스트**
-
-#### **개발환경**
-- [ ] `log_all_requests=True` 설정
-- [ ] DEBUG 레벨 로깅 활성화
-- [ ] 상세한 요청/응답 정보 로깅
-- [ ] 느린 요청 임계값 낮게 설정 (1-2초)
-
-#### **스테이징환경**
-- [ ] `log_all_requests=False` 설정
-- [ ] INFO 레벨 로깅 활성화
-- [ ] 느린 요청만 선택적 로깅
-- [ ] 중간 임계값 설정 (2-3초)
-
-#### **운영환경**
-- [ ] `log_all_requests=False` 설정
-- [ ] WARN/ERROR 레벨만 로깅
-- [ ] 성능에 영향을 주는 로깅 최소화
-- [ ] 높은 임계값 설정 (5초 이상)
-- [ ] 로그 로테이션 및 보관 정책 적용
-
 ---
 
 ## 🔄 Network 서비스 전체 흐름
@@ -883,7 +862,6 @@ if content_length:
 - **상태 관리**: 초기화 상태 추적 및 안전한 종료 처리
 
 ### **2. 안전한 개선 및 확장**
-- **기존 로직 유지**: CLAUDE.md 패턴 준수로 안전한 개선
 - **예외 처리 강화**: 모든 단계에서 예외 상황 대응
 - **로깅 개선**: 기존 Logger 패턴 활용으로 일관성 유지
 - **메트릭 수집**: 성능 모니터링을 위한 상세한 통계 데이터
@@ -948,65 +926,6 @@ REQUEST_TIMEOUT=600
 MAX_REQUEST_SIZE=52428800
 SLOW_REQUEST_THRESHOLD=3.0
 ```
-
-### **의존성 설치**
-```bash
-# requirements.txt 기반 설치
-pip install -r requirements.txt
-
-# 또는 개별 설치
-pip install fastapi starlette pydantic asyncio
-```
-
-### **FastAPI 앱 설정 예시**
-```python
-from fastapi import FastAPI
-from service.net.net_config import NetConfig, FastApiConfig
-from service.net.fastapi_middleware import FastAPIMiddlewareService
-
-# FastAPI 앱 생성
-app = FastAPI(title="AI Trading Platform API")
-
-# 네트워크 설정
-fastapi_config = FastApiConfig(
-    request_timeout=600,
-    slow_request_threshold=3.0,
-    max_request_size=52428800,
-    enable_request_timeout=True,
-    enable_size_limit=True,
-    enable_slow_request_logging=True,
-    enable_gzip=True
-)
-
-net_config = NetConfig(
-    host="0.0.0.0",
-    port=8000,
-    fastApiConfig=fastapi_config
-)
-
-# 미들웨어 서비스 초기화
-FastAPIMiddlewareService.init(net_config)
-
-# 미들웨어 설정
-FastAPIMiddlewareService.setup_middlewares(app, net_config)
-
-# 라우터 등록
-# app.include_router(...)
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host=net_config.host, port=net_config.port)
-```
-
----
-
-## 📚 추가 리소스
-
-- **FastAPI 문서**: https://fastapi.tiangolo.com/
-- **Starlette 문서**: https://www.starlette.io/
-- **ASGI 문서**: https://asgi.readthedocs.io/
-- **Pydantic 문서**: https://pydantic-docs.helpmanual.io/
-- **asyncio 문서**: https://docs.python.org/3/library/asyncio.html
 
 ---
 
