@@ -159,7 +159,7 @@ graph LR
 
 ```mermaid
 graph TD
-    subgraph App[app/ (App Router)]
+    subgraph App[App Router]
         Layout[layout.tsx]
         Page[page.tsx]
         Auth[auth/]
@@ -302,7 +302,7 @@ graph TD
 
 ```mermaid
 graph LR
-    subgraph NextJS[Next.js App (Edge/Node)]
+    subgraph NextJS[Next.js App Edge/Node]
         Next[Next.js App]
     end
     
@@ -1291,9 +1291,9 @@ data: {
 
 ```mermaid
 flowchart TD
-    A[현재 상태 (As-Is)] --> B[Phase 1 (Q4-2025)<br/>성능 최적화]
-    A --> C[Phase 2 (Q1-2026)<br/>보안 강화]
-    A --> D[Phase 3 (Q2-2026)<br/>오프라인 지원]
+    A[현재 상태 As-Is] --> B[Phase 1 Q4-2025 성능 최적화]
+    A --> C[Phase 2 Q1-2026 보안 강화]
+    A --> D[Phase 3 Q2-2026 오프라인 지원]
     
     B --> B1[rAF 타이핑 전환]
     B --> B2[코드 스플릿 적용]
@@ -1629,16 +1629,21 @@ test('백필 merge 정합성 유지', () => {
 
 #### Mermaid 공통 스타일
 ```mermaid
-%% 모든 다이어그램에서 사용할 수 있는 공통 스타일
-%% planned 요소는 노란색 배경으로 표시
-classDef planned fill:#fff8e1,stroke:#f4b400,stroke-width:2px
-classDef current fill:#e3f2fd,stroke:#2196f3,stroke-width:2px
-classDef future fill:#f3e5f5,stroke:#9c27b0,stroke-width:2px
-
-%% 사용 예시:
-%% 노드명:::planned  - 향후 계획
-%% 노드명:::current  - 현재 구현
-%% 노드명:::future   - 미래 계획
+graph LR
+    %% 모든 다이어그램에서 사용할 수 있는 공통 스타일
+    %% planned 요소는 노란색 배경으로 표시
+    A[예시 노드]:::planned
+    B[현재 노드]:::current
+    C[미래 노드]:::future
+    
+    classDef planned fill:#fff8e1,stroke:#f4b400,stroke-width:2px
+    classDef current fill:#e3f2fd,stroke:#2196f3,stroke-width:2px
+    classDef future fill:#f3e5f5,stroke:#9c27b0,stroke-width:2px
+    
+    %% 사용 예시:
+    %% 노드명:::planned  - 향후 계획
+    %% 노드명:::current  - 현재 구현
+    %% 노드명:::future   - 미래 계획
 ```
 
 #### CI 린트 규칙
