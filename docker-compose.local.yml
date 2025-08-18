@@ -6,7 +6,7 @@ services:
     build:
       context: ./base_server
       dockerfile: Dockerfile
-    image: ai-trading-backend:local
+    image: ashone91/trading-backend:local
     container_name: trading-backend-test
     ports:
       - "8000:8000"
@@ -31,7 +31,7 @@ services:
     build:
       context: ./base_server/frontend/ai-trading-platform
       dockerfile: Dockerfile
-    image: ai-trading-frontend:local
+    image: ashone91/trading-frontend:local
     container_name: trading-frontend-test
     ports:
       - "3000:3000"
