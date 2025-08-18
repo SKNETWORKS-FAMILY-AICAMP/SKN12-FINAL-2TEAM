@@ -881,22 +881,6 @@ if content_length:
 
 ---
 
-## 🛠️ 개발 환경 설정
-
-### **환경 변수**
-```bash
-# .env
-APP_ENV=DEVELOPMENT
-LOG_LEVEL=DEBUG
-HOST=0.0.0.0
-PORT=8000
-REQUEST_TIMEOUT=600
-MAX_REQUEST_SIZE=52428800
-SLOW_REQUEST_THRESHOLD=3.0
-```
-
----
-
 > **문서 버전**: v1.1 (헬스체크 엔드포인트, 패킷 명세서, 로깅 운영 고려사항 추가)
 > **최종 업데이트**: 2025년 1월  
 > **담당자**: Network Service Development Team
