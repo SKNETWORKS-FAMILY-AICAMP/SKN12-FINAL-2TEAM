@@ -12,33 +12,55 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? `http://${HOSTNAME}:800
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
-
-  // ✅ 프론트 개발자안 유지: Fast Refresh / RSC 최적화 경로
   experimental: {
-    optimizePackageImports: ['@/components', '@/lib', '@/providers'],
+    appDir: true,
   },
-
-  // ✅ 도커/환경별 프록시 주소를 환경변수 하나로 제어 (프론트 개발자안 유지)
+  env: {
+    // 기본 환경 변수 설정 (개발용)
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
+    NEXT_PUBLIC_API_BASE: process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000',
+    NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000',
+  },
   async rewrites() {
-    return [{ source: '/api/:path*', destination: `${API_BASE}/api/:path*` }]
+    return [
+      {
+        source: '/api/:path*',
+        destination: `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/:path*`,
+      },
+    ];
   },
-
-  // ✅ 전역 CORS 헤더 금지 (프론트 개발자안 유지)
   async headers() {
-    return [] // CSP 비활성화 - TradingView 위젯을 위해
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          {
+            key: 'X-Frame-Options',
+            value: 'DENY',
+          },
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff',
+          },
+          {
+            key: 'Referrer-Policy',
+            value: 'origin-when-cross-origin',
+          },
+        ],
+      },
+    ];
   },
-
-  // ✅ devServer/HMR 튜닝 금지 (프론트 개발자안 유지)
-  // Docker 빌드를 위한 경로 alias 추가
-  webpack(config) {
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      '@': path.resolve(__dirname, './')
+  webpack: (config, { buildId, dev, isServer, defaultLoaders, webpack }) => {
+    // WebSocket 지원을 위한 설정
+    config.externals = config.externals || [];
+    if (!isServer) {
+      config.externals.push({
+        'utf-8-validate': 'commonjs utf-8-validate',
+        'bufferutil': 'commonjs bufferutil',
+      });
     }
-    return config
+    return config;
   },
-
   // ⬇️ 도커 빌드 안정성/운영 편의 추가 (프론트 개발자안과 충돌 없음)
   eslint: { ignoreDuringBuilds: true },
   typescript: { ignoreBuildErrors: true },

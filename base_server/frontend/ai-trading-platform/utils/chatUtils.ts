@@ -110,7 +110,7 @@ export function createStreamingChat(
   let fullContent = "";
 
   const connect = (sessionId?: string) => {
-    ws = new WebSocket(`ws://localhost:3000/ws/chat`);
+    ws = new WebSocket(`${process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000'}/ws/chat`);
     
     ws.onopen = () => {
       console.log('WebSocket 연결됨');

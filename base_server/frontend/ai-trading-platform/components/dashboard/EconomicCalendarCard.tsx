@@ -71,7 +71,9 @@ export function EconomicCalendarCard() {
       console.log("data.events 길이:", Array.isArray(data.events) ? data.events.length : '배열 아님');
       console.log("data.events 첫 번째 항목:", data.events?.[0]);
       
-      if (data.result === 'success') {
+      // 백엔드 응답 구조에 맞게 수정
+      // result가 'success'이거나 events 배열이 있으면 데이터 설정
+      if (data.result === 'success' || (Array.isArray(data.events) && data.events.length > 0)) {
         if (Array.isArray(data.events)) {
           console.log("✅ 이벤트 배열 설정:", data.events);
           setEvents(data.events);

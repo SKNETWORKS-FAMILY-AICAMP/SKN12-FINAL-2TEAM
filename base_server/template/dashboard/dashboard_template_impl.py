@@ -13,7 +13,7 @@ from template.dashboard.common.dashboard_serialize import (
     PriceRequest, PriceResponse,
     StockRecommendationRequest, StockRecommendationResponse,
     EconomicCalendarRequest, EconomicCalendarResponse,
-    MarketRiskPremiumRequest, MarketRiskPremiumResponse
+    MarketRiskPremiumRequest, MarketRiskPremiumResponse,
 )
 from template.dashboard.common.dashboard_model import AssetSummary, StockHolding, MarketAlert, MarketOverview
 from service.service_container import ServiceContainer
@@ -999,7 +999,7 @@ class DashboardTemplateImpl(BaseTemplate):
 
                 news_snippets = [f"- {t}: {build_news_lines(t)}" for t in cands]
                 prompt = (
-                    "아래 후보 티커와 최신 뉴스 제목을 참고하여 카테고리 {style} 관점에서 상위 3개를 고르고, "
+                    "아래 후보 티커와 최신 뉴스 제목을 참고하여 카테고리 {style} 관점에서 상위 3개를 고르고(나스닥에 상장되어 있는 것만 고르시오.), "
                     "각 선택 이유를 한 줄로 설명하라. 오직 JSON 배열로만 응답. 형식: "
                     '[{{"ticker":"TSLA","reason":"..."}}, ...]'
                 ).format(style=style)
@@ -1261,6 +1261,7 @@ class DashboardTemplateImpl(BaseTemplate):
                     
                     data = await resp.json()
                     Logger.info(f"📥 FMP API 응답 데이터 타입: {type(data)}")
+                    Logger.info(f"📥 FMP API 응답 데이터: {data}")
                     Logger.info(f"📥 FMP API 응답 데이터 길이: {len(data) if isinstance(data, list) else 'not list'}")
                     
                     if isinstance(data, list) and len(data) > 0:
@@ -1423,6 +1424,7 @@ class DashboardTemplateImpl(BaseTemplate):
         """FMP API에서 시장 위험 프리미엄 데이터 가져오기"""
         try:
             Logger.info(f"🌐 FMP 시장 위험 프리미엄 API 호출 준비")
+            Logger.info(f"🔍 요청된 국가들: {countries}")
 
             # FMP API 호출
             url = "https://financialmodelingprep.com/stable/market-risk-premium"
@@ -1452,21 +1454,164 @@ class DashboardTemplateImpl(BaseTemplate):
                         Logger.warn("⚠️ FMP API 응답이 리스트가 아님 - 더미 데이터 반환")
                         return self._get_dummy_market_risk_premiums(countries)
                     
+                    # 상세한 디버깅을 위한 샘플 데이터 로깅
+                    if len(data) > 0:
+                        Logger.info(f"🔍 첫 번째 항목 샘플: {data[0]}")
+                        Logger.info(f"🔍 첫 번째 항목의 키들: {list(data[0].keys()) if isinstance(data[0], dict) else 'not dict'}")
+                    
                     # 요청된 국가들만 필터링
                     filtered_premiums = []
-                    for item in data:
-                        country_code = item.get("country", "")
-                        if country_code in countries:
-                            premium = {
-                                "country": self._get_country_name(country_code),
-                                "countryCode": country_code,
-                                "continent": item.get("continent", ""),
-                                "countryRiskPremium": round(float(item.get("countryRiskPremium", 0)), 2),
-                                "totalEquityRiskPremium": round(float(item.get("totalEquityRiskPremium", 0)), 2)
-                            }
-                            filtered_premiums.append(premium)
+                    matched_countries = set()
+                    unmatched_countries = set()
                     
+                    # 국가명을 국가 코드로 변환하는 매핑
+                    country_name_to_code = {
+                        "United States": "US", "USA": "US", "America": "US",
+                        "South Korea": "KR", "Korea": "KR", "Korea, Republic of": "KR",
+                        "Japan": "JP", "Nippon": "JP",
+                        "China": "CN", "People's Republic of China": "CN",
+                        "United Kingdom": "GB", "Great Britain": "GB", "England": "GB",
+                        "Germany": "DE", "Deutschland": "DE",
+                        "France": "FR", "République française": "FR",
+                        "Canada": "CA", "Kanada": "CA",
+                        "Australia": "AU", "Commonwealth of Australia": "AU",
+                        "India": "IN", "Bharat": "IN",
+                        "Brazil": "BR", "Brasil": "BR",
+                        "Russia": "RU", "Russian Federation": "RU",
+                        "Mexico": "MX", "México": "MX",
+                        "Singapore": "SG", "Republic of Singapore": "SG",
+                        "Hong Kong": "HK", "Hong Kong SAR": "HK",
+                        "Taiwan": "TW", "Taiwan, Province of China": "TW",
+                        "Netherlands": "NL", "Holland": "NL",
+                        "Switzerland": "CH", "Schweiz": "CH",
+                        "Sweden": "SE", "Sverige": "SE",
+                        "European Union": "EU", "EU": "EU",
+                        "South Africa": "ZA", "RSA": "ZA",
+                        "Zimbabwe": "ZW", "Zambia": "ZM", "Kenya": "KE",
+                        "Nigeria": "NG", "Ghana": "GH", "Egypt": "EG",
+                        "Morocco": "MA", "Tunisia": "TN", "Algeria": "DZ",
+                        "Argentina": "AR", "Chile": "CL", "Peru": "PE",
+                        "Colombia": "CO", "Venezuela": "VE", "Ecuador": "EC",
+                        "Thailand": "TH", "Malaysia": "MY", "Indonesia": "ID",
+                        "Philippines": "PH", "Vietnam": "VN", "Cambodia": "KH",
+                        "Myanmar": "MM", "Laos": "LA", "Brunei": "BN",
+                        "Poland": "PL", "Czech Republic": "CZ", "Hungary": "HU",
+                        "Romania": "RO", "Bulgaria": "BG", "Croatia": "HR",
+                        "Slovenia": "SI", "Slovakia": "SK", "Estonia": "EE",
+                        "Latvia": "LV", "Lithuania": "LT", "Finland": "FI",
+                        "Norway": "NO", "Denmark": "DK", "Iceland": "IS",
+                        "Ireland": "IE", "Portugal": "PT", "Spain": "ES",
+                        "Italy": "IT", "Greece": "GR", "Cyprus": "CY",
+                        "Malta": "MT", "Luxembourg": "LU", "Belgium": "BE",
+                        "Austria": "AT", "Slovenia": "SI", "Croatia": "HR"
+                    }
+                    
+                    for item in data:
+                        if not isinstance(item, dict):
+                            Logger.warn(f"⚠️ 항목이 딕셔너리가 아님: {type(item)}")
+                            continue
+                            
+                        # 다양한 country 필드명 시도
+                        country_name = (
+                            item.get("country", "") or 
+                            item.get("countryName", "") or 
+                            item.get("name", "")
+                        )
+                        
+                        if not country_name:
+                            Logger.warn(f"⚠️ country 필드를 찾을 수 없음: {item}")
+                            continue
+                        
+                        # 국가명을 국가 코드로 변환
+                        country_code = country_name_to_code.get(country_name, country_name)
+                        
+                        # 만약 여전히 국가명이라면, 2글자로 축약 시도
+                        if len(country_code) > 2:
+                            # 일반적인 축약 규칙 적용
+                            if country_code.startswith("United States"):
+                                country_code = "US"
+                            elif country_code.startswith("United Kingdom"):
+                                country_code = "GB"
+                            elif country_code.startswith("South Korea"):
+                                country_code = "KR"
+                            elif country_code.startswith("North Korea"):
+                                country_code = "KP"
+                            elif country_code.startswith("New Zealand"):
+                                country_code = "NZ"
+                            elif country_code.startswith("South Africa"):
+                                country_code = "ZA"
+                            else:
+                                # 첫 2글자 사용 (일부 국가에 대해)
+                                country_code = country_code[:2].upper()
+                        
+                        # 국가 코드 정규화 (대문자로 변환)
+                        country_code = str(country_code).upper().strip()
+                        
+                        Logger.debug(f"🔍 국가명 '{country_name}' → 국가코드 '{country_code}' 변환")
+                        
+                        if country_code in countries:
+                            try:
+                                # 숫자 필드 안전하게 변환
+                                country_risk_premium = 0.0
+                                total_equity_risk_premium = 0.0
+                                
+                                # 다양한 필드명 시도
+                                crp_raw = (
+                                    item.get("countryRiskPremium") or 
+                                    item.get("country_risk_premium") or 
+                                    item.get("crp") or 
+                                    item.get("risk_premium") or 
+                                    0
+                                )
+                                
+                                terp_raw = (
+                                    item.get("totalEquityRiskPremium") or 
+                                    item.get("total_equity_risk_premium") or 
+                                    item.get("terp") or 
+                                    item.get("equity_risk_premium") or 
+                                    0
+                                )
+                                
+                                # 안전한 숫자 변환
+                                try:
+                                    country_risk_premium = round(float(crp_raw), 2) if crp_raw is not None else 0.0
+                                except (ValueError, TypeError):
+                                    country_risk_premium = 0.0
+                                    Logger.warn(f"⚠️ country_risk_premium 변환 실패: {crp_raw}")
+                                
+                                try:
+                                    total_equity_risk_premium = round(float(terp_raw), 2) if terp_raw is not None else 0.0
+                                except (ValueError, TypeError):
+                                    total_equity_risk_premium = 0.0
+                                    Logger.warn(f"⚠️ total_equity_risk_premium 변환 실패: {terp_raw}")
+                                
+                                premium = {
+                                    "country": self._get_country_name(country_code),
+                                    "countryCode": country_code,
+                                    "continent": item.get("continent", ""),
+                                    "countryRiskPremium": country_risk_premium,
+                                    "totalEquityRiskPremium": total_equity_risk_premium
+                                }
+                                
+                                filtered_premiums.append(premium)
+                                matched_countries.add(country_code)
+                                Logger.debug(f"✅ 국가 {country_code} 매칭 성공: {premium}")
+                                
+                            except Exception as e:
+                                Logger.warn(f"⚠️ 국가 {country_code} 데이터 변환 실패: {e}, item={item}")
+                                continue
+                        else:
+                            unmatched_countries.add(country_code)
+                    
+                    Logger.info(f"🔍 매칭된 국가들: {matched_countries}")
+                    Logger.info(f"🔍 매칭되지 않은 국가들: {unmatched_countries}")
                     Logger.info(f"✅ FMP API 데이터 변환 완료: {len(filtered_premiums)}개 국가")
+                    
+                    # 매칭된 국가가 없으면 더미 데이터 반환
+                    if not filtered_premiums:
+                        Logger.warn("⚠️ 매칭된 국가가 없음 - 더미 데이터 반환")
+                        return self._get_dummy_market_risk_premiums(countries)
+                    
                     return filtered_premiums
 
         except Exception as e:
@@ -1475,25 +1620,83 @@ class DashboardTemplateImpl(BaseTemplate):
 
     def _get_dummy_market_risk_premiums(self, countries: List[str]) -> list:
         """더미 시장 위험 프리미엄 데이터 생성"""
+        Logger.info(f"🎭 더미 시장 위험 프리미엄 데이터 생성 시작: 요청된 국가들={countries}")
+        
+        # 확장된 더미 데이터 (더 많은 국가 지원)
         dummy_data = {
             "US": {"countryRiskPremium": 0.0, "totalEquityRiskPremium": 4.6},
             "KR": {"countryRiskPremium": 1.2, "totalEquityRiskPremium": 5.8},
             "JP": {"countryRiskPremium": 0.8, "totalEquityRiskPremium": 5.4},
             "CN": {"countryRiskPremium": 1.5, "totalEquityRiskPremium": 6.1},
-            "EU": {"countryRiskPremium": 0.5, "totalEquityRiskPremium": 5.1}
+            "EU": {"countryRiskPremium": 0.5, "totalEquityRiskPremium": 5.1},
+            "GB": {"countryRiskPremium": 0.3, "totalEquityRiskPremium": 4.9},
+            "DE": {"countryRiskPremium": 0.4, "totalEquityRiskPremium": 5.0},
+            "FR": {"countryRiskPremium": 0.6, "totalEquityRiskPremium": 5.2},
+            "CA": {"countryRiskPremium": 0.2, "totalEquityRiskPremium": 4.8},
+            "AU": {"countryRiskPremium": 0.7, "totalEquityRiskPremium": 5.3},
+            "IN": {"countryRiskPremium": 2.1, "totalEquityRiskPremium": 6.7},
+            "BR": {"countryRiskPremium": 2.8, "totalEquityRiskPremium": 7.4},
+            "RU": {"countryRiskPremium": 3.2, "totalEquityRiskPremium": 7.8},
+            "MX": {"countryRiskPremium": 2.5, "totalEquityRiskPremium": 7.1},
+            "SG": {"countryRiskPremium": 0.9, "totalEquityRiskPremium": 5.5},
+            "HK": {"countryRiskPremium": 1.1, "totalEquityRiskPremium": 5.7},
+            "TW": {"countryRiskPremium": 1.0, "totalEquityRiskPremium": 5.6},
+            "NL": {"countryRiskPremium": 0.3, "totalEquityRiskPremium": 4.9},
+            "CH": {"countryRiskPremium": 0.1, "totalEquityRiskPremium": 4.7},
+            "SE": {"countryRiskPremium": 0.4, "totalEquityRiskPremium": 5.0},
+            "ZW": {"countryRiskPremium": 12.0, "totalEquityRiskPremium": 16.4},
+            "IT": {"countryRiskPremium": 0.8, "totalEquityRiskPremium": 5.4},
+            "ES": {"countryRiskPremium": 1.0, "totalEquityRiskPremium": 5.6},
+            "PL": {"countryRiskPremium": 1.8, "totalEquityRiskPremium": 6.4},
+            "TR": {"countryRiskPremium": 4.2, "totalEquityRiskPremium": 8.8},
+            "TH": {"countryRiskPremium": 2.3, "totalEquityRiskPremium": 6.9},
+            "MY": {"countryRiskPremium": 1.9, "totalEquityRiskPremium": 6.5},
+            "ID": {"countryRiskPremium": 2.7, "totalEquityRiskPremium": 7.3},
+            "PH": {"countryRiskPremium": 2.9, "totalEquityRiskPremium": 7.5},
+            "VN": {"countryRiskPremium": 2.6, "totalEquityRiskPremium": 7.2},
+            "AR": {"countryRiskPremium": 3.5, "totalEquityRiskPremium": 8.1},
+            "CL": {"countryRiskPremium": 2.4, "totalEquityRiskPremium": 7.0},
+            "PE": {"countryRiskPremium": 3.1, "totalEquityRiskPremium": 7.7},
+            "CO": {"countryRiskPremium": 3.8, "totalEquityRiskPremium": 8.4},
+            "ZA": {"countryRiskPremium": 2.2, "totalEquityRiskPremium": 6.8},
+            "EG": {"countryRiskPremium": 3.9, "totalEquityRiskPremium": 8.5},
+            "NG": {"countryRiskPremium": 4.1, "totalEquityRiskPremium": 8.7},
+            "KE": {"countryRiskPremium": 3.3, "totalEquityRiskPremium": 7.9},
+            "GH": {"countryRiskPremium": 3.7, "totalEquityRiskPremium": 8.3}
         }
         
         premiums = []
+        supported_countries = []
+        unsupported_countries = []
+        
         for country_code in countries:
-            if country_code in dummy_data:
+            country_code_upper = country_code.upper().strip()
+            if country_code_upper in dummy_data:
                 premium = {
-                    "country": self._get_country_name(country_code),
-                    "countryCode": country_code,
-                    "continent": "Asia" if country_code in ["KR", "JP", "CN"] else "North America" if country_code == "US" else "Europe",
-                    "countryRiskPremium": dummy_data[country_code]["countryRiskPremium"],
-                    "totalEquityRiskPremium": dummy_data[country_code]["totalEquityRiskPremium"]
+                    "country": self._get_country_name(country_code_upper),
+                    "countryCode": country_code_upper,
+                    "continent": self._get_continent(country_code_upper),
+                    "countryRiskPremium": dummy_data[country_code_upper]["countryRiskPremium"],
+                    "totalEquityRiskPremium": dummy_data[country_code_upper]["totalEquityRiskPremium"]
                 }
                 premiums.append(premium)
+                supported_countries.append(country_code_upper)
+                Logger.debug(f"✅ 더미 데이터 생성: {country_code_upper} = {premium}")
+            else:
+                unsupported_countries.append(country_code_upper)
+                Logger.warn(f"⚠️ 지원되지 않는 국가 코드: {country_code_upper}")
         
-        Logger.info(f"🎭 더미 시장 위험 프리미엄 데이터 생성: {len(premiums)}개 국가")
+        Logger.info(f"🎭 더미 데이터 생성 완료: {len(premiums)}개 국가 (지원됨: {supported_countries}, 지원안됨: {unsupported_countries})")
         return premiums
+    
+    def _get_continent(self, country_code: str) -> str:
+        """국가 코드로 대륙 반환"""
+        continent_map = {
+            "US": "North America", "CA": "North America", "MX": "North America",
+            "KR": "Asia", "JP": "Asia", "CN": "Asia", "IN": "Asia", "SG": "Asia", 
+            "HK": "Asia", "TW": "Asia", "AU": "Oceania",
+            "EU": "Europe", "GB": "Europe", "DE": "Europe", "FR": "Europe", 
+            "NL": "Europe", "CH": "Europe", "SE": "Europe",
+            "BR": "South America", "RU": "Europe", "ZA": "Africa"
+        }
+        return continent_map.get(country_code, "Unknown")

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const API_BASE = 'http://localhost:8000/api';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ? `${process.env.NEXT_PUBLIC_API_URL}/api` : 'http://localhost:8000/api';
 const TIMEOUT = 600_000; // 10분(ms)
 
 export async function GET(req: NextRequest, { params }: { params: { path: string[] } }) {
