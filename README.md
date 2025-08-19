@@ -51,7 +51,7 @@
       프론트엔드 총괄
     </td>
     <td align="center">
-      <img src="images/standardized/jaehyun - bugy_240.png width="120px" alt="김재현" style="border-radius:50%; object-fit:cover;"/><br />
+      <img src="images/standardized/jaehyun - bugy_240.png" width=120px" alt="김재현" style="border-radius:50%; object-fit:cover;"/><br />
       <sub><b>김재현</b></sub><br />
       ML 총괄
     </td>
