@@ -60,8 +60,7 @@ export function EconomicCalendarCard() {
         throw new Error('경제 일정 데이터를 가져올 수 없습니다.');
       }
       
-      const str_data = await response.json();
-      const data = JSON.parse(str_data);
+      const data = await response.json();
       console.log("경제 일정 응답 데이터:", data);
       console.log("데이터 타입:", typeof data);
       console.log("데이터 키들:", Object.keys(data));
