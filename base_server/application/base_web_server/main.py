@@ -104,11 +104,16 @@ config_file = get_config_filename()
 # 글로벌 데이터베이스 서비스
 database_service = None
 
-async def clear_redis_chat_data():
-    """개발용: Redis 전체 데이터베이스 정리 (FLUSHDB)"""
+async def clear_redis_chat_data(app_env: str):
+    """개발용: Redis 전체 데이터베이스 정리 (FLUSHDB) - PROD 환경에서는 실행하지 않음"""
     try:
         from service.cache.cache_service import CacheService
         
+        # PROD 환경에서는 Redis 정리하지 않음 (프로덕션 데이터 보호)
+        if app_env.upper() == 'PROD':
+            Logger.info("🚫 PROD 환경: Redis 정리 스킵 (프로덕션 데이터 보호)")
+            return
+            
         # CacheService가 초기화되어 있는지 확인
         if not CacheService.is_initialized():
             Logger.info("⚠️ CacheService가 아직 초기화되지 않음 - Redis 정리 스킵")
@@ -117,7 +122,7 @@ async def clear_redis_chat_data():
         async with CacheService.get_client() as redis:
             # 개발용: 전체 Redis 서버 정리 (모든 DB)
             await redis._client.flushall()
-            Logger.info("🧹 개발용: Redis 전체 서버 정리 완료 (FLUSHALL - 모든 DB)")
+            Logger.info(f"🧹 개발용 ({app_env}): Redis 전체 서버 정리 완료 (FLUSHALL - 모든 DB)")
                 
     except Exception as e:
         Logger.error(f"❌ Redis 전체 정리 실패: {e}")
@@ -173,7 +178,7 @@ async def lifespan(app: FastAPI):
                 CacheService.Init(cache_client_pool)
                 
                 # 🧹 개발용: Redis 채팅 관련 데이터 정리 (스테일 데이터 방지)
-                await clear_redis_chat_data()
+                await clear_redis_chat_data(app_config.templateConfig.env)
                 
                 database_service = DatabaseService(app_config.databaseConfig)
                 await database_service.init_service()
