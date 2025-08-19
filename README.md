@@ -129,18 +129,7 @@ graph TB
     APP --> S3
     APP --> SEARCH
     
-    style FE fill:#e3f2fd
-    style APP fill:#f3e5f5
-    style LLM fill:#e8f5e8
-    style SIG fill:#fff3e0
-    style NET fill:#fce4ec
-    style CHAT fill:#e0f2f1
-    style WS fill:#f1f8e9
-    style CORE fill:#fafafa
-    style MYSQL fill:#e8eaf6
-    style REDIS fill:#ffebee
-    style S3 fill:#e0f7fa
-    style SEARCH fill:#f3e5f5
+
 ```
 
 ---
