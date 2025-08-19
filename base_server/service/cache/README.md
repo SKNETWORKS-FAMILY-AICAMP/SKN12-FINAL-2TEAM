@@ -91,7 +91,7 @@ class CacheService:
     async def GetSessionInfo(cls, access_token: str) -> Optional[Dict[str, Any]]:
         """세션 정보를 Redis에서 가져오기"""
     
-    @classmethod
+        @classmethod
     async def RemoveSessionInfo(cls, access_token: str) -> bool:
         """세션 정보를 Redis에서 삭제"""
     
@@ -450,7 +450,7 @@ class RedisCacheClientPool:
 3. Redis에 session:{access_token} 키로 JSON 저장
 4. TTL 설정 (기본 3600초)
 5. 세션 조회 시 GetSessionInfo(access_token) 호출
-6. JSON 역직렬화하여 session_data 반환
+6. Redis에서 세션 데이터 반환
 ```
 
 #### **3.2 해시 캐시 과정**
