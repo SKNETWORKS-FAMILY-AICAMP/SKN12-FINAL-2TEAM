@@ -471,4 +471,4 @@ Application Service는 AI Trading Platform의 핵심 애플리케이션 계층�
 - **AI 서비스**: LangChain 기반 LLM 통합 및 도구 체인
 - **마이크로서비스**: 독립적인 서비스 배포 및 관리
 
-이 아키텍처를 통해 개발팀은 빠르고 안정적인 AI Trading Platform을 구축하고 운영할 수 있습니다. 🚀
+
