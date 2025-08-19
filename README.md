@@ -1,7 +1,7 @@
 # 🏦 SKN12-FINAL-2TEAM — AI 기반 스마트 투자 플랫폼
 
-> **"사람 대신 판단과 실행까지 맡기는 AI 투자 비서"**  
-> 개인화 포트폴리오 · 전략 기반 자동매매 · LLM 챗봇 · 대시보드
+> **"주린이도 쉽게, AI가 판단하고 실행하는 투자 시스템"**  
+> **감정적 투자 NO! 데이터 기반 AI 투자 YES!**
 
 <!-- Badges: clean dark labels + logos -->
 <p align="center">
@@ -37,321 +37,324 @@
 
 ---
 
-## 📌 한 줄 요약 (TL;DR)
+## 🎯 프로젝트 목적: 왜 만들었나?
 
-AI가 *데이터 수집 → 신호 생성 → 리스크 통제 → 주문 실행* 을 **한 파이프라인**으로 잇는 투자 운영 시스템. “대화형 조언”에 머무르지 않고 **실행까지 책임지는** 구조.
+### **주린이들의 고민**
+- 📊 **정보 과부하**: 너무 많은 주식 정보, 무엇을 믿어야 할지 모름
+- 😰 **감정적 투자**: FOMO(놓칠까봐 두려움), 공포, 욕심으로 인한 손실
+- ⏰ **타이밍 놓침**: 언제 사고, 언제 팔아야 할지 모름
+- 💸 **리스크 관리 부족**: 손절매, 익절매 기준이 없음
 
-
----
-
-## 🧠 무엇을 해결하나
-
-- **초보~고급 투자자 공통 Pain**: 정보 과부하, 리밸런싱 타이밍 놓침, 감정적 매매  
-- **솔루션**:  
-  - 성향/목표/리스크 기반 **맞춤 포트폴리오**  
-  - 전략 기반 **자동매매 + 백테스팅**  
-  - **LLM 챗봇(SSE)**로 시장/포트 실시간 분석
-
----
-
-## 🚀 주요 기능
-
-- **대시보드**: 총자산, 수익률, 배분, 경고/알림 한눈에
-- **포트폴리오**: 실시간 평가·성과 시각화, **리밸런싱 제안**
-- **AI 챗봇("기가 버핏")**: 포트/시장 데이터 기반 답변, **SSE 스트리밍**
-- **자동매매**: 프리셋/AI 추천 전략, **백테스트 내장**
-- **알림**: 가격/뉴스/목표 도달 이벤트 푸시
+### **우리의 솔루션**
+- 🤖 **AI가 판단**: 감정 없이 데이터만 보고 투자 결정
+- 📈 **자동 실행**: AI가 판단한 대로 자동으로 매매 실행
+- 🎯 **개인 맞춤**: 나의 투자 성향, 목표, 리스크에 맞는 포트폴리오
+- 💡 **쉬운 설명**: 복잡한 투자 용어를 쉽게 설명해주는 AI 비서
 
 ---
 
-## 🏗️ 아키텍처 개요
+## 🚀 핵심 가치: AI가 판단하고 실행한다!
 
-- **Backend**: FastAPI (Python) — SOA(Service Container), 비동기 처리  
-- **Data**: MySQL(샤딩 고려), Redis(캐시/세션/MQ/EQ/분산락)  
-- **Frontend**: Next.js(React, TS), React Query, Tailwind, **SSE**  
-- **Ops**: Docker/Compose, Jenkins CI/CD  
-- **Cloud(옵션)**: S3, OpenSearch, Bedrock 등 비용 최적화 구상
+### **기존 투자 vs 우리 시스템**
 
+| 구분 | 기존 투자 | AI 투자 시스템 |
+|------|-----------|----------------|
+| **판단** | 사람의 감정 + 직감 | AI의 데이터 분석 |
+| **실행** | 수동으로 직접 주문 | AI가 자동으로 타이밍 알려줌 |
+| **리스크** | 감정적 손절매 | 체계적인 리스크 관리 |
+| **학습** | 개인 경험에 의존 | AI가 시장 패턴 학습 |
+
+### **AI가 하는 일**
+1. **📊 데이터 수집**: 주가, 뉴스, 경제지표, 시장 심리 등
+2. **🧠 패턴 분석**: 칼만 필터로 시장 상황 파악
+3. **📈 신호 생성**: 매수/매도/홀딩 신호 생성
+4. **⚡ 자동 실행**: AI가 판단한 대로 시그널 보냄
+5. **📱 실시간 알림**: 중요한 변화사항 즉시 알림
+
+---
+
+## 🏗️ 전체 시스템 구조
+
+```mermaid
+graph TB
+    subgraph "🎨 Frontend Layer"
+        FE[Next.js + React + TypeScript<br/>📱 대시보드 · 채팅 · 포트폴리오 · 자동매매]
+    end
+    
+    subgraph "🚀 Application Layer"
+        APP[FastAPI + Service Container<br/>🔐 인증 · 📊 API · 🤖 WebSocket · 📈 모델 서버]
+    end
+    
+    subgraph "🔧 Service Layer"
+        LLM[🧠 LLM Service<br/>AI 챗봇 · 칼만 필터]
+        SIG[📡 Signal Service<br/>실시간 신호 · 기술적 분석]
+        NET[🌐 Network Service<br/>미들웨어 · 헬스체크]
+        CHAT[💬 Chat Service<br/>AI 채팅 · WebSocket]
+        WS[🔌 WebSocket Service<br/>실시간 통신 · 클라이언트 관리]
+        CORE[⚙️ Core Service<br/>로깅 · 모니터링]
+    end
+    
+    subgraph "💾 Data Layer"
+        MYSQL[(MySQL<br/>📊 주식 데이터)]
+        REDIS[(Redis<br/>💬 채팅 기록 · 캐시)]
+        S3[(S3<br/>📁 파일 저장)]
+        SEARCH[(OpenSearch<br/>🔍 검색 엔진)]
+    end
+    
+    subgraph "🌐 External APIs"
+        LLM_API[OpenAI/Bedrock<br/>AI 모델]
+        MARKET[한국투자증권<br/>시장 데이터]
+        NEWS[뉴스 API<br/>경제 정보]
+    end
+    
+    %% 연결 관계
+    FE <-->|HTTP/WebSocket| APP
+    APP --> LLM
+    APP --> SIG
+    APP --> NET
+    APP --> CHAT
+    APP --> WS
+    APP --> CORE
+    
+    LLM --> LLM_API
+    SIG --> MARKET
+    SIG --> NEWS
+    
+    LLM --> REDIS
+    CHAT --> REDIS
+    WS --> REDIS
+    CORE --> REDIS
+    
+    APP --> MYSQL
+    APP --> S3
+    APP --> SEARCH
+    
+    style FE fill:#e3f2fd
+    style APP fill:#f3e5f5
+    style LLM fill:#e8f5e8
+    style SIG fill:#fff3e0
+    style NET fill:#fce4ec
+    style CHAT fill:#e0f2f1
+    style WS fill:#f1f8e9
+    style CORE fill:#fafafa
+    style MYSQL fill:#e8eaf6
+    style REDIS fill:#ffebee
+    style S3 fill:#e0f7fa
+    style SEARCH fill:#f3e5f5
 ```
-[Web/Next.js]  –SSE/HTTPS–>  [FastAPI]
-                              ├─ Redis (Cache / MQ / EQ / Lock)
-                              ├─ MySQL (Sharded-ready)
-                              └─ External (Market/News/LLM/Broker)
-```
-
-> 레포 루트에 프론트 가이드, Jenkinsfile, 두 종류의 docker-compose가 포함되어 배포/운영 플로우까지 이어진다.
 
 ---
 
-## 🧭 Architecture Diagrams
+## 📁 프로젝트 구조 및 상세 문서
 
-### 1) System Overview
+### **🎨 Frontend Layer** - 사용자 인터페이스
+> Next.js 기반의 현대적 웹 애플리케이션
+
+- **[📱 Frontend README](base_server/frontend/README.md)** - React 컴포넌트, 상태 관리, API 연동
+- **주요 기능**: 대시보드, AI 채팅, 포트폴리오, 자동 매수/매도 시그널 설정
+
+### **🚀 Application Layer** - 비즈니스 로직
+> FastAPI 기반의 API 서버 및 마이크로서비스
+
+- **[🔐 Application README](base_server/application/README.md)** - 메인 웹 서버, 모델 서버, API 라우터
+- **주요 기능**: 사용자 인증, API 엔드포인트, WebSocket 통신
+
+### **🔧 Service Layer** - 핵심 서비스들
+> 각종 비즈니스 로직을 담당하는 서비스들
+
+- **[🧠 LLM Service](base_server/service/llm/README.md)** - AI 챗봇, 칼만 필터, 블랙-숄즈 모델
+- **[📡 Signal Service](base_server/service/signal/README.md)** - 실시간 주식 신호, 볼린저 밴드, AI 모델 연동
+- **[🌐 Network Service](base_server/service/net/README.md)** - FastAPI 미들웨어, 헬스체크, 패킷 처리
+- **[💬 Chat Service](base_server/service/chat/README.md)** - AI 채팅 인프라, Redis 메모리, WebSocket 스트리밍
+- **[🔌 WebSocket Service](base_server/service/websocket/README.md)** - 실시간 통신, 클라이언트 관리, Redis Pub/Sub
+- **[⚙️ Core Service](base_server/service/core/README.md)** - 로깅, 모니터링, 설정 관리
+
+### **📋 Template Layer** - 비즈니스 템플릿
+> 각 도메인별 비즈니스 로직 구현
+
+- **[🏠 Base Template](base_server/template/base/README.md)** - 기본 템플릿 시스템
+- **[💬 Chat Template](base_server/template/chat/README.md)** - 채팅 비즈니스 로직
+- **[📊 Dashboard Template](base_server/template/dashboard/README.md)** - 대시보드 데이터 처리
+- **[🤖 AutoTrade Template](base_server/template/autotrade/README.md)** - 자동매매 전략 실행
+
+---
+
+## 🔄 전체 시스템 흐름
+
+### **1. 사용자 접속부터 AI 투자까지**
+
+```mermaid
+sequenceDiagram
+    participant User as 사용자
+    participant Frontend as Next.js Frontend
+    participant App as FastAPI Application
+    participant Services as Service Layer
+    participant Data as Data Layer
+    participant External as External APIs
+
+    User->>Frontend: 웹사이트 접속
+    Frontend->>App: 로그인 요청
+    App->>Services: 사용자 인증
+    Services->>Data: 사용자 정보 조회
+    Data-->>Services: 사용자 데이터
+    Services-->>App: 인증 완료
+    App-->>Frontend: 액세스 토큰 발급
+    Frontend-->>User: 대시보드 표시
+
+    User->>Frontend: "테슬라 주식 분석해줘"
+    Frontend->>App: AI 채팅 요청
+    App->>Services: LLM 서비스 호출
+    Services->>External: 주식 데이터 수집
+    Services->>Services: 칼만 필터 분석
+    Services->>Services: 블랙-숄즈 모델 계산
+    Services-->>App: AI 분석 결과
+    App-->>Frontend: 스트리밍 응답
+    Frontend-->>User: 실시간 AI 답변
+
+    User->>Frontend: "자동매매 시작"
+    Frontend->>App: 자동매매 설정
+    App->>Services: 시그널 모니터링 시작
+    Services->>External: 실시간 시장 데이터
+    Services->>Services: 매매 신호 생성
+    Services->>App: 주문 실행
+    App->>External: 브로커 API 호출
+    App-->>Frontend: 주문 완료 알림
+    Frontend-->>User: 포트폴리오 업데이트
+```
+
+### **2. 데이터 파이프라인**
 
 ```mermaid
 flowchart LR
-  subgraph Client["Client (Browser)"]
-    U[User]
-  end
+    A["📊 Raw Data<br/>(주가, 뉴스, 경제지표)"] --> B["🔧 Feature Engineering<br/>(정규화, 복합 지표)"]
+    B --> C["🧠 AI Analysis<br/>(칼만 필터, 패턴 인식)"]
+    C --> D["📡 Signal Generation<br/>(매수/매도/홀딩)"]
+    D --> E["⚡ Order Execution<br/>(자동 주문 실행)"]
+    E --> F["📱 Real-time Update<br/>(대시보드, 알림)"]
+    
 
-  subgraph FE["Next.js (React, TS)"]
-    SSE[SSE Stream Handler]
-    UI[Dashboard & Chat UI]
-  end
-
-  subgraph BE["FastAPI (Python) — Service Container / SOA"]
-    API[(REST API)]
-    SVC_Auth[Auth Service]
-    SVC_Portfolio[Portfolio Service]
-    SVC_Chat[LLM Chat Orchestrator]
-    SVC_Signal[Signal/Strategy Engine]
-    SVC_Notify[Notification Service]
-  end
-
-  subgraph Data["Data Layer"]
-    MYSQL[(MySQL Cluster<br/>Sharded-Ready)]
-    REDIS[(Redis<br/>Cache / Session / MQ / EQ / Lock)]
-    SEARCH[(OpenSearch)]
-    S3[(S3 Object Storage)]
-  end
-
-  subgraph External["External Integrations"]
-    LLM[(LLM: Bedrock / OpenAI)]
-    MDATA[(Market / News / Macro APIs)]
-    BROKER[(Broker APIs)]
-  end
-
-  U -->|HTTPS| FE
-  FE -->|REST| API
-  FE -->|SSE| SVC_Chat
-
-  API --> SVC_Auth
-  API --> SVC_Portfolio
-  API --> SVC_Chat
-  API --> SVC_Signal
-  API --> SVC_Notify
-
-  SVC_Auth --> REDIS
-  SVC_Portfolio <-->|R/W| MYSQL
-  SVC_Portfolio --> S3
-  SVC_Chat --> LLM
-  SVC_Signal --> MDATA
-  SVC_Signal --> SEARCH
-  SVC_Signal --> REDIS
-  SVC_Signal --> BROKER
-  SVC_Notify --> REDIS
-
-  MYSQL <--> REDIS
-```
-
-### 2) CI/CD Pipeline
-
-```mermaid
-flowchart LR
-  Dev[Developer Push] --> GH[(GitHub Repo)]
-  GH --> JX[Jenkins Pipeline]
-  JX --> TB[Unit/Integration Tests]
-  JX --> DBU[Docker Build]
-  DBU --> DHP[(Docker Hub / Registry)]
-  DHP --> SRV[Deploy Server]
-  SRV --> DCP[Docker Compose Up/Update]
-  DCP --> HC[Healthchecks / Smoke Tests]
-```
-
-### 3) Signal → Order → Portfolio Flow
-
-```mermaid
-flowchart LR
-  A["Raw Data Ingestion<br/>(Market, News, Macro)"] --> B["Feature Pipeline<br/>(log1p / Z-score, Composite)"]
-  B --> C["Regime Detection<br/>(Kalman Regime Filter)"]
-  C --> D["Signal Generation<br/>(Value / Momentum / Custom)"]
-  D --> E["Risk Management<br/>(Exposure, SL / TP, Position Size)"]
-  E --> F["Order Routing<br/>(Paper / Real via Broker API)"]
-  F --> G["Portfolio Update<br/>(Positions, PnL, Rebalancing)"]
-  G --> H["Dashboard + Chat SSE<br/>(Real-time Feedback)"]
-```
-
-
-
----
-
-## 🗂️ 레포 구조
-
-```
-.
-├─ base_server/                # FastAPI 백엔드 (도메인/서비스 분리)
-├─ frontend/                   # Next.js + TypeScript (SSE 응답)
-├─ docs/                       # 아키텍처/큐/CI·CD/AWS/패킷/요구사항 문서
-├─ 산출물/                      # 결과물(리포트/데모 등)
-├─ FRONTEND_MINIMAL_DEPLOY.md  # 프론트 최소 배포 가이드
-├─ Jenkinsfile                 # Jenkins 파이프라인
-├─ docker-compose.local.yml    # 로컬 개발 스택
-├─ docker-compose.hub.yml      # 서버/허브 배포 스택
-├─ app.py, CLITest.py, Test.py, models.txt, structure.txt
-└─ (aws-setup/scripts)         # (있는 경우) 배포/인프라 보조 스크립트
 ```
 
 ---
 
-## ⚙️ 빠른 시작 (로컬 개발)
+## 🎯 주요 기능 상세
 
-### 요구사항
-- Python 3.10+, Node 18+, Docker(선택), Git
+### **🤖 AI 투자 비서 (LLM + 칼만 필터)**
+- **자연어 질문**: "테슬라 주식 어때?" → AI가 분석해서 답변
+- **칼만 필터**: 시장 상황을 실시간으로 분석하여 매매 타이밍 제시
+- **블랙-숄즈**: 옵션 가격을 이론적으로 계산하여 투자 가치 판단
 
-### 1) 클론
+### **📊 실시간 대시보드**
+- **포트폴리오 현황**: 보유 종목, 수익률, 리스크 지표
+- **AI 신호**: 실시간 매매 신호 및 신뢰도
+- **시장 동향**: 주요 지수, 섹터별 움직임
+
+### **⚡ 자동 매수/매도 시그널 시스템**
+- **AI 신호 기반**: 칼만 필터가 생성한 신호로 자동 주문
+- **리스크 관리**: 손절매, 익절매, 포지션 사이징 자동화
+- **백테스팅**: 과거 데이터로 전략 검증
+
+### **💬 AI 채팅 (실시간 스트리밍)**
+- **WebSocket 기반**: 실시간으로 AI 응답을 받을 수 있음
+- **컨텍스트 유지**: 이전 대화 내용을 기억하여 연속성 있는 답변
+- **도구 체인**: 주식 분석, 포트폴리오 조언 등 다양한 도구 연동
+
+---
+
+## 🚀 빠른 시작 (5분 만에 시작하기)
+
+### **1. 프로젝트 클론**
 ```bash
 git clone https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-2TEAM.git
 cd SKN12-FINAL-2TEAM
 ```
 
-### 2) 환경 변수 (예시)
-
-`configs/app.env.example` 형태가 있다면 복사해서 `.env` 구성. 없다면 아래 예시 사용.
-
+### **2. 환경 설정 (간단 버전)**
 ```bash
-# LLM
-OPENAI_API_KEY=your_openai_key
-
-# Market / News / Macro
-FMP_API_KEY=your_fmp_key
-NEWSAPI_KEY=your_newsapi_key
-FRED_API_KEY=your_fred_key
-
-# DB / Cache
-MYSQL_DSN=mysql+pymysql://user:pass@localhost:3306/appdb
-REDIS_URL=redis://localhost:6379/0
-
-# Feature Flags
-ENABLE_AUTOTRADE=false
+# .env 파일 생성
+echo "OPENAI_API_KEY=your_openai_key" > .env
+echo "REDIS_URL=redis://localhost:6379" >> .env
 ```
 
-**(선택) 브로커/API 설정을 분리하고 싶으면 `configs/broker.yaml`로 관리:**
-
-```yaml
-paper:
-  app_key: "your_paper_app_key"
-  app_secret: "your_paper_app_secret"
-  account:
-    stock: "12345678"
-real:
-  app_key: "your_real_app_key"
-  app_secret: "your_real_app_secret"
-  account:
-    stock: "87654321"
-user_agent: "Mozilla/5.0 ..."
-```
-
-### 3) 백엔드 실행
-
+### **3. 백엔드 실행**
 ```bash
-# 옵션 A) base_server 안에 main 모듈인 경우
 cd base_server
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-
-# 옵션 B) 루트 app.py가 엔트리인 경우
-# uvicorn app:app --host 0.0.0.0 --port 8000 --reload
+uvicorn application.base_web_server.main:app --reload
 ```
 
-### 4) 프론트엔드 실행
-
+### **4. 프론트엔드 실행**
 ```bash
-cd frontend
+cd frontend/ai-trading-platform
 npm install
-npm run dev   # http://localhost:3000
+npm run dev
 ```
 
-**헬스체크**
-- **API**: `GET /healthz` → `{ "status": "ok" }` (구현 위치는 코드 기준)
-- **시스템 상태/메트릭 엔드포인트**는 운영 설정에 따라 분리 권장
+### **5. 브라우저에서 확인**
+- **백엔드**: http://localhost:8000
+- **프론트엔드**: http://localhost:3000
 
 ---
 
-## 🐳 Docker Compose (로컬/서버)
+## 🔧 개발자 가이드
 
-레포 루트에 로컬용/서버용 Compose가 구분돼 있다.
-- `docker-compose.local.yml` (로컬 개발)
-- `docker-compose.hub.yml` (서버/허브)
+### **아키텍처 원칙**
+- **🎯 도메인 분리**: 각 서비스가 명확한 책임을 가짐
+- **🔄 비동기 처리**: Redis MQ/EQ로 장시간 작업 분리
+- **🧪 테스트 가능**: 각 계층별로 독립적인 테스트 가능
+- **📈 확장 가능**: 마이크로서비스 아키텍처로 수평 확장
 
-```bash
-# 로컬
-docker compose -f docker-compose.local.yml up -d --build
-docker compose -f docker-compose.local.yml logs -f
-
-# 서버(예시)
-docker compose -f docker-compose.hub.yml pull
-docker compose -f docker-compose.hub.yml up -d
-```
+### **코드 구조**
+- **Service Container**: 모든 서비스를 중앙에서 관리
+- **Template Pattern**: 비즈니스 로직을 템플릿으로 분리
+- **Event-Driven**: 이벤트 기반으로 서비스 간 통신
+- **Caching Strategy**: Redis를 활용한 다층 캐싱
 
 ---
 
-## 🌐 프론트 최소 배포
+## 📚 더 자세한 정보
 
-프론트만 빨리 띄워야 하면 루트의 [FRONTEND_MINIMAL_DEPLOY.md](FRONTEND_MINIMAL_DEPLOY.md) 참고.  
-정적 자산/환경변수/역프록시 포인트만 맞추면 된다.
+각 디렉토리의 README에서 더 상세한 정보를 확인할 수 있습니다:
 
----
-
-## 🔄 CI/CD
-
-- **루트에 [Jenkinsfile](Jenkinsfile) 존재** → 빌드 → 테스트 → 도커 이미지 → 레지스트리 푸시 → 배포 자동화 가능.
-- **서버 측은 `docker-compose.hub.yml`과 연계**한다.
-
----
-
-## 🔧 개발자 가이드 (핵심 원칙)
-
-- **도메인/서비스 분리**: Service Container 패턴으로 모듈 경계를 명확히
-- **큐/비동기**: Redis MQ/EQ로 장시간 작업 분리, 분산락으로 중복 실행 방지
-- **전략 파이프라인**: Signal → Position → Portfolio 단계 분리로 테스트/검증 용이
-- **LLM 연동**: 호출 비용 최소화를 위한 캐시/배치 처리, SSE 스트리밍 UX
-- **테스트/로깅**: 표준화된 예외/로그 포맷으로 운영 모니터링 일원화
+- **[🎨 Frontend](base_server/frontend/README.md)**: React 컴포넌트, 상태 관리, API 연동
+- **[🚀 Application](base_server/application/README.md)**: FastAPI 서버, 라우터, 마이크로서비스
+- **[🧠 LLM Service](base_server/service/llm/README.md)**: AI 모델, 칼만 필터, 블랙-숄즈
+- **[📡 Signal Service](base_server/service/signal/README.md)**: 실시간 신호, 기술적 분석
+- **[🌐 Network Service](base_server/service/net/README.md)**: 네트워크 계층, 미들웨어
+- **[💬 Chat Service](base_server/service/chat/README.md)**: AI 채팅, WebSocket, Redis
+- **[🔌 WebSocket Service](base_server/service/websocket/README.md)**: 실시간 통신, 클라이언트 관리
+- **[⚙️ Core Service](base_server/service/core/README.md)**: 핵심 인프라, 로깅, 모니터링
 
 ---
 
-## 💸 비용 최적화 팁
+## 🎯 프로젝트 비전
 
-- **OpenSearch/S3/LLM**은 최소 사양 + 캐시/스케줄링
-- **로그/스냅샷 Lifecycle**로 저장비 절감
-- **LLM 호출**은 요약 캐시/배치 처리로 단가 절감
-
----
-
-## 🧭 로드맵
-
-- **1~2주**: 온보딩 튜토리얼, 대시보드 차트 마감
-- **1개월**: Settings 고도화, Notification 시스템
-- **2~3개월**: LLM 챗봇 고도화, 포트 고급 분석, 브로커 실거래 연동
-
----
-
-## 📚 문서(일부 예시)
-
-`/docs` 디렉토리에 아키텍처, 큐 시스템, CI/CD, AWS 셋업, 프론트 퀵스타트, 패킷 명세, 요구사항 정리 등 세부 문서가 포함됨.
-
----
-
-## 🤝 기여
-
-1. **Fork** → 2) **브랜치**(`feat/*`) → 3) **PR**
-
-**커밋 태그**: `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`
+### **장기 목표 **
+- 🌟 고급 포트폴리오 분석 도구
+- 🌟 멀티 자산 클래스 지원 (주식, 채권, 원자재)
+- 🌟 개인화된 AI 투자 전략
+- 🌟 글로벌 시장 지원
 
 ---
 
 ## 📄 라이선스
 
-MIT License
+MIT License - 자유롭게 사용, 수정, 배포 가능
 
 ---
 
 <div align="center">
 
-**🚀 AI 기반 스마트 투자 플랫폼으로 여러분의 투자 여정을 시작하세요! 🚀**
+**🚀 AI가 판단하고 실행하는 스마트 투자 시스템으로 시작하세요! 🚀**
 
 [![Star](https://img.shields.io/github/stars/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-2TEAM?style=social)](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-2TEAM)
 [![Fork](https://img.shields.io/github/forks/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-2TEAM?style=social)](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-2TEAM)
 [![Issues](https://img.shields.io/github/issues/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-2TEAM)](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-2TEAM/issues)
+
+**주린이도 쉽게, AI가 판단하고 실행하는 투자 시스템**  
+**감정적 투자 NO! 데이터 기반 AI 투자 YES!**
 
 </div>
 
