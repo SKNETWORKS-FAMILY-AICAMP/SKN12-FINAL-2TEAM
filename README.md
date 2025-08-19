@@ -45,6 +45,38 @@
 | **윤권** | PM/ML 엔지니어 | 
 | **박진양** | 리소스 매니저/데이터 엔지니어 | 
 
+# 👥 Team Members
+
+<table>
+  <tr>
+    <td align="center">
+      <img src="/Users/cpldxx/GitHub/Final-SKN-Project/SKN12-FINAL-2TEAM/images/sungho - loofy.jpg" width="120px;" alt="Alice"/><br />
+      <sub><b>권성호</b></sub><br />
+      백엔드 총괄/AWS 총괄/풀스택 
+    </td>
+    <td align="center">
+      <img src="/Users/cpldxx/GitHub/Final-SKN-Project/SKN12-FINAL-2TEAM/images/sangwon - doflamingo.png" width="120px;" alt="Bob"/><br />
+      <sub><b>지상원</b></sub><br />
+      프론트엔드 총괄
+    </td>
+    <td align="center">
+      <img src="/Users/cpldxx/GitHub/Final-SKN-Project/SKN12-FINAL-2TEAM/images/jaehyun - bugy.png" width="120px;" alt="Charlie"/><br />
+      <sub><b>김재현</b></sub><br />
+      ML 총괄
+    </td>
+    <td align="center">
+      <img src="/Users/cpldxx/GitHub/Final-SKN-Project/SKN12-FINAL-2TEAM/images/gwon - chopa.png" width="120px;" alt="David"/><br />
+      <sub><b>윤권</b></sub><br />
+      PM/ML 엔지니어
+    </td>
+    <td align="center">
+      <img src="/Users/cpldxx/GitHub/Final-SKN-Project/SKN12-FINAL-2TEAM/images/jinyang - charlos.png" width="120px;" alt="Eve"/><br />
+      <sub><b>박진양</b></sub><br />
+      리소스 매니저/데이터 엔지니어
+    </td>
+  </tr>
+</table>
+
 ---
 
 ## 🎯 프로젝트 목적: 왜 만들었나?
