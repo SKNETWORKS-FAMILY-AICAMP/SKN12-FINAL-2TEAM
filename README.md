@@ -353,6 +353,8 @@ npm run dev
 - **[📚 Tutorial Template](base_server/template/tutorial/README.md)**: 튜토리얼 시스템, 학습 가이드, 온보딩
 - **[🔔 Notification Template](base_server/template/notification/README.md)**: 알림 템플릿, 메시지 포맷, 알림 규칙
 
+### **🗄️ Database Layer** - 데이터베이스의 정수
+- **[🏛 Database Architecture](base_server/db_scripts/README.md)**: 데이터베이스 아키텍쳐 및 구성요소
 ---
 
 ## 🎯 프로젝트 비전
