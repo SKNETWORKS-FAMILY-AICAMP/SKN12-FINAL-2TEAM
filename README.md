@@ -36,35 +36,61 @@
 </p>
 
 
-# 👨‍👩‍👧‍👦 조원 명단
+# 👥 팀원 소개
 
 <table>
   <tr>
-    <td align="center" width="200px">
-      <b>권성호</b><br />
-      <img src="images/standardized/sungho - loofy_240.jpg" width="120" height="120" style="border-radius:10%; object-fit:cover;" alt="권성호"/><br />
-      백엔드 총괄 · AWS · 풀스택
+    <!-- 카드 1 -->
+    <td align="center" width="220" style="border:1px solid #2f3337; padding:14px;">
+      <div style="font-weight:700; font-size:16px; margin-bottom:8px; text-align:center;">권성호</div>
+      <hr style="border:0; border-top:1px solid #3e4348; margin:8px 0 14px 0;">
+      <img src="images/standardized/sungho - loofy_240.jpg" width="160" height="160"
+           alt="권성호"
+           style="object-fit:cover; border-radius:8px;">
+      <hr style="border:0; border-top:1px solid #3e4348; margin:14px 0 8px 0;">
+      <div style="font-size:13px; line-height:1.45; text-align:center;">백엔드 · 인프라 · AWS</div>
     </td>
-    <td align="center" width="200px">
-      <b>지상원</b><br />
-      <img src="images/standardized/sangwon - doflamingo_240.png" width="120" height="120" style="border-radius:10%; object-fit:cover;" alt="지상원"/><br />
-      프론트엔드 총괄
+    <!-- 카드 2 -->
+    <td align="center" width="220" style="border:1px solid #2f3337; padding:14px;">
+      <div style="font-weight:700; font-size:16px; margin-bottom:8px; text-align:center;">지상원</div>
+      <hr style="border:0; border-top:1px solid #3e4348; margin:8px 0 14px 0;">
+      <img src="images/standardized/sangwon - doflamingo_240.png" width="160" height="160"
+           alt="지상원"
+           style="object-fit:cover; border-radius:8px;">
+      <hr style="border:0; border-top:1px solid #3e4348; margin:14px 0 8px 0;">
+      <div style="font-size:13px; line-height:1.45; text-align:center;">프론트엔드 리드 · UI/UX</div>
     </td>
-    <td align="center" width="200px">
-      <b>김재현</b><br />
-      <img src="images/standardized/jaehyun - bugy_240.png" width="120" height="120" style="border-radius:10%; object-fit:cover;" alt="김재현"/><br />
-      ML 총괄
+    <!-- 카드 3 -->
+    <td align="center" width="220" style="border:1px solid #2f3337; padding:14px;">
+      <div style="font-weight:700; font-size:16px; margin-bottom:8px; text-align:center;">김재현</div>
+      <hr style="border:0; border-top:1px solid #3e4348; margin:8px 0 14px 0;">
+      <img src="images/standardized/jaehyun - bugy_240.png" width="160" height="160"
+           alt="김재현"
+           style="object-fit:cover; border-radius:8px;">
+      <hr style="border:0; border-top:1px solid #3e4348; margin:14px 0 8px 0;">
+      <div style="font-size:13px; line-height:1.45; text-align:center;">ML 리드 · 모델/서빙</div>
     </td>
-    <td align="center" width="200px">
-      <b>윤권</b><br />
-      <img src="images/standardized/gwon - chopa_240.png" width="120" height="120" style="border-radius:10%; object-fit:cover;" alt="윤권"/><br />
-      PM · ML 엔지니어
+    <!-- 카드 4 -->
+    <td align="center" width="220" style="border:1px solid #2f3337; padding:14px;">
+      <div style="font-weight:700; font-size:16px; margin-bottom:8px; text-align:center;">윤권</div>
+      <hr style="border:0; border-top:1px solid #3e4348; margin:8px 0 14px 0;">
+      <img src="images/standardized/gwon - chopa_240.png" width="160" height="160"
+           alt="윤권"
+           style="object-fit:cover; border-radius:8px;">
+      <hr style="border:0; border-top:1px solid #3e4348; margin:14px 0 8px 0;">
+      <div style="font-size:13px; line-height:1.45; text-align:center;">PM · ML 엔지니어</div>
     </td>
-    <td align="center" width="200px">
-      <b>박진양</b><br />
-      <img src="images/standardized/jinyang - charlos_240.png" width="120" height="120" style="border-radius:10%; object-fit:cover;" alt="박진양"/><br />
-      리소스 매니저 · 데이터 엔지니어
+    <!-- 카드 5 -->
+    <td align="center" width="220" style="border:1px solid #2f3337; padding:14px;">
+      <div style="font-weight:700; font-size:16px; margin-bottom:8px; text-align:center;">박진양</div>
+      <hr style="border:0; border-top:1px solid #3e4348; margin:8px 0 14px 0;">
+      <img src="images/standardized/jinyang - charlos_240.png" width="160" height="160"
+           alt="박진양"
+           style="object-fit:cover; border-radius:8px;">
+      <hr style="border:0; border-top:1px solid #3e4348; margin:14px 0 8px 0;">
+      <div style="font-size:13px; line-height:1.45; text-align:center;">리소스 · 데이터 엔지니어</div>
     </td>
+
   </tr>
 </table>
 
