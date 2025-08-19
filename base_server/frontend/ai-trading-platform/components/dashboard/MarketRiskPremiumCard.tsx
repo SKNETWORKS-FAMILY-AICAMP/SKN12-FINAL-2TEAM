@@ -43,10 +43,19 @@ export function MarketRiskPremiumCard() {
       const data = await response.json();
       console.log("시장 위험 프리미엄 응답 데이터:", data);
       
-      if (data.result === 'success') {
-        setPremiums(data.premiums || []);
-        setLastFetch(Date.now());
+      // 백엔드 응답 구조에 맞게 수정
+      // result가 'success'이거나 premiums 배열이 있으면 데이터 설정
+      if (data.result === 'success' || (Array.isArray(data.premiums) && data.premiums.length > 0)) {
+        if (Array.isArray(data.premiums)) {
+          console.log("✅ 프리미엄 배열 설정:", data.premiums);
+          setPremiums(data.premiums);
+          setLastFetch(Date.now());
+        } else {
+          console.error("❌ data.premiums가 배열이 아님:", data.premiums);
+          throw new Error('프리미엄 데이터 형식이 올바르지 않습니다.');
+        }
       } else {
+        console.error("❌ API 응답 실패:", data.message);
         throw new Error(data.message || '데이터 조회 실패');
       }
     } catch (err) {
