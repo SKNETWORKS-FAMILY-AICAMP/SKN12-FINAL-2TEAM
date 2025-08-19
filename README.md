@@ -307,14 +307,51 @@ npm run dev
 
 각 디렉토리의 README에서 더 상세한 정보를 확인할 수 있습니다:
 
-- **[🎨 Frontend](base_server/frontend/README.md)**: React 컴포넌트, 상태 관리, API 연동
-- **[🚀 Application](base_server/application/README.md)**: FastAPI 서버, 라우터, 마이크로서비스
-- **[🧠 LLM Service](base_server/service/llm/README.md)**: AI 모델, 칼만 필터, 블랙-숄즈
-- **[📡 Signal Service](base_server/service/signal/README.md)**: 실시간 신호, 기술적 분석
-- **[🌐 Network Service](base_server/service/net/README.md)**: 네트워크 계층, 미들웨어
-- **[💬 Chat Service](base_server/service/chat/README.md)**: AI 채팅, WebSocket, Redis
-- **[🔌 WebSocket Service](base_server/service/websocket/README.md)**: 실시간 통신, 클라이언트 관리
-- **[⚙️ Core Service](base_server/service/core/README.md)**: 핵심 인프라, 로깅, 모니터링
+### **🎨 Frontend Layer**
+- **[📱 Frontend](base_server/frontend/README.md)**: React 컴포넌트, 상태 관리, API 연동
+
+### **🚀 Application Layer**
+- **[🔐 Application](base_server/application/README.md)**: FastAPI 서버, 라우터, 마이크로서비스
+
+### **🔧 Service Layer** - 핵심 서비스들
+- **[🧠 LLM Service](base_server/service/llm/README.md)**: AI 챗봇, 칼만 필터, 블랙-숄즈 모델
+- **[📡 Signal Service](base_server/service/signal/README.md)**: 실시간 주식 신호, 볼린저 밴드, AI 모델 연동
+- **[🌐 Network Service](base_server/service/net/README.md)**: FastAPI 미들웨어, 헬스체크, 패킷 처리
+- **[💬 Chat Service](base_server/service/chat/README.md)**: AI 채팅 인프라, Redis 메모리, WebSocket 스트리밍
+- **[🔌 WebSocket Service](base_server/service/websocket/README.md)**: 실시간 통신, 클라이언트 관리, Redis Pub/Sub
+- **[⚙️ Core Service](base_server/service/core/README.md)**: 로깅, 모니터링, 설정 관리
+- **[💾 Database Service](base_server/service/db/README.md)**: MySQL 연결, 테이블 관리, 데이터베이스 서비스
+- **[🔐 Cache Service](base_server/service/cache/README.md)**: Redis 캐싱, 세션 관리, 연결 풀링
+- **[📁 Storage Service](base_server/service/storage/README.md)**: S3 파일 저장, 객체 관리, 스토리지 클라이언트
+- **[🔍 Search Service](base_server/service/search/README.md)**: OpenSearch 연동, 검색 엔진, 인덱스 관리
+- **[🧠 VectorDB Service](base_server/service/vectordb/README.md)**: 벡터 데이터베이스, 임베딩 저장, 유사도 검색
+- **[📚 RAG Service](base_server/service/rag/README.md)**: Retrieval-Augmented Generation, 문서 검색, AI 응답 생성
+- **[📧 Email Service](base_server/service/email/README.md)**: 이메일 발송, 템플릿 관리, SMTP 연동
+- **[📱 SMS Service](base_server/service/sms/README.md)**: SMS 발송, 문자 메시지, 알림 서비스
+- **[🔔 Notification Service](base_server/service/notification/README.md)**: 알림 시스템, 푸시 알림, 이벤트 관리
+- **[📊 Data Service](base_server/service/data/README.md)**: 데이터 처리, ETL 파이프라인, 데이터 변환
+- **[📋 Queue Service](base_server/service/queue/README.md)**: 메시지 큐, 작업 대기열, 비동기 처리
+- **[🔒 Lock Service](base_server/service/lock/README.md)**: 분산 락, 동시성 제어, 리소스 관리
+- **[📅 Scheduler Service](base_server/service/scheduler/README.md)**: 작업 스케줄링, 크론 작업, 백그라운드 태스크
+- **[🌐 External Service](base_server/service/external/README.md)**: 외부 API 연동, 클라이언트 풀링, 통합 서비스
+- **[📝 Outbox Service](base_server/service/outbox/README.md)**: 아웃박스 패턴, 메시지 전송 보장, 재시도 로직
+- **[🎯 Event Service](base_server/service/event/README.md)**: 이벤트 시스템, 이벤트 버스, 메시지 브로커
+
+### **📋 Template Layer** - 비즈니스 템플릿
+- **[🏠 Base Template](base_server/template/base/README.md)**: 기본 템플릿 시스템, 공통 인터페이스
+- **[💬 Chat Template](base_server/template/chat/README.md)**: 채팅 비즈니스 로직, AI 응답 처리
+- **[📊 Dashboard Template](base_server/template/dashboard/README.md)**: 대시보드 데이터 처리, 차트 생성
+- **[🤖 AutoTrade Template](base_server/template/autotrade/README.md)**: 자동매매 전략 실행, 시그널 처리
+- **[📈 Portfolio Template](base_server/template/portfolio/README.md)**: 포트폴리오 관리, 자산 배분, 리밸런싱
+- **[👤 Profile Template](base_server/template/profile/README.md)**: 사용자 프로필, 설정 관리, 개인화
+- **[📈 Market Template](base_server/template/market/README.md)**: 시장 데이터, 주식 정보, 시장 분석
+- **[🕷️ Crawler Template](base_server/template/crawler/README.md)**: 웹 크롤링, 데이터 수집, 스크래핑
+- **[🔐 Account Template](base_server/template/account/README.md)**: 계정 관리, 인증, 권한 관리
+- **[👨‍💼 Admin Template](base_server/template/admin/README.md)**: 관리자 기능, 시스템 모니터링, 사용자 관리
+- **[🧠 Model Template](base_server/template/model/README.md)**: AI 모델 관리, 예측 서비스, 모델 버전 관리
+- **[⚙️ Settings Template](base_server/template/settings/README.md)**: 시스템 설정, 환경 설정, 구성 관리
+- **[📚 Tutorial Template](base_server/template/tutorial/README.md)**: 튜토리얼 시스템, 학습 가이드, 온보딩
+- **[🔔 Notification Template](base_server/template/notification/README.md)**: 알림 템플릿, 메시지 포맷, 알림 규칙
 
 ---
 
