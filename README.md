@@ -41,29 +41,29 @@
 <table>
   <tr>
     <td align="center">
-      <img src="images/sungho - loofy.jpg" width="120px;" alt="Alice"/><br />
+      <img src="images/standardized/sungho - loofy_240.jpg" width="120px" alt="권성호" style="border-radius:50%; object-fit:cover;"/><br />
       <sub><b>권성호</b></sub><br />
-      백엔드 총괄/AWS 총괄/풀스택 
+      백엔드 총괄 · AWS · 풀스택
     </td>
     <td align="center">
-      <img src="images/sangwon - doflamingo.png" width="120px;" alt="Bob"/><br />
+      <img src="images/standardized/sangwon - doflamingo_240.png" width="120px" alt="지상원" style="border-radius:50%; object-fit:cover;"/><br />
       <sub><b>지상원</b></sub><br />
       프론트엔드 총괄
     </td>
     <td align="center">
-      <img src="images/jaehyun - bugy.png" width="120px;" alt="Charlie"/><br />
+      <img src="images/standardized/jaehyun - bugy_240.png width="120px" alt="김재현" style="border-radius:50%; object-fit:cover;"/><br />
       <sub><b>김재현</b></sub><br />
       ML 총괄
     </td>
     <td align="center">
-      <img src="images/gwon - chopa.png" width="120px;" alt="David"/><br />
+      <img src="images/standardized/gwon - chopa_240.png" width="120px" alt="윤권" style="border-radius:50%; object-fit:cover;"/><br />
       <sub><b>윤권</b></sub><br />
-      PM/ML 엔지니어
+      PM · ML 엔지니어
     </td>
     <td align="center">
-      <img src="images/jinyang - charlos.png" width="120px;" alt="Eve"/><br />
+      <img src="images/standardized/jinyang - charlos_240.png" width="120px" alt="박진양" style="border-radius:50%; object-fit:cover;"/><br />
       <sub><b>박진양</b></sub><br />
-      리소스 매니저/데이터 엔지니어
+      리소스 매니저 · 데이터 엔지니어
     </td>
   </tr>
 </table>
