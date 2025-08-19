@@ -40,29 +40,29 @@
 
 <table>
   <tr>
-    <td align="center">
-      <img src="images/standardized/sungho - loofy_240.jpg" width="120px" alt="권성호" style="border-radius:50%; object-fit:cover;"/><br />
-      <sub><b>권성호</b></sub><br />
+    <td align="center" width="200px">
+      <img src="images/standardized/sungho - loofy_240.jpg" width="120" height="120" alt="권성호" style="border-radius:50%; object-fit:cover;"/><br />
+      <b>권성호</b><br />
       백엔드 총괄 · AWS · 풀스택
     </td>
-    <td align="center">
-      <img src="images/standardized/sangwon - doflamingo_240.png" width="120px" alt="지상원" style="border-radius:50%; object-fit:cover;"/><br />
-      <sub><b>지상원</b></sub><br />
+    <td align="center" width="200px">
+      <img src="images/standardized/sangwon - doflamingo_240.png" width="120" height="120" alt="지상원" style="border-radius:50%; object-fit:cover;"/><br />
+      <b>지상원</b><br />
       프론트엔드 총괄
     </td>
-    <td align="center">
-      <img src="images/standardized/jaehyun - bugy_240.png" width=120px" alt="김재현" style="border-radius:50%; object-fit:cover;"/><br />
-      <sub><b>김재현</b></sub><br />
+    <td align="center" width="200px">
+      <img src="images/standardized/jaehyun - bugy_240.png" width="120" height="120" alt="김재현" style="border-radius:50%; object-fit:cover;"/><br />
+      <b>김재현</b><br />
       ML 총괄
     </td>
-    <td align="center">
-      <img src="images/standardized/gwon - chopa_240.png" width="120px" alt="윤권" style="border-radius:50%; object-fit:cover;"/><br />
-      <sub><b>윤권</b></sub><br />
+    <td align="center" width="200px">
+      <img src="images/standardized/gwon - chopa_240.png" width="120" height="120" alt="윤권" style="border-radius:50%; object-fit:cover;"/><br />
+      <b>윤권</b><br />
       PM · ML 엔지니어
     </td>
-    <td align="center">
-      <img src="images/standardized/jinyang - charlos_240.png" width="120px" alt="박진양" style="border-radius:50%; object-fit:cover;"/><br />
-      <sub><b>박진양</b></sub><br />
+    <td align="center" width="200px">
+      <img src="images/standardized/jinyang - charlos_240.png" width="120" height="120" alt="박진양" style="border-radius:50%; object-fit:cover;"/><br />
+      <b>박진양</b><br />
       리소스 매니저 · 데이터 엔지니어
     </td>
   </tr>
