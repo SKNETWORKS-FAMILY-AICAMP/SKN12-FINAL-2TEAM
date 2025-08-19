@@ -35,6 +35,16 @@
   <a href="#"><img src="https://img.shields.io/badge/AWS-232F3E?style=for-the-badge&logo=amazonaws&logoColor=FF9900&labelColor=1f2937" alt="aws"></a>
 </p>
 
+## 👨‍👩‍👧‍👦 조원 명단
+
+| 이름 | 역할 |
+|------|------|
+| **권성호** | 백엔드 총괄/AWS 총괄/풀스택 | 
+| **지상원** | 프론트엔드 총괄 | 
+| **김재현** | ML 총괄 | 
+| **윤권** | PM/ML 엔지니어 | 
+| **박진양** | 리소스 매니저/데이터 엔지니어 | 
+
 ---
 
 ## 🎯 프로젝트 목적: 왜 만들었나?
