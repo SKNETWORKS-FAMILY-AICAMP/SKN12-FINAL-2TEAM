@@ -42,6 +42,35 @@ pipeline {
             }
         }
         
+        stage('🧹 Clean Docker Space') {
+            steps {
+                echo "Docker 디스크 공간 정리 중..."
+                sh '''
+                    # 중지된 컨테이너 삭제
+                    docker container prune -f || true
+                    
+                    # 사용하지 않는 이미지 삭제
+                    docker image prune -f || true
+                    
+                    # 오래된 이미지 삭제 (7일 이상)
+                    docker image prune -a --filter "until=168h" -f || true
+                    
+                    # 사용하지 않는 볼륨 삭제
+                    docker volume prune -f || true
+                    
+                    # 빌드 캐시 정리
+                    docker builder prune -f || true
+                    
+                    # 디스크 사용량 확인
+                    echo "=== 현재 디스크 사용량 ==="
+                    df -h /var/lib/docker || df -h /
+                    
+                    echo "=== Docker 디스크 사용량 ==="
+                    docker system df
+                '''
+            }
+        }
+        
         stage('🔨 Build Docker Images') {
             parallel {
                 stage('Backend Build') {
