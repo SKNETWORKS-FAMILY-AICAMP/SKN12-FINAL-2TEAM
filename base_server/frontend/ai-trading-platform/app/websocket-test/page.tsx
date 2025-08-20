@@ -128,7 +128,7 @@ export default function WebSocketTestPage() {
       <div className="p-4 bg-gray-100 rounded">
         <h2 className="text-lg font-semibold mb-2">환경 정보</h2>
         <div className="text-sm space-y-1">
-          <div>WebSocket URL: {process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000'}</div>
+          <div>WebSocket URL: {process.env.NEXT_PUBLIC_WS_URL || 'wss://bullant-kr.com'}</div>
           <div>실제 WebSocket 사용: {process.env.NEXT_PUBLIC_USE_REAL_WEBSOCKET === 'true' ? '예' : '아니오'}</div>
         </div>
       </div>

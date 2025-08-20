@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     /* 4. 새 발급 루틴 시작 */
     inFlight = (async () => {
       const backend =
-        process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
+        process.env.NEXT_PUBLIC_API_URL ?? "https://bullant-kr.com"
 
       const res = await fetch(`${backend}/api/dashboard/oauth`, {
         method : "POST",

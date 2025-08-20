@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 실제 백엔드 API 호출
-    const backend = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
+    const backend = process.env.NEXT_PUBLIC_API_URL ?? "https://bullant-kr.com"
     console.log("🌐 백엔드 API 호출:", `${backend}/api/dashboard/market-risk-premium`)
     
     try {

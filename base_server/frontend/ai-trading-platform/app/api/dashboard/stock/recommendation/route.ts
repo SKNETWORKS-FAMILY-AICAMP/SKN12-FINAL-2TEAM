@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "사용자 accessToken 없음" }, { status: 401 })
     }
 
-    const backend = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
+    const backend = process.env.NEXT_PUBLIC_API_URL ?? "https://bullant-kr.com"
     const res = await fetch(`${backend}/api/dashboard/stock/recommendation`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

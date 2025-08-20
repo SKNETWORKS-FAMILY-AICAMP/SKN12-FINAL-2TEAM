@@ -17,7 +17,7 @@ function start() {
     if (queue.length === 0) { timer && clearTimeout(timer); timer = null; return }
     const t = queue.shift()!
     try {
-      const backend = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
+      const backend = process.env.NEXT_PUBLIC_API_URL ?? "https://bullant-kr.com"
       const res = await fetch(`${backend}/api/dashboard/price/us`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

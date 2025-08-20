@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Authorization token required' }, { status: 401 })
     }
 
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/dashboard/realtime/status`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://bullant-kr.com'}/dashboard/realtime/status`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,

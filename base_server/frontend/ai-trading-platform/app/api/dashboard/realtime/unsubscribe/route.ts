@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
 
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/dashboard/realtime/unsubscribe`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://bullant-kr.com'}/dashboard/realtime/unsubscribe`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
