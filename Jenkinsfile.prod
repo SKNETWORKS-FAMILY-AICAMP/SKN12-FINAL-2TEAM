@@ -93,16 +93,13 @@ pipeline {
                         echo "Frontend Docker 이미지 빌드 시작..."
                         dir('base_server/frontend/ai-trading-platform') {
                             sh '''
-                                # 프로덕션 환경변수로 Frontend 이미지 빌드 (build-time 주입)
+                                # Frontend 이미지 빌드 (환경변수는 Dockerfile에 하드코딩됨)
                                 docker build -t ${DOCKER_HUB_REPO_FRONTEND}:${BUILD_TAG} \
                                             -t ${DOCKER_HUB_REPO_FRONTEND}:latest \
-                                            --build-arg NEXT_PUBLIC_API_URL=https://bullant-kr.com \
-                                            --build-arg NEXT_PUBLIC_WS_URL=wss://bullant-kr.com \
-                                            --build-arg NEXT_PUBLIC_API_TIMEOUT=10000 \
                                             -f Dockerfile .
                                             
                                 echo "Frontend 이미지 빌드 완료: ${DOCKER_HUB_REPO_FRONTEND}:${BUILD_TAG}"
-                                echo "✅ 프로덕션 환경변수 build-time 주입 완료 (https://bullant-kr.com)"
+                                echo "✅ 프로덕션 환경변수 적용 완료 (https://bullant-kr.com)"
                             '''
                         }
                     }

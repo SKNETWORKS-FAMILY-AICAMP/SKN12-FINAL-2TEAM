@@ -39,11 +39,10 @@ RUN npm install && \
 # 소스 코드 복사
 COPY . .
 
-# 빌드 시 .env 파일 동적 생성 (build-arg 값 사용) - Next.js 빌드 전에 실행
-RUN echo "NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}" > .env && \
-    echo "NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}" >> .env && \
-    echo "NEXT_PUBLIC_API_TIMEOUT=${NEXT_PUBLIC_API_TIMEOUT}" >> .env && \
-    echo "NODE_ENV=production" >> .env && \
+# 빌드 시 .env 파일 동적 생성 - 프로덕션 URL 하드코딩
+RUN echo "NEXT_PUBLIC_API_URL=https://bullant-kr.com" > .env && \
+    echo "NEXT_PUBLIC_API_BASE=https://bullant-kr.com" >> .env && \
+    echo "NEXT_PUBLIC_API_TIMEOUT=60000" >> .env && \
     echo "Generated .env file:" && cat .env
 
 # Next.js 빌드 (빌드 전에 .env 파일이 생성되어 있음)
