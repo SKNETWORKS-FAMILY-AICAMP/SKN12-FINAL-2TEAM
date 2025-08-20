@@ -53,12 +53,18 @@ pipeline {
                     script {
                         echo "Building Frontend Docker image with production URLs..."
                         sh """
-                            docker build -t ${DOCKER_HUB_REPO_FRONTEND}:${BUILD_TAG} \
-                                        -t ${DOCKER_HUB_REPO_FRONTEND}:latest \
+                            # Docker 캐시 무효화를 위한 강제 리빌드
+                            docker build --no-cache \
                                         --build-arg NEXT_PUBLIC_API_URL=https://bullant-kr.com \
                                         --build-arg NEXT_PUBLIC_WS_URL=wss://bullant-kr.com \
                                         --build-arg NEXT_PUBLIC_API_TIMEOUT=10000 \
+                                        -t ${DOCKER_HUB_REPO_FRONTEND}:${BUILD_TAG} \
+                                        -t ${DOCKER_HUB_REPO_FRONTEND}:latest \
                                         -f Dockerfile .
+                                        
+                            echo "✅ Build Args 적용됨:"
+                            echo "  NEXT_PUBLIC_API_URL=https://bullant-kr.com"
+                            echo "  NEXT_PUBLIC_WS_URL=wss://bullant-kr.com"
                         """
                     }
                 }
