@@ -493,7 +493,15 @@ MIT License - 자유롭게 사용, 수정, 배포 가능
     </tr>
     <tr>
       <td style="border:1px solid #2f3337; padding:12px; font-weight:600; text-align:center;">윤권</td>
-      <td style="border:1px solid #2f3337; padding:12px;">&nbsp;</td>
+      <td style="border:1px solid #2f3337; padding:12px;">
+        <div style="line-height:1.6; text-align:left;">
+          6개월간의 과정과 마지막 2개월간의 최종 프로젝트까지, 총 5개의 프로젝트를 다양한 팀원들과 함께 진행했습니다. 하지만 매 프로젝트마다 제 스스로 부족함을 느낄 수밖에 없었습니다. 그럼에도 불구하고 어느 팀에서든 항상 팀원들께 감사한 마음뿐이었습니다.
+          <br/>
+          특히 최종 프로젝트에서는 팀원분들이 각자의 역할을 너무도 잘해주셔서 제 부족함이 더욱 크게 다가왔습니다. 지난 3차, 4차 프로젝트와 이번 최종 프로젝트에서 저는 머신러닝을 맡았는데, 매번 아쉬움이 남았습니다. 이번에도 마찬가지로 아쉬움이 많았지만, 그 과정에서 팀원분들, 멘토님, 강사님께서 이끌어주시고 옆에서 알려주신 덕분에, 지금 당장은 달라진 것이 보이지 않더라도 분명 제 성장에 큰 도움이 되었다고 생각합니다.
+          <br/>
+          6개월이라는 시간 동안 함께해주신 모든 분들께 감사드리며, 정말 수고 많으셨습니다. 앞으로도 좋은 일만 가득하시기를 진심으로 바라겠습니다.
+        </div>
+      </td>
     </tr>
     <tr>
       <td style="border:1px solid #2f3337; padding:12px; font-weight:600; text-align:center;">박진양</td>
