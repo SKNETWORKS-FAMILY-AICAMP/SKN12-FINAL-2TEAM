@@ -454,7 +454,7 @@ MIT License - 자유롭게 사용, 수정, 배포 가능
   <thead>
     <tr>
       <th align="center" style="border:1px solid #2f3337; padding:12px; width:120px;">이름</th>
-      <th align="center" style="border:1px solid #2f3337; padding:12px;">한 줄 회고</th>
+      <th align="center" style="border:1px solid #2f3337; padding:12px;">회고</th>
     </tr>
   </thead>
   <tbody>
@@ -463,10 +463,10 @@ MIT License - 자유롭게 사용, 수정, 배포 가능
       <td style="border:1px solid #2f3337; padding:12px;">
         <div style="line-height:1.6; text-align:left;">
           이번 프로젝트를 함께해 준 모든 팀원들께 진심으로 감사드립니다.<br/>
-          처음에는 막막한 부분이 많았지만, 여러분 덕분에 마음 편히 프로젝트를 완성할 수 있었습니다.<br/>
+          처음에는 막막한 부분이 많았지만, 여러분 덕분에 마음 편히 프로젝트를 완성할 수 있었습니다.
           <br/>
           큰 어려움 없이 원활하게 진행할 수 있었던 것도 모두 여러분의 노력 덕분입니다.<br/>
-          이 프로젝트를 통해 얻은 가장 큰 수확은 제 개인의 성장뿐만 아니라, 함께 성장할 수 있는 팀이 있다는 사실이었습니다.<br/>
+          이 프로젝트를 통해 얻은 가장 큰 수확은 제 개인의 성장뿐만 아니라, 함께 성장할 수 있는 팀이 있다는 사실이었습니다.
           <br/>
           정말 고맙습니다. 앞으로도 각자의 자리에서 더 멋진 삶을 만들어가길 바랍니다.
         </div>
