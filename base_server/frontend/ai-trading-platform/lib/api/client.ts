@@ -217,7 +217,7 @@ class ApiClient {
 
   // WebSocket Methods
   connectWebSocket(endpoint: string, onMessage?: (data: any) => void): WebSocket {
-    const wsUrl = `${process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000"}${endpoint}`
+    const wsUrl = `${process.env.NEXT_PUBLIC_WS_URL || "wss://bullant-kr.com"}${endpoint}`
     const ws = new WebSocket(wsUrl)
 
     ws.onopen = () => {
