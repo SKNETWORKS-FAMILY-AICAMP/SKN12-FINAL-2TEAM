@@ -192,9 +192,6 @@ services:
       - \"3000:3000\"
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=https://bullant-kr.com
-      - NEXT_PUBLIC_WS_URL=wss://bullant-kr.com
-      - NEXT_PUBLIC_API_TIMEOUT=10000
     volumes:
       - \"/opt/trading/logs:/app/logs\"
     healthcheck:

@@ -39,10 +39,13 @@ RUN npm install && \
 # 소스 코드 복사
 COPY . .
 
-# 환경 설정 파일 복사 (빌드 시 필요)
-COPY .env.local .env
+# 빌드 시 .env 파일 동적 생성 (build-arg 값 사용)
+RUN echo "NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}" > .env && \
+    echo "NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}" >> .env && \
+    echo "NEXT_PUBLIC_API_TIMEOUT=${NEXT_PUBLIC_API_TIMEOUT}" >> .env && \
+    echo "NODE_ENV=production" >> .env
 
-# Next.js 빌드
+# Next.js 빌드 (이제 .env 파일을 읽을 수 있음)
 RUN npm run build
 
 # =============================================================================
