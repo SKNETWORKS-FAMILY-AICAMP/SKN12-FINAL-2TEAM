@@ -7,13 +7,8 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
-    env_file:
-      - /opt/trading/frontend-config/.env
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=https://bullant-kr.com
-      - NEXT_PUBLIC_WS_URL=wss://bullant-kr.com
-      - NEXT_PUBLIC_API_TIMEOUT=10000
     volumes:
       # 로그 디렉토리 마운팅
       - "/opt/trading/logs:/app/logs"
