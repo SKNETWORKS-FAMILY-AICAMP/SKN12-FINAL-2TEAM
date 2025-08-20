@@ -13,15 +13,12 @@ pipeline {
         // Docker Hub 설정
         DOCKER_HUB_REPO_BACKEND = 'ashone91/trading-backend'
         DOCKER_HUB_REPO_FRONTEND = 'ashone91/trading-frontend'
-        DOCKER_CREDENTIALS_ID = 'dockerhub-creds'
+        DOCKER_CREDENTIALS_ID = 'dockerhub-credentials'
         
         // AWS EC2 배포 설정
         DEPLOY_HOST = 'ec2-xx-xxx-xxx-xxx.compute.amazonaws.com'
         DEPLOY_USER = 'ubuntu'
         SSH_CREDENTIALS_ID = 'deploy-server-ssh'
-        
-        // 버전 태그
-        BUILD_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT?.take(7)}"
     }
     
     stages {
@@ -29,6 +26,13 @@ pipeline {
             steps {
                 echo "Checking out code from ${GIT_REPO}"
                 git branch: "${GIT_BRANCH}", url: "${GIT_REPO}"
+                
+                script {
+                    // BUILD_TAG 생성 (Git checkout 후에 생성)
+                    env.GIT_COMMIT_SHORT = sh(script: 'git rev-parse HEAD | cut -c1-7', returnStdout: true).trim()
+                    env.BUILD_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT_SHORT}"
+                    echo "BUILD_TAG: ${env.BUILD_TAG}"
+                }
             }
         }
         
@@ -268,11 +272,17 @@ COMPOSE_EOF
             echo "❌ Deployment Failed! Check the logs for details."
         }
         cleanup {
-            // 로컬 이미지 정리
-            sh """
-                docker image prune -f
-                docker container prune -f
-            """
+            script {
+                try {
+                    // 로컬 이미지 정리
+                    sh """
+                        docker image prune -f
+                        docker container prune -f
+                    """
+                } catch (Exception e) {
+                    echo "⚠️ Cleanup 실패: ${e.getMessage()}"
+                }
+            }
         }
     }
 }
