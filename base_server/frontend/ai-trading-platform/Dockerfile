@@ -60,7 +60,7 @@ RUN apk add --no-cache libc6-compat
 
 # 보안을 위한 non-root 유저 생성
 RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nextjs -u 1001
+    adduser -S nextjs -u 1001 -G nodejs
 
 # Builder stage에서 필요한 파일만 복사
 COPY --from=builder /app/public ./public
