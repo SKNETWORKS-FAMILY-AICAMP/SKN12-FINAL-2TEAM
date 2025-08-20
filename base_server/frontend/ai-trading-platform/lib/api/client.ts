@@ -14,7 +14,7 @@ class ApiClient {
       : 30000; // 30초로 증가
 
     this.client = axios.create({
-      baseURL: process.env.NEXT_PUBLIC_API_BASE ?? (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'),
+      baseURL: process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_BASE || 'https://bullant-kr.com',
       timeout,
       headers: {
         "Content-Type": "application/json",

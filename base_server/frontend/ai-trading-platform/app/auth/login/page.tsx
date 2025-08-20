@@ -30,7 +30,7 @@ export default function LoginPage() {
         password: password,
       };
 
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "https://bullant-kr.com";
       const timeout = process.env.NEXT_PUBLIC_API_TIMEOUT
         ? parseInt(process.env.NEXT_PUBLIC_API_TIMEOUT, 10)
         : 10000;
