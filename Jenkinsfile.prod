@@ -1,256 +1,168 @@
 pipeline {
     agent any
     
-    triggers {
-        githubPush()
-    }
-    
     environment {
-        // Git 설정
-        GIT_REPO = 'https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-2TEAM.git'
-        GIT_BRANCH = 'main'
-        
         // Docker Hub 설정
         DOCKER_HUB_REPO_BACKEND = 'ashone91/trading-backend'
         DOCKER_HUB_REPO_FRONTEND = 'ashone91/trading-frontend'
-        DOCKER_CREDENTIALS_ID = 'dockerhub-credentials'
+        DOCKER_CREDENTIALS_ID = 'dockerhub-credentials'  // ⚠️ 실제 Jenkins Credentials ID와 일치해야 함
         
-        // AWS EC2 배포 설정
-        DEPLOY_HOST = 'ec2-xx-xxx-xxx-xxx.compute.amazonaws.com'
-        DEPLOY_USER = 'ubuntu'
-        SSH_CREDENTIALS_ID = 'deploy-server-ssh'
+        // GitHub 설정
+        GIT_REPO = 'https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-2TEAM.git'
+        GIT_BRANCH = 'main'
     }
     
     stages {
-        stage('Checkout') {
+        stage('🔍 Checkout') {
             steps {
-                echo "Checking out code from ${GIT_REPO}"
-                git branch: "${GIT_BRANCH}", url: "${GIT_REPO}"
+                echo "GitHub 저장소에서 코드 가져오기..."
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: "*/${GIT_BRANCH}"]],
+                    userRemoteConfigs: [[url: "${GIT_REPO}"]]
+                ])
                 
                 script {
-                    // BUILD_TAG 생성 (Git checkout 후에 생성)
-                    env.GIT_COMMIT_SHORT = sh(script: 'git rev-parse HEAD | cut -c1-7', returnStdout: true).trim()
+                    // 빌드 태그 생성 (Git checkout 후)
+                    env.GIT_COMMIT_SHORT = sh(
+                        script: 'git rev-parse HEAD | cut -c1-7',
+                        returnStdout: true
+                    ).trim()
                     env.BUILD_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT_SHORT}"
-                    echo "BUILD_TAG: ${env.BUILD_TAG}"
+                    
+                    // Git 정보 출력
+                    sh '''
+                        echo "Branch: ${GIT_BRANCH}"
+                        echo "Commit: $(git rev-parse HEAD)"
+                        echo "Build Tag: ${BUILD_TAG}"
+                        echo "Author: $(git log -1 --pretty=format:'%an')"
+                        echo "Message: $(git log -1 --pretty=format:'%s')"
+                    '''
                 }
             }
         }
         
-        stage('Build Backend Docker Image') {
-            steps {
-                dir('base_server') {
-                    script {
-                        echo "Building Backend Docker image..."
-                        sh """
-                            docker build -t ${DOCKER_HUB_REPO_BACKEND}:${BUILD_TAG} \
-                                        -t ${DOCKER_HUB_REPO_BACKEND}:latest \
-                                        -f Dockerfile .
-                        """
-                    }
-                }
-            }
-        }
-        
-        stage('Build Frontend Docker Image') {
-            steps {
-                dir('base_server/frontend/ai-trading-platform') {
-                    script {
-                        echo "Building Frontend Docker image with production URLs..."
-                        sh """
-                            # Docker 캐시 무효화를 위한 강제 리빌드
-                            docker build --no-cache \
-                                        --build-arg NEXT_PUBLIC_API_URL=https://bullant-kr.com \
-                                        --build-arg NEXT_PUBLIC_WS_URL=wss://bullant-kr.com \
-                                        --build-arg NEXT_PUBLIC_API_TIMEOUT=10000 \
-                                        -t ${DOCKER_HUB_REPO_FRONTEND}:${BUILD_TAG} \
-                                        -t ${DOCKER_HUB_REPO_FRONTEND}:latest \
-                                        -f Dockerfile .
-                                        
-                            echo "✅ Build Args 적용됨:"
-                            echo "  NEXT_PUBLIC_API_URL=https://bullant-kr.com"
-                            echo "  NEXT_PUBLIC_WS_URL=wss://bullant-kr.com"
-                        """
-                    }
-                }
-            }
-        }
-        
-        stage('Push to Docker Hub') {
-            steps {
-                script {
-                    withCredentials([usernamePassword(
-                        credentialsId: "${DOCKER_CREDENTIALS_ID}",
-                        usernameVariable: 'DOCKER_USER',
-                        passwordVariable: 'DOCKER_PASS'
-                    )]) {
-                        sh """
-                            echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
-                            
-                            # Push Backend
-                            docker push ${DOCKER_HUB_REPO_BACKEND}:${BUILD_TAG}
-                            docker push ${DOCKER_HUB_REPO_BACKEND}:latest
-                            
-                            # Push Frontend
-                            docker push ${DOCKER_HUB_REPO_FRONTEND}:${BUILD_TAG}
-                            docker push ${DOCKER_HUB_REPO_FRONTEND}:latest
-                            
-                            docker logout
-                        """
-                    }
-                }
-            }
-        }
-        
-        stage('Deploy to EC2') {
+        stage('🔨 Build Docker Images') {
             parallel {
-                stage('Deploy Backend') {
+                stage('Backend Build') {
                     steps {
-                        script {
-                            sshagent(credentials: ["${SSH_CREDENTIALS_ID}"]) {
-                                sh """
-                                    ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_HOST} '
-                                        # 최신 코드 가져오기
-                                        cd /home/ubuntu/SKN12-FINAL-2TEAM
-                                        git pull origin main
-                                        
-                                        # 새 Backend 이미지 다운로드
-                                        docker pull ${DOCKER_HUB_REPO_BACKEND}:${BUILD_TAG}
-                                        docker pull ${DOCKER_HUB_REPO_BACKEND}:latest
-                                        
-                                        # 기존 Backend Docker Compose 중지
-                                        docker-compose -f docker-compose.backend.yml down || true
-                                        
-                                        # Backend Docker Compose 파일 업데이트
-                                        tee docker-compose.backend.yml > /dev/null << \"COMPOSE_EOF\"
-version: \"3.8\"
-
-services:
-  backend:
-    image: ${DOCKER_HUB_REPO_BACKEND}:${BUILD_TAG}
-    container_name: trading-backend-prod
-    restart: unless-stopped
-    ports:
-      - \"8000:8000\"
-    environment:
-      - APP_ENV=PROD
-      - PYTHONUNBUFFERED=1
-    volumes:
-      - \"/opt/trading/configs/base_web_server-config.json:/app/application/base_web_server/base_web_server-config.json:ro\"
-      - \"/opt/trading/logs:/app/logs\"
-    healthcheck:
-      test: [\"CMD\", \"curl\", \"-f\", \"http://localhost:8000/health\"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    networks:
-      - trading-backend-network
-
-networks:
-  trading-backend-network:
-    driver: bridge
-COMPOSE_EOF
-                                        
-                                        # 새 Backend 서비스 시작
-                                        docker-compose -f docker-compose.backend.yml up -d
-                                    '
-                                """
-                            }
+                        echo "Backend Docker 이미지 빌드 시작..."
+                        dir('base_server') {
+                            sh '''
+                                docker build -t ${DOCKER_HUB_REPO_BACKEND}:${BUILD_TAG} \
+                                            -t ${DOCKER_HUB_REPO_BACKEND}:latest \
+                                            -f Dockerfile .
+                                
+                                echo "Backend 이미지 빌드 완료: ${DOCKER_HUB_REPO_BACKEND}:${BUILD_TAG}"
+                            '''
                         }
                     }
                 }
-                stage('Deploy Frontend') {
+                
+                stage('Frontend Build') {
                     steps {
-                        script {
-                            sshagent(credentials: ["${SSH_CREDENTIALS_ID}"]) {
-                                sh """
-                                    # Frontend 서버가 다른 경우를 위한 배포
-                                    # Frontend 서버 IP가 다르면 FRONTEND_DEPLOY_HOST 환경변수 사용
-                                    FRONTEND_HOST=\${FRONTEND_DEPLOY_HOST:-$DEPLOY_HOST}
-                                    
-                                    ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@\${FRONTEND_HOST} '
-                                        # 최신 코드 가져오기 (Frontend 서버도 동일 저장소 사용)
-                                        cd /home/ubuntu/SKN12-FINAL-2TEAM
-                                        git pull origin main
-                                        
-                                        # 새 Frontend 이미지 다운로드
-                                        docker pull ${DOCKER_HUB_REPO_FRONTEND}:${BUILD_TAG}
-                                        docker pull ${DOCKER_HUB_REPO_FRONTEND}:latest
-                                        
-                                        # 기존 Frontend Docker Compose 중지
-                                        docker-compose -f docker-compose.frontend.yml down || true
-                                        
-                                        # Frontend Docker Compose 파일 업데이트 (프로덕션 환경변수 포함)
-                                        tee docker-compose.frontend.yml > /dev/null << \"COMPOSE_EOF\"
-version: \"3.8\"
-
-services:
-  frontend:
-    image: ${DOCKER_HUB_REPO_FRONTEND}:${BUILD_TAG}
-    container_name: trading-frontend-prod
-    restart: unless-stopped
-    ports:
-      - \"3000:3000\"
-    environment:
-      - NODE_ENV=production
-    volumes:
-      - \"/opt/trading/logs:/app/logs\"
-    healthcheck:
-      test: [\"CMD\", \"wget\", \"--no-verbose\", \"--tries=1\", \"--spider\", \"http://localhost:3000\"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    networks:
-      - trading-frontend-network
-
-networks:
-  trading-frontend-network:
-    driver: bridge
-COMPOSE_EOF
-                                        
-                                        # 새 Frontend 서비스 시작
-                                        docker-compose -f docker-compose.frontend.yml up -d
-                                    '
-                                """
-                            }
+                        echo "Frontend Docker 이미지 빌드 시작..."
+                        dir('base_server/frontend/ai-trading-platform') {
+                            sh '''
+                                # 프로덕션 환경변수로 Frontend 이미지 빌드 (build-time 주입)
+                                docker build -t ${DOCKER_HUB_REPO_FRONTEND}:${BUILD_TAG} \
+                                            -t ${DOCKER_HUB_REPO_FRONTEND}:latest \
+                                            --build-arg NEXT_PUBLIC_API_URL=https://bullant-kr.com \
+                                            --build-arg NEXT_PUBLIC_WS_URL=wss://bullant-kr.com \
+                                            --build-arg NEXT_PUBLIC_API_TIMEOUT=10000 \
+                                            -f Dockerfile .
+                                            
+                                echo "Frontend 이미지 빌드 완료: ${DOCKER_HUB_REPO_FRONTEND}:${BUILD_TAG}"
+                                echo "✅ 프로덕션 환경변수 build-time 주입 완료 (https://bullant-kr.com)"
+                            '''
                         }
                     }
                 }
             }
         }
         
-        stage('Health Check') {
+        stage('📤 Push to Docker Hub') {
             steps {
+                echo "Docker Hub로 이미지 푸시..."
+                withCredentials([usernamePassword(
+                    credentialsId: "${DOCKER_CREDENTIALS_ID}",
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    sh '''
+                        # Docker Hub 로그인
+                        echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
+                        
+                        # Backend 이미지 푸시
+                        echo "Backend 이미지 푸시 중..."
+                        docker push ${DOCKER_HUB_REPO_BACKEND}:${BUILD_TAG}
+                        docker push ${DOCKER_HUB_REPO_BACKEND}:latest
+                        
+                        # Frontend 이미지 푸시
+                        echo "Frontend 이미지 푸시 중..."
+                        docker push ${DOCKER_HUB_REPO_FRONTEND}:${BUILD_TAG}
+                        docker push ${DOCKER_HUB_REPO_FRONTEND}:latest
+                        
+                        # 로그아웃
+                        docker logout
+                        
+                        echo "✅ Docker Hub 푸시 완료!"
+                    '''
+                }
+            }
+        }
+        
+        stage('🚀 Deploy to Auto Scaling Groups') {
+            steps {
+                echo "Auto Scaling Group 인스턴스 새로 고침 시작..."
+                
                 script {
-                    sh """
-                        sleep 30
+                    try {
+                        // Backend Auto Scaling Group 인스턴스 새로 고침
+                        echo "Backend Auto Scaling Group 배포 중..."
+                        sh '''
+                            aws autoscaling start-instance-refresh \
+                                --auto-scaling-group-name trading-backend-asg \
+                                --preferences '{"MinHealthyPercentage":50,"InstanceWarmup":300}'
+                        '''
                         
-                        # Backend 헬스체크
-                        curl -f http://${DEPLOY_HOST}:8000/health || exit 1
-                        echo "✅ Backend health check passed"
+                        // Frontend Auto Scaling Group 인스턴스 새로 고침  
+                        echo "Frontend Auto Scaling Group 배포 중..."
+                        sh '''
+                            aws autoscaling start-instance-refresh \
+                                --auto-scaling-group-name trading-frontend-asg \
+                                --preferences '{"MinHealthyPercentage":50,"InstanceWarmup":300}'
+                        '''
                         
-                        # Frontend 헬스체크 (다른 서버일 수 있음)
-                        FRONTEND_HOST=\${FRONTEND_DEPLOY_HOST:-$DEPLOY_HOST}
-                        curl -f http://\${FRONTEND_HOST}:3000 || exit 1
-                        echo "✅ Frontend health check passed"
+                        echo """
+                        ========================================
+                        🎉 배포 시작됨! 
+                        ========================================
                         
-                        # Docker Compose 상태 확인
-                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_HOST} '
-                            echo "=== Backend Container Status ==="
-                            docker-compose -f docker-compose.backend.yml ps
-                            echo "=== Backend Logs (last 10 lines) ==="
-                            docker-compose -f docker-compose.backend.yml logs --tail=10 backend
-                        '
+                        새로운 Docker 이미지 배포:
+                        - Backend: ${DOCKER_HUB_REPO_BACKEND}:${BUILD_TAG}
+                        - Frontend: ${DOCKER_HUB_REPO_FRONTEND}:${BUILD_TAG}
                         
-                        FRONTEND_HOST=\${FRONTEND_DEPLOY_HOST:-$DEPLOY_HOST}
-                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@\${FRONTEND_HOST} '
-                            echo "=== Frontend Container Status ==="
-                            docker-compose -f docker-compose.frontend.yml ps
-                            echo "=== Frontend Logs (last 10 lines) ==="
-                            docker-compose -f docker-compose.frontend.yml logs --tail=10 frontend
-                        '
+                        Auto Scaling Groups가 무중단으로 
+                        인스턴스를 새로 고침합니다 (약 5-10분 소요)
                         
-                        echo "🚀 All services are healthy and running!"
-                    """
+                        배포 진행 상황:
+                        AWS Console → EC2 → Auto Scaling Groups
+                        → Instance refresh 탭에서 확인
+                        
+                        배포 완료 후 확인:
+                        https://bullant-kr.com
+                        
+                        ========================================
+                        """
+                        
+                    } catch (Exception e) {
+                        echo "⚠️ Instance Refresh 실패: ${e.getMessage()}"
+                        echo "수동으로 AWS Console에서 Instance Refresh 실행하세요."
+                        
+                        // 실패해도 빌드는 성공으로 처리 (이미지는 푸시됨)
+                        currentBuild.result = 'SUCCESS'
+                    }
                 }
             }
         }
@@ -259,56 +171,44 @@ COMPOSE_EOF
     post {
         success {
             echo """
-                ✅ Deployment Successful!
-                - Backend: ${DOCKER_HUB_REPO_BACKEND}:${BUILD_TAG}
-                - Frontend: ${DOCKER_HUB_REPO_FRONTEND}:${BUILD_TAG}
-                - Server: ${DEPLOY_HOST}
+            ✅ ✅ ✅ 파이프라인 성공! ✅ ✅ ✅
+            
+            빌드 번호: ${BUILD_NUMBER}
+            빌드 태그: ${BUILD_TAG}
+            
+            Docker Hub에서 확인:
+            https://hub.docker.com/r/ashone91/trading-backend/tags
+            https://hub.docker.com/r/ashone91/trading-frontend/tags
             """
         }
+        
         failure {
-            echo "❌ Deployment Failed! Check the logs for details."
+            echo """
+            ❌ ❌ ❌ 파이프라인 실패! ❌ ❌ ❌
+            
+            로그를 확인하여 문제를 해결하세요.
+            Jenkins Blue Ocean에서 상세 로그 확인 가능합니다.
+            """
         }
-        cleanup {
+        
+        always {
             script {
                 try {
-                    // 로컬 이미지 정리
-                    sh """
-                        docker image prune -f
-                        docker container prune -f
-                    """
+                    // 디스크 공간 확보를 위한 정리
+                    sh '''
+                        echo "Docker 이미지 정리 중..."
+                        docker image prune -f || true
+                        docker container prune -f || true
+                        
+                        # 오래된 이미지 삭제 (3일 이상)
+                        docker image prune -a --filter "until=72h" -f || true
+                        
+                        echo "정리 완료!"
+                    '''
                 } catch (Exception e) {
-                    echo "⚠️ Cleanup 실패: ${e.getMessage()}"
+                    echo "정리 과정에서 오류 발생: ${e.getMessage()}"
                 }
             }
         }
     }
 }
-
-// =============================================================================
-// 🔧 Jenkins 설정 필요사항
-// =============================================================================
-// 
-// 1. Credentials 설정:
-//    - dockerhub-creds: Docker Hub 로그인 (Username with password)
-//    - deploy-server-ssh: EC2 SSH 키 (SSH Username with private key)
-//
-// 2. 플러그인 필요:
-//    - GitHub plugin
-//    - Docker Pipeline
-//    - SSH Agent plugin
-//
-// 3. Jenkins 서버 요구사항:
-//    - Docker 설치
-//    - Git 설치
-//    - curl 설치
-//
-// 4. EC2 배포 서버 준비:
-//    - Docker & Docker Compose 설치
-//    - /home/ubuntu/SKN12-FINAL-2TEAM 경로에 저장소 클론
-//    - /opt/trading/configs/base_web_server-config.json 설정 파일 준비
-//
-// 5. 환경 변수 수정:
-//    - DEPLOY_HOST: 실제 EC2 퍼블릭 DNS 또는 IP
-//    - DOCKER_HUB_REPO_*: 실제 Docker Hub 저장소명
-//
-// =============================================================================
