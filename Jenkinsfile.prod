@@ -46,27 +46,46 @@ pipeline {
             steps {
                 echo "Docker 디스크 공간 정리 중..."
                 sh '''
-                    # 중지된 컨테이너 삭제
-                    docker container prune -f || true
+                    echo "=== 정리 전 디스크 사용량 ==="
+                    df -h /
                     
-                    # 사용하지 않는 이미지 삭제
-                    docker image prune -f || true
+                    # 모든 컨테이너 중지 및 삭제
+                    docker stop $(docker ps -aq) 2>/dev/null || true
+                    docker rm $(docker ps -aq) 2>/dev/null || true
                     
-                    # 오래된 이미지 삭제 (7일 이상)
-                    docker image prune -a --filter "until=168h" -f || true
+                    # 모든 이미지 삭제 (현재 태그된 이미지 제외)
+                    docker rmi $(docker images -q) 2>/dev/null || true
                     
-                    # 사용하지 않는 볼륨 삭제
-                    docker volume prune -f || true
+                    # Docker 시스템 전체 정리 (강력)
+                    docker system prune -a --volumes -f || true
                     
-                    # 빌드 캐시 정리
-                    docker builder prune -f || true
+                    # 빌드 캐시 완전 정리
+                    docker builder prune -a -f || true
                     
-                    # 디스크 사용량 확인
-                    echo "=== 현재 디스크 사용량 ==="
-                    df -h /var/lib/docker || df -h /
+                    # Jenkins 오래된 워크스페이스 정리
+                    find /var/jenkins_home/workspace -maxdepth 1 -type d -mtime +3 -exec rm -rf {} \\; 2>/dev/null || true
+                    
+                    # Jenkins 오래된 빌드 로그 정리
+                    find /var/jenkins_home/jobs -name "builds" -type d -exec sh -c 'cd "$1" && ls -t | tail -n +11 | xargs rm -rf' _ {} \\; 2>/dev/null || true
+                    
+                    # 시스템 로그 정리
+                    journalctl --vacuum-time=3d 2>/dev/null || true
+                    
+                    # apt 캐시 정리
+                    apt-get clean 2>/dev/null || true
+                    
+                    echo "=== 정리 후 디스크 사용량 ==="
+                    df -h /
                     
                     echo "=== Docker 디스크 사용량 ==="
                     docker system df
+                    
+                    # 최소 필요 공간 체크 (3GB)
+                    AVAILABLE=$(df / | awk 'NR==2 {print $4}' | sed 's/G//')
+                    if (( $(echo "$AVAILABLE < 3" | bc -l) )); then
+                        echo "⚠️ 경고: 사용 가능한 공간이 3GB 미만입니다! ($AVAILABLE GB)"
+                        echo "빌드가 실패할 수 있습니다."
+                    fi
                 '''
             }
         }
