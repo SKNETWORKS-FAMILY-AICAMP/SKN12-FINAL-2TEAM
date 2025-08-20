@@ -445,3 +445,66 @@ MIT License - 자유롭게 사용, 수정, 배포 가능
 
 </div>
 
+
+---
+
+## 📝 2팀 최종프로젝트 회고록
+
+<table style="border-collapse:collapse; width:100%;">
+  <thead>
+    <tr>
+      <th align="center" style="border:1px solid #2f3337; padding:12px; width:120px;">이름</th>
+      <th align="center" style="border:1px solid #2f3337; padding:12px;">한 줄 회고</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="border:1px solid #2f3337; padding:12px; font-weight:600; text-align:center;">권성호</td>
+      <td style="border:1px solid #2f3337; padding:12px;">
+        <div style="line-height:1.6; text-align:left;">
+          이번 프로젝트를 함께해 준 모든 팀원들께 진심으로 감사드립니다.<br/>
+          처음에는 막막한 부분이 많았지만, 여러분 덕분에 마음 편히 프로젝트를 완성할 수 있었습니다.<br/>
+          <br/>
+          큰 어려움 없이 원활하게 진행할 수 있었던 것도 모두 여러분의 노력 덕분입니다.<br/>
+          이 프로젝트를 통해 얻은 가장 큰 수확은 제 개인의 성장뿐만 아니라, 함께 성장할 수 있는 팀이 있다는 사실이었습니다.<br/>
+          <br/>
+          정말 고맙습니다. 앞으로도 각자의 자리에서 더 멋진 삶을 만들어가길 바랍니다.
+        </div>
+      </td>
+    </tr>
+    <tr>
+      <td style="border:1px solid #2f3337; padding:12px; font-weight:600; text-align:center;">지상원</td>
+      <td style="border:1px solid #2f3337; padding:12px;">
+        <div style="line-height:1.6; text-align:left;">
+          이번 프로젝트에서 팀원들에게 정말 많이 배웠습니다. 모든 경험이 제게 살이 되고 피가 되는 값진 교육이었고, 비전공자로서 더욱 큰 관심과 동기를 얻을 수 있었습니다.<br/>
+          단순히 코드를 짜는 것에 그치지 않고, 설계 목적과 이유를 고민하며 구조를 잡는 시각을 키울 수 있었습니다. 아직 부족한 부분이 많지만, 팀원들이 열정적으로 임하는 모습에서 자극을 받아 저 또한 부족함을 채우기 위해 더 열심히 성장해 나가겠습니다.<br/>
+          이번 프로젝트는 저에게 매우 소중하고 뜻깊은 경험이었습니다.
+        </div>
+      </td>
+    </tr>
+    <tr>
+      <td style="border:1px solid #2f3337; padding:12px; font-weight:600; text-align:center;">김재현</td>
+      <td style="border:1px solid #2f3337; padding:12px;">
+        <div style="line-height:1.6; text-align:left;">
+          두 달간의 최종 프로젝트는 제가 AI 개발을 취미가 아닌 직업적 태도로 임하게 되는 전환점이었습니다. 비교적 긴 기간 동안 큰 목표를 유지하면서도 매일의 작은 과제를 해결하는 과정에서, 협업의 기본과 새로운 기술을 빠르게 검증하고 안정화하는 방법을 다시 익혔습니다.<br/>
+          특히 팀원들께서 끝까지 성실하게 임해 주신 덕분에 여러 난관을 함께 넘어설 수 있었습니다. 함께해 주신 모든 팀원분들께 진심으로 감사드립니다. 앞으로 각자가 다른 곳에서 공부하거나 일하게 되더라도 이번 경험에서 얻은 원칙과 태도를 지속하여, 각자의 자리에서 꾸준한 성취를 이루시길 바랍니다. 저 또한 이번 배움을 바탕으로 더 높은 수준의 실무 역량을 갖추기 위해 정진하겠습니다.
+        </div>
+      </td>
+    </tr>
+    <tr>
+      <td style="border:1px solid #2f3337; padding:12px; font-weight:600; text-align:center;">윤권</td>
+      <td style="border:1px solid #2f3337; padding:12px;">&nbsp;</td>
+    </tr>
+    <tr>
+      <td style="border:1px solid #2f3337; padding:12px; font-weight:600; text-align:center;">박진양</td>
+      <td style="border:1px solid #2f3337; padding:12px;">
+        <div style="line-height:1.6; text-align:left;">
+          벌써 최종 프로젝트의 끝자락에 왔네요. 최고의 팀원들, 최고의 멘토님과 함께 1달 반동안 프로젝트에 전념할 수 있어서 너무 행복했습니다. 지난 4달 반동안 배운 것들을 기반으로 프로젝트에 임하였습니다.<br/>
+          살면서 프로그래밍을 처음 해보는 것이었기 때문에 강의 기간 초반에는 걱정이 많았지만 이제는 알아서 제 할 일 찾아서 한다는 것이 어찌보면 과정을 지나면서 제가 발전한게 보이네요.<br/>
+          SKN12-FINAL-2TEAM이 만든 LLM을 활용한 주식 상품 추천 시스템은 기획 단계부터, 겉으로 보여지는 프론트엔드, 단단한 내실을 담고있는 백엔드까지 어느 하나 부족한 것 없는 완성형입니다.<br/>이는 간단히 만들어진 것이 아닌, 5명의 능력이 모두 담겨있는 결과물입니다.
+        </div>
+      </td>
+    </tr>
+  </tbody>
+  
+</table>
