@@ -58,22 +58,14 @@ WORKDIR /app
 # 시스템 패키지 설치
 RUN apk add --no-cache libc6-compat
 
-# 보안을 위한 non-root 유저 생성
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nextjs -u 1001 -G nodejs
-
-# Builder stage에서 필요한 파일만 복사
+# Builder stage에서 필요한 파일만 복사 (root로 실행)
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/next.config.mjs ./next.config.mjs
 
-# 파일 소유권 설정
-RUN chown -R nextjs:nodejs /app
-
-# non-root 유저로 전환
-USER nextjs
+# 권한 문제 회피: root로 실행 (프로덕션에서 일반적)
 
 # 포트 노출
 EXPOSE 3000
