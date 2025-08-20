@@ -12,9 +12,9 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? `http://${HOSTNAME}:800
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    appDir: true,
-  },
+  // experimental: {
+  //   appDir: true,  // Next.js 15에서 제거됨 - App Router가 기본값
+  // },
   env: {
     // 기본 환경 변수 설정 (개발용)
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
@@ -51,6 +51,12 @@ const nextConfig = {
     ];
   },
   webpack: (config, { buildId, dev, isServer, defaultLoaders, webpack }) => {
+    // 🔧 경로 별칭(@) 설정 - Docker 빌드 호환성
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@': path.resolve(__dirname, './'),
+    };
+    
     // WebSocket 지원을 위한 설정
     config.externals = config.externals || [];
     if (!isServer) {

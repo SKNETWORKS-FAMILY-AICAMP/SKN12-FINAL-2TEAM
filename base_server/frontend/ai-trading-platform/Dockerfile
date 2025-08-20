@@ -15,7 +15,15 @@
 
 FROM node:18-alpine AS builder
 
-# 기본 환경 설정
+# 🔧 Build Arguments (Jenkins에서 주입)
+ARG NEXT_PUBLIC_API_URL=http://localhost:8000
+ARG NEXT_PUBLIC_WS_URL=ws://localhost:8000
+ARG NEXT_PUBLIC_API_TIMEOUT=10000
+
+# 🌍 Build-time 환경변수 설정 (Next.js 빌드에서 사용)
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+ENV NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
+ENV NEXT_PUBLIC_API_TIMEOUT=${NEXT_PUBLIC_API_TIMEOUT}
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
