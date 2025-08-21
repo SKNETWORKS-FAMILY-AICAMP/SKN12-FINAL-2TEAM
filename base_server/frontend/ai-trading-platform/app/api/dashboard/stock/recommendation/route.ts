@@ -10,11 +10,19 @@ export async function POST(request: NextRequest) {
     }
 
     const backend = process.env.NEXT_PUBLIC_API_URL ?? "https://bullant-kr.com"
+    
+    // 서버 환경을 위한 긴 타임아웃 설정
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000); // 120초 타임아웃
+    
     const res = await fetch(`${backend}/api/dashboard/stock/recommendation`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accessToken, market, strategy })
-    })
+      body: JSON.stringify({ accessToken, market, strategy }),
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
 
     const text = await res.text()
     if (!res.ok) {
@@ -51,6 +59,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(data)
   } catch (err) {
     console.error("/api/dashboard/stock/recommendation error", err)
+    // 타임아웃 에러 구분
+    if (err instanceof Error && err.name === 'AbortError') {
+      return NextResponse.json({ error: "백엔드 응답 타임아웃 (120초 초과)" }, { status: 504 })
+    }
     return NextResponse.json({ error: "route error" }, { status: 500 })
   }
 }

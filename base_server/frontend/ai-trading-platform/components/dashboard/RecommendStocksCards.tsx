@@ -64,6 +64,15 @@ function SkeletonCard() {
           <div className="h-3 w-10/12 bg-gray-300/60 dark:bg-gray-700/60 rounded" />
         </div>
       </div>
+      {/* 서버 환경을 위한 로딩 메시지 추가 */}
+      <div className="mt-4 text-center w-full">
+        <div className="text-sm text-gray-500 dark:text-gray-400">
+          AI 추천 종목 분석 중... (최대 120초)
+        </div>
+        <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+          서버 환경에서는 응답이 늦을 수 있습니다
+        </div>
+      </div>
     </div>
   );
 }
@@ -92,10 +101,20 @@ export default function RecommendStocksCards() {
         setIsLoading(true);
         const accessToken = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
         if (!accessToken) return;
+        
+        // 서버 환경을 위한 긴 타임아웃 설정
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 120000); // 120초 타임아웃
+        
         const res = await fetch('/api/dashboard/stock/recommendation', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ accessToken, market: 'NASDAQ', strategy: 'MOMENTUM' })
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accessToken, market: 'NASDAQ', strategy: 'MOMENTUM' }),
+          signal: controller.signal
         });
+        
+        clearTimeout(timeoutId);
+        
         if (!res.ok) return;
         const data = await res.json();
         
@@ -144,6 +163,10 @@ export default function RecommendStocksCards() {
         requestPrices(arr.map((x) => x.ticker));
       } catch (e) {
         console.error('recommendation fetch error', e);
+        // 에러 발생 시 기본 데이터 표시 (선택사항)
+        if (e instanceof Error && e.name === 'AbortError') {
+          console.log('요청 타임아웃 - 서버 응답이 너무 늦습니다');
+        }
       } finally {
         setIsLoading(false);
       }
