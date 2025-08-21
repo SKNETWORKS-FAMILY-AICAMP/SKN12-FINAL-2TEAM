@@ -72,7 +72,7 @@ async def dashboard_performance(request: DashboardPerformanceRequest, req: Reque
         dashboard_protocol.dashboard_performance_req_controller
     )
 
-@router.post("/oauth")
+@router.post("/oauth/authenticate")
 async def dashboard_oauth(
     request: SecuritiesLoginRequest,
     req: Request,
