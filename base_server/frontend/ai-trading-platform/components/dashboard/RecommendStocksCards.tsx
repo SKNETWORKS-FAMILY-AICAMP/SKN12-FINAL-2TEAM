@@ -164,13 +164,25 @@ export default function RecommendStocksCards() {
         }));
         
         console.log("🔍 [RecommendStocksCards] 최종 변환된 배열:", arr);
+        console.log("🔍 [RecommendStocksCards] 배열 길이:", arr.length);
+        console.log("🔍 [RecommendStocksCards] 첫 번째 아이템:", arr[0]);
         
         // 컴포넌트가 여전히 마운트되어 있는지 확인
-        if (!isMounted) return;
+        if (!isMounted) {
+          console.log("❌ [RecommendStocks] 컴포넌트가 언마운트됨, 상태 업데이트 취소");
+          return;
+        }
         
-        // 상태 업데이트를 명시적으로 처리
+        // 상태 업데이트를 강제로 처리
+        console.log("🔄 [RecommendStocks] 상태 업데이트 시작...");
         setItems(arr);
-        console.log("✅ [RecommendStocks] items 상태 업데이트 완료");
+        setIsLoading(false); // 명시적으로 로딩 완료 처리
+        
+        // 상태 업데이트 확인을 위한 지연
+        setTimeout(() => {
+          console.log("✅ [RecommendStocks] items 상태 업데이트 완료, 길이:", arr.length);
+          console.log("✅ [RecommendStocks] 현재 isLoading:", false);
+        }, 100);
         
         // 추천 종목 실시간 구독 + 초기 REST 가격 큐 등록(전역 큐가 0.5초 간격 직렬 처리)
         for (const it of arr) {
@@ -178,16 +190,19 @@ export default function RecommendStocksCards() {
         }
         requestPrices(arr.map((x) => x.ticker));
       } catch (e) {
-        console.error('recommendation fetch error', e);
-        // 에러 발생 시 기본 데이터 표시 (선택사항)
-        if (e instanceof Error && e.name === 'AbortError') {
-          console.log('요청 타임아웃 - 서버 응답이 너무 늦습니다');
+        console.error('❌ [RecommendStocks] API 호출 에러:', e);
+        
+        if (isMounted) {
+          if (e instanceof Error && e.name === 'AbortError') {
+            console.log('⏰ [RecommendStocks] 요청 타임아웃 - 서버 응답이 너무 늦습니다');
+          }
+          
+          // 에러 발생 시에도 로딩 상태 해제
+          setIsLoading(false);
+          console.log("🔄 [RecommendStocks] 에러로 인한 로딩 상태 해제");
         }
       } finally {
-        if (isMounted) {
-          setIsLoading(false);
-          console.log("✅ [RecommendStocks] 로딩 완료");
-        }
+        console.log("🔚 [RecommendStocks] API 호출 완료");
       }
     };
     
@@ -210,58 +225,95 @@ export default function RecommendStocksCards() {
     return out;
   }, [items, getStock, tick]);
 
+  // 디버깅을 위한 렌더링 상태 확인
+  console.log("🖼️ [RecommendStocks] 렌더링 상태:", {
+    isLoading,
+    itemsLength: items.length,
+    items: items.map(it => ({ ticker: it.ticker, reason: it.reason?.substring(0, 30) }))
+  });
+
   return (
     <div className="w-full max-w-7xl bg-gradient-to-br from-black via-gray-900 to-gray-850 rounded-2xl shadow-2xl border border-gray-800 p-4 flex flex-col gap-4">
+      {/* 디버깅 정보 표시 */}
+      <div className="text-xs text-gray-500 mb-2">
+        Debug: Loading={isLoading ? 'true' : 'false'}, Items={items.length}
+      </div>
+      
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
-        {isLoading || items.length === 0
-          ? Array.from({ length: 3 }).map((_, i) => (
+        {(() => {
+          console.log("🎨 [RecommendStocks] 렌더링 조건 체크:", {
+            itemsLength: items.length,
+            isLoadingState: isLoading,
+            shouldShowSkeleton: items.length === 0
+          });
+          
+          if (items.length === 0) {
+            return Array.from({ length: 3 }).map((_, i) => (
               <SkeletonCard key={`skeleton-${i}`} />
-            ))
-          : items.map((it, i) => {
-          const name = TICKER_NAME[it.ticker] ?? it.ticker;
-          const price = prices[it.ticker];
-          const sd = getStock(it.ticker);
-          const delta = sd?.change ?? 0;
-          const pct = sd?.changePct ?? 0;
-          const isUp = Number.isFinite(delta) ? delta >= 0 : true;
-          const dirColor = isUp ? '#ef4444' : '#3b82f6';
-          const cardColor = (typeof it.color === 'string' && /^#([0-9A-Fa-f]{6})$/.test(it.color)) ? it.color : '#1f2937';
-          const headerBg = hexToRgba(cardColor, 0.1);
-          return (
-            <button
-              key={`${it.ticker}-${i}`}
-              onClick={() => setOpenIdx(i)}
-              className="group text-left rounded-xl border-0 backdrop-blur-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 shadow-md p-4 flex flex-col items-start min-h-[320px] min-w-[280px] w-full"
-              style={{ background: '#0b0b0e', borderColor: cardColor, borderWidth: 1 }}
-            >
-              <div className="flex items-center w-full mb-3" style={{ background: headerBg, borderRadius: 12, padding: 8 }}>
-                <div className="w-12 h-12 rounded-full text-black font-bold text-xl flex items-center justify-center mr-5 shadow" style={{ background: cardColor }}>
-                  {it.ticker.substring(0,1)}
+            ));
+          }
+          
+          console.log("🎨 [RecommendStocks] 실제 카드 렌더링 시작, 개수:", items.length);
+          
+          return items.map((it, i) => {
+            const name = TICKER_NAME[it.ticker] ?? it.ticker;
+            const price = prices[it.ticker];
+            const sd = getStock(it.ticker);
+            const delta = sd?.change ?? 0;
+            const pct = sd?.changePct ?? 0;
+            const isUp = Number.isFinite(delta) ? delta >= 0 : true;
+            const dirColor = isUp ? '#ef4444' : '#3b82f6';
+            const cardColor = (typeof it.color === 'string' && /^#([0-9A-Fa-f]{6})$/.test(it.color)) ? it.color : '#1f2937';
+            const headerBg = hexToRgba(cardColor, 0.1);
+            
+            console.log(`🎨 [RecommendStocks] 카드 ${i+1} 렌더링:`, {
+              ticker: it.ticker,
+              name,
+              cardColor,
+              reason: it.reason?.substring(0, 30)
+            });
+            
+            return (
+              <button
+                key={`rec-card-${it.ticker}-${i}`}
+                onClick={() => setOpenIdx(i)}
+                className="group text-left rounded-xl border-0 backdrop-blur-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 shadow-md p-4 flex flex-col items-start min-h-[320px] min-w-[280px] w-full"
+                style={{ 
+                  background: '#0b0b0e', 
+                  borderColor: cardColor, 
+                  borderWidth: 1,
+                  display: 'flex' // 강제로 표시
+                }}
+              >
+                <div className="flex items-center w-full mb-3" style={{ background: headerBg, borderRadius: 12, padding: 8 }}>
+                  <div className="w-12 h-12 rounded-full text-black font-bold text-xl flex items-center justify-center mr-5 shadow" style={{ background: cardColor }}>
+                    {it.ticker.substring(0,1)}
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-xl font-bold leading-tight" style={{ color: cardColor }}>{name}</div>
+                    <div className="text-sm text-gray-400 font-semibold">{it.ticker}</div>
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <div className="text-xl font-bold leading-tight" style={{ color: cardColor }}>{name}</div>
-                  <div className="text-sm text-gray-400 font-semibold">{it.ticker}</div>
+                <div className="flex items-center justify-between w-full mb-3">
+                  <div className="flex items-center">
+                    <span className="text-2xl font-extrabold mr-3" style={{ color: dirColor }}>{price ? price.toLocaleString() : '-'}</span>
+                    {sd && (
+                      <span className="text-sm font-bold" style={{ color: dirColor }}>
+                        {isUp ? '▲' : '▼'} {delta >= 0 ? '+' : ''}{delta.toLocaleString()} ({pct >= 0 ? '+' : ''}{Number.isFinite(pct) ? pct.toFixed(2) : '0.00'}%)
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center justify-between w-full mb-3">
-                <div className="flex items-center">
-                  <span className="text-2xl font-extrabold mr-3" style={{ color: dirColor }}>{price ? price.toLocaleString() : '-'}</span>
-                  {sd && (
-                    <span className="text-sm font-bold" style={{ color: dirColor }}>
-                      {isUp ? '▲' : '▼'} {delta >= 0 ? '+' : ''}{delta.toLocaleString()} ({pct >= 0 ? '+' : ''}{Number.isFinite(pct) ? pct.toFixed(2) : '0.00'}%)
-                    </span>
-                  )}
+                <div className="mt-auto w-full pt-2">
+                  <div className="text-sm text-gray-400 mb-1 font-semibold">추천 사유</div>
+                  <div className="text-sm text-gray-300 line-clamp-3 whitespace-pre-line leading-relaxed">
+                    {it.reason || '-'}
+                  </div>
                 </div>
-              </div>
-              <div className="mt-auto w-full pt-2">
-                <div className="text-sm text-gray-400 mb-1 font-semibold">추천 사유</div>
-                <div className="text-sm text-gray-300 line-clamp-3 whitespace-pre-line leading-relaxed">
-                  {it.reason || '-'}
-                </div>
-              </div>
-            </button>
-          );
-        })}
+              </button>
+            );
+          });
+        })()}
       </div>
 
       {modalItem && (
