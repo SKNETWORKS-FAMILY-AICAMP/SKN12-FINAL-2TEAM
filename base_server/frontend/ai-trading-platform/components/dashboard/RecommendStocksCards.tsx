@@ -98,15 +98,45 @@ export default function RecommendStocksCards() {
         });
         if (!res.ok) return;
         const data = await res.json();
+        
+        // 디버깅을 위한 로그 추가
+        console.log("🔍 [RecommendStocksCards] 백엔드 응답:", data);
+        console.log("🔍 [RecommendStocksCards] 응답 타입:", typeof data);
+        console.log("🔍 [RecommendStocksCards] recommendations 키 존재:", 'recommendations' in data);
+        
         // 백엔드가 recommendations 배열로 내려줌
-        const arr: RecItemWithColor[] = (data?.recommendations ?? []).map((x: any) => ({
+        let recommendations = [];
+        if (data && typeof data === 'object') {
+          // 직접 recommendations 키가 있는 경우
+          if (data.recommendations && Array.isArray(data.recommendations)) {
+            recommendations = data.recommendations;
+          }
+          // 문자열로 감싸진 JSON인 경우 파싱 시도
+          else if (typeof data === 'string') {
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.recommendations && Array.isArray(parsed.recommendations)) {
+                recommendations = parsed.recommendations;
+              }
+            } catch (e) {
+              console.error('JSON 파싱 실패:', e);
+            }
+          }
+        }
+        
+        console.log("🔍 [RecommendStocksCards] 파싱된 recommendations:", recommendations);
+        
+        const arr: RecItemWithColor[] = recommendations.map((x: any) => ({
           date: String(x.date ?? ''),
           ticker: String(x.ticker ?? ''),
           reason: String(x.reason ?? ''),
           report: String(x.report ?? ''),
           color: typeof x.color === 'string' ? x.color : undefined,
         }));
+        
+        console.log("🔍 [RecommendStocksCards] 최종 변환된 배열:", arr);
         setItems(arr);
+        
         // 추천 종목 실시간 구독 + 초기 REST 가격 큐 등록(전역 큐가 0.5초 간격 직렬 처리)
         for (const it of arr) {
           addSymbol(it.ticker);

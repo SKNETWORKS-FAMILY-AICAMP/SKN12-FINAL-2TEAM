@@ -21,15 +21,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: text || "backend error" }, { status: res.status })
     }
 
+    // 디버깅을 위한 로그 추가
+    console.log("🔍 [API Route] 백엔드 원본 응답:", text);
+    console.log("🔍 [API Route] 응답 길이:", text.length);
+
     // 백엔드 응답이 문자열(JSON 직렬화)일 수 있어 파싱 시도
     let data: any
-    try { data = JSON.parse(text) } catch { data = text }
+    try { 
+      data = JSON.parse(text) 
+      console.log("🔍 [API Route] JSON 파싱 성공:", typeof data);
+    } catch (e) { 
+      console.log("🔍 [API Route] JSON 파싱 실패, 원본 텍스트 반환");
+      data = text 
+    }
 
     // 이중 직렬화 케이스 방어: 문자열로 한 번 더 감싸져 온 경우
     if (typeof data === "string") {
-      try { data = JSON.parse(data) } catch { /* keep as-is */ }
+      try { 
+        const parsed = JSON.parse(data)
+        console.log("🔍 [API Route] 이중 JSON 파싱 성공:", typeof parsed);
+        data = parsed
+      } catch (e) { 
+        console.log("🔍 [API Route] 이중 JSON 파싱 실패, 원본 유지");
+        // keep as-is 
+      }
     }
 
+    console.log("🔍 [API Route] 최종 반환 데이터:", data);
     return NextResponse.json(data)
   } catch (err) {
     console.error("/api/dashboard/stock/recommendation error", err)
