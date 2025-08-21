@@ -126,12 +126,24 @@ export default function RecommendStocksCards() {
           return;
         }
         
-        const data = await res.json();
+        let data = await res.json();
+        
+        // 문자열로 온 경우 파싱
+        if (typeof data === 'string') {
+          console.log("🔍 [RecommendStocks] 응답이 문자열로 옴, JSON 파싱 시도");
+          try {
+            data = JSON.parse(data);
+          } catch (parseError) {
+            console.error("❌ [RecommendStocks] JSON 파싱 실패:", parseError);
+            if (isMounted) setIsLoading(false);
+            return;
+          }
+        }
         
         // 디버깅을 위한 로그 추가
         console.log("🔍 [RecommendStocksCards] 백엔드 응답:", data);
         console.log("🔍 [RecommendStocksCards] 응답 타입:", typeof data);
-        console.log("🔍 [RecommendStocksCards] recommendations 키 존재:", 'recommendations' in data);
+        console.log("🔍 [RecommendStocksCards] recommendations 키 존재:", data && typeof data === 'object' ? 'recommendations' in data : false);
         
         // 백엔드가 recommendations 배열로 내려줌 - 강화된 파싱
         let recommendations = [];
