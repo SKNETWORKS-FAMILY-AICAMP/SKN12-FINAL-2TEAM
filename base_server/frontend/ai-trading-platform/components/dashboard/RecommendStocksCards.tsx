@@ -83,7 +83,6 @@ export default function RecommendStocksCards() {
   const [openIdx, setOpenIdx] = useState<number | null>(null);
   const [tick, setTick] = useState(0);
   const { initWs, addSymbol, getStock, subscribeStore, requestPrices } = useNasdaqStocks();
-  const fetchedRef = useRef(false);
 
   // 추천 데이터 로드 (초기 1회)
   useEffect(() => {
@@ -94,18 +93,24 @@ export default function RecommendStocksCards() {
 
   // 추천 데이터 로드 (초기 1회, StrictMode 중복 실행 가드)
   useEffect(() => {
-    if (fetchedRef.current) return;
-    fetchedRef.current = true;
-    (async () => {
+    // 이미 데이터가 있으면 실행하지 않음
+    if (items.length > 0) return;
+    
+    let isMounted = true;
+    const loadRecommendations = async () => {
       try {
         setIsLoading(true);
         const accessToken = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
-        if (!accessToken) return;
+        if (!accessToken) {
+          setIsLoading(false);
+          return;
+        }
         
         // 서버 환경을 위한 긴 타임아웃 설정
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 120000); // 120초 타임아웃
         
+        console.log("🚀 [RecommendStocks] API 호출 시작...");
         const res = await fetch('/api/dashboard/stock/recommendation', {
           method: 'POST', 
           headers: { 'Content-Type': 'application/json' },
@@ -115,7 +120,12 @@ export default function RecommendStocksCards() {
         
         clearTimeout(timeoutId);
         
-        if (!res.ok) return;
+        if (!res.ok) {
+          console.error("❌ [RecommendStocks] API 응답 실패:", res.status);
+          if (isMounted) setIsLoading(false);
+          return;
+        }
+        
         const data = await res.json();
         
         // 디버깅을 위한 로그 추가
@@ -154,7 +164,13 @@ export default function RecommendStocksCards() {
         }));
         
         console.log("🔍 [RecommendStocksCards] 최종 변환된 배열:", arr);
+        
+        // 컴포넌트가 여전히 마운트되어 있는지 확인
+        if (!isMounted) return;
+        
+        // 상태 업데이트를 명시적으로 처리
         setItems(arr);
+        console.log("✅ [RecommendStocks] items 상태 업데이트 완료");
         
         // 추천 종목 실시간 구독 + 초기 REST 가격 큐 등록(전역 큐가 0.5초 간격 직렬 처리)
         for (const it of arr) {
@@ -168,10 +184,21 @@ export default function RecommendStocksCards() {
           console.log('요청 타임아웃 - 서버 응답이 너무 늦습니다');
         }
       } finally {
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+          console.log("✅ [RecommendStocks] 로딩 완료");
+        }
       }
-    })();
-  }, []);
+    };
+    
+    // 비동기 함수 실행
+    loadRecommendations();
+    
+    // 클린업 함수
+    return () => {
+      isMounted = false;
+    };
+  }, [items.length, addSymbol, requestPrices]);
 
   const modalItem = openIdx !== null ? items[openIdx] : null;
   const prices = useMemo(() => {
@@ -186,7 +213,7 @@ export default function RecommendStocksCards() {
   return (
     <div className="w-full max-w-7xl bg-gradient-to-br from-black via-gray-900 to-gray-850 rounded-2xl shadow-2xl border border-gray-800 p-4 flex flex-col gap-4">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
-        {isLoading
+        {isLoading || items.length === 0
           ? Array.from({ length: 3 }).map((_, i) => (
               <SkeletonCard key={`skeleton-${i}`} />
             ))
