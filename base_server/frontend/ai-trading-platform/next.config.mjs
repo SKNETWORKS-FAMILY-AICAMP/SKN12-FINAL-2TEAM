@@ -73,7 +73,8 @@ const nextConfig = {
   images: { unoptimized: true },
   serverExternalPackages: [],
   compiler: {
-    removeConsole: process.env.NODE_ENV === 'production',
+    // 프로덕션에서도 console.log 유지 (디버깅을 위해)
+    removeConsole: false,
   },
 }
 
