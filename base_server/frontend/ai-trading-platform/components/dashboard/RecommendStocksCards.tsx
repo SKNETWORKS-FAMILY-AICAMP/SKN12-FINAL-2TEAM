@@ -133,24 +133,51 @@ export default function RecommendStocksCards() {
         console.log("🔍 [RecommendStocksCards] 응답 타입:", typeof data);
         console.log("🔍 [RecommendStocksCards] recommendations 키 존재:", 'recommendations' in data);
         
-        // 백엔드가 recommendations 배열로 내려줌
+        // 백엔드가 recommendations 배열로 내려줌 - 강화된 파싱
         let recommendations = [];
+        
+        console.log("🔍 [RecommendStocks] 원본 데이터 상세 분석:");
+        console.log("- 타입:", typeof data);
+        console.log("- 값:", data);
+        console.log("- 키들:", Object.keys(data || {}));
+        
         if (data && typeof data === 'object') {
-          // 직접 recommendations 키가 있는 경우
+          // 1. 직접 recommendations 키가 있는 경우
           if (data.recommendations && Array.isArray(data.recommendations)) {
             recommendations = data.recommendations;
+            console.log("✅ [RecommendStocks] 직접 recommendations 배열 발견:", recommendations.length);
           }
-          // 문자열로 감싸진 JSON인 경우 파싱 시도
-          else if (typeof data === 'string') {
-            try {
-              const parsed = JSON.parse(data);
-              if (parsed.recommendations && Array.isArray(parsed.recommendations)) {
-                recommendations = parsed.recommendations;
+          // 2. errorCode가 0이고 result가 success인 경우 강제로 확인
+          else if (data.errorCode === 0 && data.result === "success") {
+            console.log("🔍 [RecommendStocks] 성공 응답이지만 recommendations 누락, 전체 객체 확인");
+            console.log("- 모든 속성:", JSON.stringify(data, null, 2));
+            
+            // 혹시 다른 키에 배열이 있는지 확인
+            for (const [key, value] of Object.entries(data)) {
+              if (Array.isArray(value) && value.length > 0) {
+                console.log(`🔍 [RecommendStocks] 배열 발견: ${key}`, value);
+                if (key === 'recommendations' || value.some(item => item.ticker)) {
+                  recommendations = value;
+                  console.log(`✅ [RecommendStocks] ${key} 배열을 recommendations로 사용`);
+                  break;
+                }
               }
-            } catch (e) {
-              console.error('JSON 파싱 실패:', e);
             }
           }
+        }
+        
+        // 3. 여전히 빈 배열이면 강제로 기본 데이터 생성 (디버깅용)
+        if (recommendations.length === 0 && data && data.errorCode === 0) {
+          console.log("🚨 [RecommendStocks] 응답은 성공했지만 추천 데이터가 없음, 기본 데이터 생성");
+          recommendations = [
+            {
+              date: "2025-08-21",
+              ticker: "DEBUG",
+              reason: "디버깅용 더미 데이터 - 실제 응답 파싱 실패",
+              report: `원본 응답: ${JSON.stringify(data)}`,
+              color: "#ff0000"
+            }
+          ];
         }
         
         console.log("🔍 [RecommendStocksCards] 파싱된 recommendations:", recommendations);
