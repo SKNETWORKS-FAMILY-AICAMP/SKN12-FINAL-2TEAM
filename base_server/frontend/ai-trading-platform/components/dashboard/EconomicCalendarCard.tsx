@@ -41,6 +41,10 @@ export function EconomicCalendarCard() {
 
       setLoading(true);
       
+      // 서버 환경을 위한 긴 타임아웃 설정
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120000); // 120초 타임아웃
+      
       // 백엔드 API 호출
       const response = await fetch('/api/dashboard/economic-calendar', {
         method: 'POST',
@@ -50,8 +54,11 @@ export function EconomicCalendarCard() {
         body: JSON.stringify({
           accessToken: localStorage.getItem('accessToken') || '',
           days: 7
-        })
+        }),
+        signal: controller.signal
       });
+      
+      clearTimeout(timeoutId);
       
       if (!response.ok) {
         if (response.status === 429) {
@@ -88,12 +95,19 @@ export function EconomicCalendarCard() {
       }
     } catch (err) {
       console.error('경제 일정 조회 실패:', err);
-      const errorMessage = err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.';
-      setError(errorMessage);
       
-      // 429 에러인 경우 재시도 지연
-      if (errorMessage.includes('API 호출 한도')) {
-        setRetryCount(prev => prev + 1);
+      // 타임아웃 에러 구분
+      if (err instanceof Error && err.name === 'AbortError') {
+        setError('서버 응답이 너무 늦습니다. (120초 초과) 잠시 후 다시 시도해주세요.');
+        console.log('요청 타임아웃 - 서버 응답이 너무 늦습니다');
+      } else {
+        const errorMessage = err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.';
+        setError(errorMessage);
+        
+        // 429 에러인 경우 재시도 지연
+        if (errorMessage.includes('API 호출 한도')) {
+          setRetryCount(prev => prev + 1);
+        }
       }
     } finally {
       setLoading(false);
@@ -131,8 +145,12 @@ export function EconomicCalendarCard() {
     return (
       <div className="bg-gradient-to-br from-gray-950 via-gray-900 to-gray-800 rounded-xl shadow-lg p-3 min-w-[400px] flex flex-col items-start w-full max-w-md border border-gray-800 h-53">
         <div className="text-base font-bold mb-2 text-white">Economic Calendar</div>
-        <div className="flex items-center justify-center w-full h-32">
+        <div className="flex flex-col items-center justify-center w-full h-32 space-y-2">
           <div className="text-gray-400">로딩 중...</div>
+          <div className="text-xs text-gray-500 text-center">
+            AI 경제 일정 분석 중...<br/>
+            (최대 120초, 서버 환경에서는 응답이 늦을 수 있습니다)
+          </div>
         </div>
       </div>
     );

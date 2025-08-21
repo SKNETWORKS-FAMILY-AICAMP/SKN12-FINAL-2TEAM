@@ -14,11 +14,18 @@ export async function POST(request: NextRequest) {
     console.log("🌐 백엔드 API 호출:", `${backend}/api/dashboard/economic-calendar`)
     
     try {
+      // 서버 환경을 위한 긴 타임아웃 설정
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120000); // 120초 타임아웃
+      
       const res = await fetch(`${backend}/api/dashboard/economic-calendar`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accessToken, days })
+        body: JSON.stringify({ accessToken, days }),
+        signal: controller.signal
       })
+      
+      clearTimeout(timeoutId);
 
       const text = await res.text()
       console.log("📥 백엔드 응답 상태:", res.status)
@@ -59,6 +66,15 @@ export async function POST(request: NextRequest) {
       }
     } catch (apiError) {
       console.error("🔥 백엔드 API 호출 실패:", apiError)
+      
+      // 타임아웃 에러 구분
+      if (apiError instanceof Error && apiError.name === 'AbortError') {
+        console.error("⏰ 백엔드 API 타임아웃 (120초 초과)")
+        return NextResponse.json({ 
+          error: "백엔드 응답 타임아웃 (120초 초과)", 
+          result: "timeout" 
+        }, { status: 504 })
+      }
       
       // API 실패 시 더미 데이터 반환
       const dummyData = {

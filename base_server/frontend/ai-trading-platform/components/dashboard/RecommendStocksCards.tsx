@@ -186,7 +186,7 @@ export default function RecommendStocksCards() {
   return (
     <div className="w-full max-w-7xl bg-gradient-to-br from-black via-gray-900 to-gray-850 rounded-2xl shadow-2xl border border-gray-800 p-4 flex flex-col gap-4">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
-        {(isLoading || items.length === 0)
+        {isLoading
           ? Array.from({ length: 3 }).map((_, i) => (
               <SkeletonCard key={`skeleton-${i}`} />
             ))
